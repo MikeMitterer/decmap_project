@@ -35,13 +35,16 @@ visualisiert sie als interaktiven Graph. Zielgruppe: IT-Entscheider, CDOs, KI-Pr
 
 ## Repositories
 
-Multi-Repo — jedes Sub-Projekt hat eigenen Release-Zyklus.
+Multi-Repo — vier Repos mit eigenem Release-Zyklus.
 
 | Repo | Inhalt | Deploy |
 |---|---|---|
-| `infrastructure` | docker-compose, nginx, Makefile, Seeds, Backups, CLAUDE.md | Hetzner |
+| `DecisionMap` (Root) | Issues, Haupt-Doku (CLAUDE.md, docs/), Makefile | — |
+| `infrastructure` | docker-compose, nginx, Seeds, Backups | Hetzner |
 | `frontend` | Nuxt.js App | Hetzner (eigenstaendig) |
 | `ai-service` | FastAPI, Alembic, Repositories | Hetzner |
+
+`infrastructure/`, `frontend/` und `ai-service/` sind im Workspace-Root per `.gitignore` ausgeschlossen.
 
 ```
 frontend     → build → test → deploy frontend
@@ -54,7 +57,7 @@ infrastructure → deploy compose + config
 ## Projektstruktur
 
 ```
-DecisionMap/                     ← Workspace-Root (kein eigenes Repo)
+DecisionMap/                     ← Workspace-Root-Repo (Issues, Haupt-Doku)
 ├── CLAUDE.md                    ← Haupt-Referenz (dieses File)
 ├── docs/                        ← Detaillierte Spezifikationen
 ├── Makefile                     ← Workspace-Orchestrierung

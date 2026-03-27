@@ -8,7 +8,7 @@ aktuellem Frontend-Stand und technischen Spezifikationen.
 ## 1. Was ist DecisionMap?
 
 Eine kollektive Wissensplattform für KI-bezogene Probleme in Unternehmen. Der ursprüngliche Arbeitstitel
-war „webproblemap" — der finale Name ist **DecisionMap** (`decisionmap.ai`, Fallback: `frictionmap.ai`).
+war „KI - ProblemLandkart" — der finale Name ist **DecisionMap** (`decisionmap.ai`, Fallback: `frictionmap.ai`).
 
 Unternehmen stehen bei der Einführung von KI vor ähnlichen Herausforderungen — aber jedes löst sie isoliert.
 DecisionMap macht dieses verteilte Wissen sichtbar und nutzbar.
@@ -110,17 +110,20 @@ KI-Service) ist strukturell vorhanden, aber noch nicht an ein deployed Backend a
 
 ### Repository-Struktur
 
-Multi-Repo — drei separate Repositories mit eigenem Release-Zyklus:
+Multi-Repo — vier separate Repositories mit eigenem Release-Zyklus:
 
 ```
-DecisionMap/                     ← Workspace-Root (kein eigenes Repo)
+DecisionMap/                     ← Workspace-Root-Repo (Issues, Haupt-Doku, CI-Koordination)
 ├── CLAUDE.md                    ← Haupt-Referenz
 ├── docs/                        ← Detaillierte Spezifikationen
 ├── Makefile                     ← Workspace-Orchestrierung
-├── infrastructure/              ← docker-compose, nginx, Seeds, Backups
-├── frontend/                    ← Nuxt.js App
-└── ai-service/                  ← FastAPI + Alembic
+├── infrastructure/              ← docker-compose, nginx, Seeds, Backups (eigenes Repo)
+├── frontend/                    ← Nuxt.js App (eigenes Repo)
+└── ai-service/                  ← FastAPI + Alembic (eigenes Repo)
 ```
+
+`infrastructure/`, `frontend/` und `ai-service/` sind im Workspace-Root per `.gitignore` ausgeschlossen —
+sie haben eigene Repos. Das Workspace-Root-Repo dient als zentraler Ort für Issues und Projektdokumentation.
 
 Jedes Repo hat eine eigene Jenkins-Pipeline — ein Frontend-Deploy triggert keinen Backend-Build.
 
