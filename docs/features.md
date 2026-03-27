@@ -284,7 +284,7 @@ Links offnen immer in `target="_blank"` mit `rel="noopener noreferrer"`.
 Aktive Ubersetzung beim Einreichen — nicht passiv via DeepL-Link:
 
 1. User tippt Titel/Beschreibung in beliebiger Sprache
-2. Automatische Spracherkennung pruft ob der Text englisch ist
+2. Automatische Spracherkennung (`looksLikeEnglish`): Text gilt als Englisch wenn er keine Unicode-Zeichen > U+007F enthaelt
 3. Bei Englisch: `_en`-Felder werden automatisch befuellt, kein Translate-Button noetig
 4. Bei Nicht-Englisch: „Translate to English"-Button erscheint
 5. Klick uebersetzt beide Felder (Titel + Beschreibung) parallel

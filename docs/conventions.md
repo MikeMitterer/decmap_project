@@ -298,6 +298,7 @@ class ProblemRepository:
 - Unit-Tests nur fur Composables — keine UI-Tests vorerst
 - Alle Directus API-Aufrufe mocken
 - Testdatei spiegelt Quelle: `composables/useProblems.ts` → `tests/composables/useProblems.spec.ts`
+- `vi.mock()` muss **vor** den Imports stehen — Vitest hoisted Mocks nicht automatisch wenn Imports davor kommen
 
 ### Backend (pytest)
 

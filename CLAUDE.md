@@ -61,6 +61,8 @@ DecisionMap/                     ← Workspace-Root-Repo (Issues, Haupt-Doku)
 ├── CLAUDE.md                    ← Haupt-Referenz (dieses File)
 ├── docs/                        ← Detaillierte Spezifikationen
 ├── Makefile                     ← Workspace-Orchestrierung
+├── .templates/                  ← Wiederverwendbare Templates (Jenkinsfile, Makefile, docker/)
+├── .libs/                       ← Lokale Symlinks (BashLib, BashTools, MakeLib) — per .gitignore ausgeschlossen
 ├── infrastructure/              ← Deployment-Konfiguration
 ├── frontend/                    ← Nuxt.js App
 └── ai-service/                  ← FastAPI + Alembic
@@ -214,8 +216,8 @@ export function useProblems() {
 - **Feature Flags:** `SHOW_VOTING`, `REQUIRE_AUTH`
 - **Linting:** ESLint + Prettier (TS) / ruff (Python) — automatisch, nicht verhandelbar
 - **Makefile:** `make help` fuer alle Befehle
-- **Versionierung:** SemVer + Build-Metadata (automatisch via Jenkins)
-- **Git:** Conventional Commits `<type>(<scope>): <msg>`, Feature-Branches per PR
+- **Versionierung:** `hashVer` (BashLib) → `<Jahr>.<Quartal>.0-SNAPSHOT<MMDD>.<HASH>` — automatisch via Jenkins. Details: [`docs/infrastructure.md`](docs/infrastructure.md)
+- **Git:** Conventional Commits `<type>(<scope>): <msg>`, direkte Commits auf `main` erlaubt — Jenkins ist die einzige Schranke
 - **Seeds:** `database/seeds/` alphabetisch, idempotent
 - **Backup:** `make backup/backup-remote`, nie einchecken
 

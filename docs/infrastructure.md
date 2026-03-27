@@ -4,6 +4,20 @@
 
 Nie hardcoden. Immer aus der Umgebung lesen. Alle in `.env.example` dokumentiert.
 
+### Build-Maschine (Jenkins-Agent / Entwickler-Workstation)
+
+Diese Variablen gehoeren nicht in `.env.example` — sie werden einmalig in der Shell-Umgebung gesetzt.
+
+| Variable | Zeigt auf | Benoetigt von |
+|---|---|---|
+| `DEV_LOCAL` | Lokales Dev-Verzeichnis (z.B. `/Volumes/DevLocal`) | `make setup` — erstellt `.libs/`-Symlinks |
+| `DEV_MAKE` | `MakeLib`-Verzeichnis | `.templates/Makefile` — `include ${DEV_MAKE}/...` |
+| `DEV_DOCKER` | Docker-Hilfsskripte | `.templates/docker/build.sh` — Build + Push |
+| `BASH_LIBS` | Bash-Bibliotheken (`*.lib.sh`) | `.templates/docker/build.sh` — sourced via `. ${BASH_LIBS}/build.lib.sh` usw. |
+| `BASH_TOOLS` | Bash-Tools (`local2Server.sh` usw.) | `.templates/Makefile` — `lh2server`/`update`-Targets |
+
+### Applikation (`.env` / Runtime)
+
 ```
 OPENAI_API_KEY=           # OpenAI API-Key fur Embeddings und Filterung
 DIRECTUS_URL=             # Directus-Instanz URL
@@ -75,11 +89,74 @@ make format-backend   # ruff format
 
 ---
 
+## CI/CD — Jenkins Pipeline
+
+Jedes Sub-Repo hat eine eigene Pipeline. Ein Frontend-Deploy triggert keinen Backend-Build.
+
+### Frontend-Pipeline (Reihenfolge invariant)
+
+```
+1. checkout
+2. npm ci
+3. lint (ESLint + Prettier)
+4. test (Vitest)
+5. docker build (Multi-Stage: build → runner)
+6. docker save | ssh → docker load → docker compose up
+```
+
+### Deploy-Strategie
+
+`nuxt build` erzeugt einen Node.js-Server (nicht statische Dateien). Das Docker-Image
+wird lokal auf dem Jenkins-Agent gebaut und per `docker save | ssh | docker load`
+auf den Hetzner-Server uebertragen. Restart via `docker compose up --no-deps --force-recreate frontend`.
+
+**Warum nicht `nuxt generate`?** Die SPA-Routes (`ssr: false`) und dynamische Daten
+funktionieren nicht sauber mit statischer Generierung.
+
+**Dockerfile (Multi-Stage):**
+- Base Image: `node:20-bookworm-slim` (Debian 12 slim) — nicht Alpine, da native npm-Dependencies sonst musl-Kompatibilitätsprobleme verursachen
+- Stage `builder`: `npm ci` + `nuxt build` → erzeugt `.output/`
+- Stage `runner`: nur Node.js + `.output/` — kein `node_modules`, kein Source-Code im Image
+
+**Naming-Konvention:** Image- und Container-Namen folgen dem Schema `decisionmap-<service>`
+(z.B. `decisionmap-frontend`, `decisionmap-ai-service`, `decisionmap-postgres`).
+Definiert in `infrastructure/docker-compose.yml`.
+
+**Jenkinsfile:** Lint + Test laufen auf allen Branches. Build + Deploy nur auf `main`.
+Lokales Build-Image wird nach dem Deploy auf dem Jenkins-Agent geloescht.
+[`.templates/Jenkinsfile`](../.templates/Jenkinsfile) ist ein generisches Ausgangs-Template — muss fuer die oben beschriebene Deploy-Strategie (docker save|ssh|load) angepasst werden. Konkret: `sh './docker/app/build --build'` → `sh './docker/build.sh --build'` (Pfad auf `docker/build.sh` des Sub-Repos anpassen).
+
+**Build-Script:** [`.templates/docker/build.sh`](../.templates/docker/build.sh) ist das generische Bash-Template fuer Sub-Repo-Build-Skripte. (Das ebenfalls vorhandene `.templates/docker/Dockerfile` ist ein generisches Debian/certbot-Base-Image fuer Tooling — kein Nuxt-Template.) Enthaelt Platform-Erkennung, BashLib-Includes, `--build`/`--push`/`--images`-Flags und TAG-Erzeugung via `hashVer 4 "" .` (→ `26.1.0-SNAPSHOT0327.a3f9`). Benoetigt `DEV_DOCKER`-Env-Variable auf der Build-Maschine (zeigt auf Docker-Hilfsskripte). Pro Sub-Repo nach `docker/build.sh` kopieren und `NAMESPACE`/`NAME`/Deploy-Logik anpassen. **Wichtig:** Der `--push`-Zweig im Template ruft `pushImage2DockerHub` auf — dieser Block muss vollstaendig durch `docker save | ssh | docker load` ersetzt werden (Docker Hub wird nicht verwendet). Das Dockerfile liegt in `docker/`, der Build-Context ist das Parent-Verzeichnis des Sub-Repos (`docker build -f Dockerfile ..`). **Achtung:** Da der Build-Context das gesamte Sub-Repo-Verzeichnis umfasst, muss `docker/` in `.dockerignore` ausgeschlossen werden — sonst landet das Build-Verzeichnis selbst im Image.
+
+**`.dockerignore` fuer Multi-Stage-Builds:** `.output/` muss in `.dockerignore` stehen — nicht weil `COPY --from=builder` den Host liest (das tut es nicht, es greift auf Stage 1 zu), sondern weil `COPY . .` in Stage 1 ein lokales `.output/` (vom Host) in den Build-Context uebertraegt. Das kann ein veraltetes lokales Artefakt in Stage 1 einschleppen, bevor `npm run build` laeuft. `node_modules/` und `.output/` gehoeren daher beide in `.dockerignore`.
+
+### Konfiguration ausserhalb der Pipeline
+
+Das `.env` liegt auf dem Hetzner-Server — Jenkins deployt nur den Build-Artefakt.
+Phasenumschaltung ausschliesslich durch Anpassen von `.env` auf dem Server:
+
+```bash
+# Phase 1 — Fake-Daten
+USE_FAKE_DATA=true
+
+# Phase 2 — Live (Pipeline unveraendert)
+USE_FAKE_DATA=false
+DIRECTUS_URL=https://...
+NUXT_PUBLIC_API_BASE=https://...
+```
+
+---
+
 ## Makefile
 
 Alle haufigen Operationen uber `make`. `make help` zeigt alle Befehle.
 
+[`.templates/Makefile`](../.templates/Makefile) ist ein generisches Ausgangs-Template fuer Sub-Repo-Makefiles. Benoetigt `DEV_MAKE`-Env-Variable (zeigt auf `MakeLib`) und `BASH_TOOLS` (fuer `lh2server`/`update`-Targets).
+
 ```makefile
+# Lokales Setup (einmalig, benoetigt DEV_LOCAL-Env-Variable)
+setup             # Erstellt .libs/-Symlinks (BashLib, BashTools, MakeLib)
+
 # Entwicklung
 up / down / logs
 
@@ -105,22 +182,56 @@ build / deploy
 
 ## Versionierung
 
-**Format:** `<TAG-oder-0.0.0>[-PRERELEASE][+YYMMDD.HHMM.<hash>[.dirty]]`
+Build-Scripts verwenden `hashVer` (BashLib-Funktion) — kein klassisches SemVer.
 
-| Teil | Bedeutung |
-|---|---|
-| MAJOR | Breaking Change |
-| MINOR | Neues Feature (ruckwartskompatibel) |
-| PATCH | Bugfix (ruckwartskompatibel) |
+**Format:** `<Jahr>.<Quartal>.0[-<PRERELEASE><MMDD>][<META_SEP><HASH>]`
 
 ```
-1.0.0                              # Release
-1.0.0-beta.1                       # Pre-Release
-1.0.0+240315.1430.a3f9c2d          # Build-Metadata
-0.0.0+240315.1430.a3f9c2d          # Vor dem ersten Tag
+26.1.0-SNAPSHOT0327.a3f9     # Snapshot-Build (Docker-Image-Tag)
+26.1.0-SNAPSHOT0327+a3f9     # Snapshot-Build (SemVer-konform, nicht fuer Docker)
+26.1.0                        # Release-Tag (manuell gesetzt)
 ```
 
-Build-Metadata automatisch vom Jenkins-Build — nie manuell.
+**`hashVer`-Parameter:**
+
+| Parameter | Standard | Bedeutung |
+|---|---|---|
+| `HASH_DIGITS` | — | Laenge des Hash-Anteils (0 = kein Hash) |
+| `PRERELEASE_IDENTIFIER` | `SNAPSHOT` | Praefix vor MMDD; leer = kein Praefix |
+| `META_SEPARATOR` | `+` | Trenner vor Hash; `.` fuer Docker (`+` ist in Image-Tags ungueltig) |
+
+**Docker-Image-Tags:** `hashVer 4 "" .` → `26.1.0-SNAPSHOT0327.a3f9`
+`META_SEPARATOR` muss `.` sein — Docker lehnt `+` in Tags ab.
+
+**Alternative: `semVerWithDate`** — wenn `package.json`-Version als Basis benoetigt wird:
+`semVerWithDate "" . 1 4` → `1.2.3-build-260327.1445.a3f9` (+ `.dirty` bei uncommitted changes).
+Vorteil: Version stammt aus dem Git-Tag (`vX.Y.Z`), enthaelt Datum+Uhrzeit und dirty-Flag.
+Voraussetzung: Git-Tag bei jedem `package.json`-Versionssprung setzen.
+
+**`bumpVer` / `gitUpdateVersionTag`** — fuer Git-Tags und Versionsdateien (`package.json`, `pyproject.toml`, `VERSION`):
+
+```
+v26.3.0+260327.1445     # Release-Tag mit Timestamp (SemVer Build-Metadata)
+v26.3.0-rc1+260327.1445 # Pre-Release
+```
+
+Format: `v<YY>.<minor>.<patch>[+<YYMMDD.HHMM>]` — kein Hash-Anteil, kein Quartal-Zwang.
+`gitUpdateVersionTag` ist idempotent: Falls HEAD bereits getaggt ist, wird der bestehende Tag zurueckgegeben.
+
+**Tag-Ordering bei `bumpVer`:** Git-Tag immer **nach** dem Commit setzen, nicht davor.
+Begruendung: `git checkout v26.1.0` muss einen konsistenten Stand liefern — `package.json` und Tag zeigen auf denselben Commit.
+Reihenfolge: `_gitCalcNextVersion` → Datei schreiben → `git commit` → `_gitSetVersionTag`.
+
+**Makefile-Targets fuer Version-Bumping (Sub-Repos):**
+
+```makefile
+tag-patch   # Patch hochzaehlen  (26.3.0 → 26.3.1)
+tag-minor   # Minor hochzaehlen  (26.3.0 → 26.4.0)
+tag-major   # Major hochzaehlen  (26.3.0 → 27.0.0)
+```
+
+Diese Targets rufen `bumpVer` auf und setzen den Git-Tag automatisch nach dem Commit.
+Snapshot-Tags (Docker-Image-Tags via `hashVer`) werden automatisch vom Jenkins-Build erzeugt — nie manuell.
 
 ---
 
@@ -147,9 +258,9 @@ fix/<kurze-beschreibung>
 chore/<kurze-beschreibung>
 ```
 
-- Kein direktes Committen auf `main`
-- `main` ist immer deploybar
-- Feature-Branches per PR/MR mergen
+- `main` ist immer deploybar — Jenkins ist die einzige Schranke
+- Direkte Commits auf `main` sind erlaubt (kleines Team)
+- Feature-Branches optional, aber empfohlen fuer groessere Aenderungen
 
 ---
 

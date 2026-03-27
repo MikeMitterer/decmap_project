@@ -17,9 +17,16 @@ database/backups/
 .vscode/
 *.swp
 *.swo
+*.backup
 
 # Claude Code (lokale Einstellungen)
 .claude/
+
+# Externe Bibliotheks-Symlinks (lokal via DEV_LOCAL setzen)
+.libs/*
+
+# Build-Logs (generiert von .templates/docker/build.sh)
+.templates/docker/logs/
 frontend/
 infrastructure/
 ai-service/

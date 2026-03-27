@@ -117,6 +117,8 @@ DecisionMap/                     ← Workspace-Root-Repo (Issues, Haupt-Doku, CI
 ├── CLAUDE.md                    ← Haupt-Referenz
 ├── docs/                        ← Detaillierte Spezifikationen
 ├── Makefile                     ← Workspace-Orchestrierung
+├── .templates/                  ← Wiederverwendbare Templates (Jenkinsfile, Makefile, docker/)
+├── .libs/                       ← Lokale Symlinks (BashLib, BashTools, MakeLib) — per .gitignore ausgeschlossen
 ├── infrastructure/              ← docker-compose, nginx, Seeds, Backups (eigenes Repo)
 ├── frontend/                    ← Nuxt.js App (eigenes Repo)
 └── ai-service/                  ← FastAPI + Alembic (eigenes Repo)
@@ -143,6 +145,8 @@ Hybrides Rendering per Route — SPA wo App-Feeling gebraucht wird, statisch wo 
 | `/table` | SPA | Virtuelles Scrollen, Filter, Sortierung |
 | `/admin/**` | SPA | Interner Bereich |
 | `/problem/**` | Prerender | SEO — Suchmaschinen sollen Probleme finden |
+
+Deploy-Artefakt: `nuxt build` (Node.js-Server), nicht `nuxt generate` — SPA-Routes und dynamische Daten funktionieren nicht sauber mit statischer Generierung. Details: [`docs/infrastructure.md`](docs/infrastructure.md).
 
 ### Data Layer — Fake/Real Switch
 
@@ -467,7 +471,9 @@ Vollständige Spezifikation: siehe [`docs/infrastructure.md`](infrastructure.md)
 ### Makefile
 
 Alle häufigen Operationen über `make`. `make help` zeigt alle Befehle.
-Kategorien: Entwicklung, Code-Qualität, Testing, Datenbank, Backup, Build/Deploy.
+Kategorien: Setup, Entwicklung, Code-Qualität, Testing, Datenbank, Backup, Build/Deploy.
+
+`make setup` — erstellt `.libs/`-Symlinks zu lokalen Entwicklungs-Bibliotheken (BashLib, BashTools, MakeLib). Einmalig nach dem Klonen, benötigt `DEV_LOCAL`-Env-Variable.
 
 ### Umgebungsvariablen
 
@@ -485,6 +491,11 @@ Nie hardcoden — alle in `.env.example` dokumentiert. Wichtigste:
 
 SQL-Files in `database/seeds/` — alphabetisch importiert, idempotent via `ON CONFLICT DO NOTHING`.
 Dieselben Files für Entwicklung und Tests.
+
+### Versionierung
+
+Build-Scripts verwenden `hashVer` (BashLib) — Format: `<Jahr>.<Quartal>.0-SNAPSHOT<MMDD>.<HASH>` (z.B. `26.1.0-SNAPSHOT0327.a3f9`).
+Automatisch via Jenkins — nie manuell setzen. Vollständige Spezifikation: [`docs/infrastructure.md`](docs/infrastructure.md).
 
 ### Backup
 

@@ -1,0 +1,33 @@
+pipeline {
+    agent { label 'linux' }
+
+    parameters {
+        booleanParam(defaultValue: true, description: 'Build image', name: 'BUILD_IMAGE')
+        booleanParam(defaultValue: false, description: 'Push to Docker-Hub', name: 'PUSH_TO_DOCKERHUB')
+    }
+
+    stages {
+        stage('Build (amd64 only)') {
+            when { anyOf { expression { params.BUILD_IMAGE }}}
+            steps {
+               timeout(time: 30, unit: 'MINUTES') {
+                    ansiColor('xterm') {
+                        sh './docker/app/build --build'
+                    }
+                }
+            }
+        }
+
+        stage('Deploy (amd64 only)') {
+            when { anyOf { expression { params.PUSH_TO_DOCKERHUB }}}
+            steps {
+                timeout(time: 30, unit: 'MINUTES') {
+                    ansiColor('xterm') {
+                    sh './docker/app/build --push'
+                    }
+                }
+            }
+        }
+
+    }
+}

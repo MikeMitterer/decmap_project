@@ -2,6 +2,15 @@
 
 INFRA := infrastructure
 
+# ─── Setup ───────────────────────────────────────────────────────────────────
+
+.PHONY: setup
+setup: ## Lokale Symlinks in .libs/ erstellen (DEV_LOCAL muss gesetzt sein)
+	@test -n "$(DEV_LOCAL)" || (echo "Fehler: DEV_LOCAL ist nicht gesetzt." && exit 1)
+	ln -sf $(DEV_LOCAL)/DevBash/Production/BashLib  .libs/BashLib
+	ln -sf $(DEV_LOCAL)/DevBash/Production/BashTools .libs/BashTools
+	ln -sf $(DEV_LOCAL)/DevMake/Production/MakeLib   .libs/MakeLib
+
 -include $(INFRA)/.env
 export
 
