@@ -17,6 +17,9 @@ database/backups/
 .vscode/
 *.swp
 *.swo
+
+# Claude Code (lokale Einstellungen)
+.claude/
 frontend/
 infrastructure/
 ai-service/
