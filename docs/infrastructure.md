@@ -11,7 +11,7 @@ Diese Variablen gehoeren nicht in `.env.example` — sie werden einmalig in der 
 | Variable | Zeigt auf | Benoetigt von |
 |---|---|---|
 | `DEV_LOCAL` | Lokales Dev-Verzeichnis (z.B. `/Volumes/DevLocal`) | `make setup` — erstellt `.libs/`-Symlinks |
-| `DEV_MAKE` | `MakeLib`-Verzeichnis | `.templates/Makefile` — `include ${DEV_MAKE}/...` |
+| `DEV_MAKE` | `MakeLib`-Verzeichnis | Root-`Makefile` + `.templates/Makefile` — `include ${DEV_MAKE}/colours.mk`, `tools.mk` |
 | `DEV_DOCKER` | Docker-Hilfsskripte | `.templates/docker/build.sh` — Build + Push |
 | `BASH_LIBS` | Bash-Bibliotheken (`*.lib.sh`) | `.templates/docker/build.sh` — sourced via `. ${BASH_LIBS}/build.lib.sh` usw. |
 | `BASH_TOOLS` | Bash-Tools (`local2Server.sh` usw.) | `.templates/Makefile` — `lh2server`/`update`-Targets |
@@ -147,35 +147,40 @@ NUXT_PUBLIC_API_BASE=https://...
 
 ---
 
-## Makefile
+## Makefile-Struktur
 
-Alle haufigen Operationen uber `make`. `make help` zeigt alle Befehle.
+Jedes Sub-Repo hat ein eigenes Makefile fuer seinen Kontext. `make help` zeigt die Befehle des jeweiligen Repos.
 
-[`.templates/Makefile`](../.templates/Makefile) ist ein generisches Ausgangs-Template fuer Sub-Repo-Makefiles. Benoetigt `DEV_MAKE`-Env-Variable (zeigt auf `MakeLib`) und `BASH_TOOLS` (fuer `lh2server`/`update`-Targets).
+| Makefile | Zustandig fuer |
+|---|---|
+| `Makefile` (Root) | Workspace-Setup, Delegation an Sub-Repos, Cross-Repo lint/test |
+| `infrastructure/Makefile` | Docker, Datenbank, Backup, Deploy |
+| `frontend/Makefile` | Dev-Server, Lint, Test, Build, Versioning |
+| `ai-service/Makefile` | (noch nicht angelegt — folgt demselben Muster) |
 
-```makefile
-# Lokales Setup (einmalig, benoetigt DEV_LOCAL-Env-Variable)
-setup             # Erstellt .libs/-Symlinks (BashLib, BashTools, MakeLib)
+[`.templates/Makefile`](../.templates/Makefile) ist ein generisches Ausgangs-Template. Benoetigt `DEV_MAKE`-Env-Variable (zeigt auf `MakeLib`).
 
-# Entwicklung
-up / down / logs
+```bash
+# Workspace-Root
+make setup             # .libs/-Symlinks erstellen (einmalig, benoetigt DEV_LOCAL)
+make dev-up            # → delegiert an infrastructure/Makefile
+make lint              # → delegiert an frontend/ (und kuenftig ai-service/)
+make test              # → delegiert an frontend/ (und kuenftig ai-service/)
 
-# Code-Qualitat
-lint / lint-frontend / lint-backend
-format / format-frontend / format-backend
+# Infrastructure (aus infrastructure/ oder via make -C infrastructure ...)
+make up / down / logs                                 # Alle Services
+make dev-up / dev-down / dev-logs                     # Dev-Umgebung (Directus + Mailpit)
+make db-migrate / db-seed / db-reset                  # Datenbank
+make seed-users                                       # Test-User in Directus
+make backup / backup-schema / backup-restore          # Backup
+make build / deploy                                   # Build & Deploy
+make precheck / version / tags                        # Versioning (hashVer)
+make tag-patch / tag-minor / tag-major                # Git-Tag setzen + pushen
 
-# Testing
-test / test-frontend / test-backend
-
-# Datenbank
-db-migrate / db-migrate-create / db-migrate-status / db-rollback
-db-seed / db-reset (nur lokal!)
-
-# Backup
-backup / backup-schema / backup-restore / backup-remote
-
-# Build / Deploy
-build / deploy
+# Frontend (aus frontend/ oder via make -C frontend ...)
+make dev / install / lint / format / test             # Entwicklung
+make build / deploy                                   # Deploy
+make tag-patch / tag-minor / tag-major                # Versioning
 ```
 
 ---

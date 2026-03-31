@@ -59,31 +59,31 @@ weight              float (Soft-Clustering-Score, 0.0–1.0)
 PRIMARY KEY (problem_id, cluster_id)
 ```
 
-**`tags`** — Hierarchische Themen-Tags. Level bestimmt die Ebene in der Taxonomie: L0 Root, L1-L9 KI-generierte Kategorien, L10 User-Tags. Strukturelle Tags (L0-L9) haben ein `parentId`, User-Tags (L10) sind flach.
+**`tags`** — Hierarchische Themen-Tags. Level bestimmt die Ebene in der Taxonomie: L0 Root, L1-L9 KI-generierte Kategorien, L10 User-Tags. Strukturelle Tags (L0-L9) haben ein `parent_id`, User-Tags (L10) sind flach.
 ```
 id                  uuid (PK)
 name                string (unique)
 level               integer                     — 0 = Root, 1-9 = KI-Kategorien, 10 = User-Tags
-parentId            FK → tags (nullable)        — null bei L0 und L10
-lockedBy            enum: admin | ai | null     — Schutz vor manueller Bearbeitung
+parent_id           FK → tags (nullable)        — null bei L0 und L10
+locked_by           enum: admin | ai | null     — Schutz vor manueller Bearbeitung
 created_at          timestamp
 ```
 
 Tag-Hierarchie:
-- **L0** (Root): Einzelner Wurzelknoten — uebergeordnetes Thema der Plattform. `lockedBy: admin`
-- **L1** (Top-Kategorien): z.B. "Governance & Compliance" — KI-generiert, `lockedBy: ai`
-- **L2** (Unterkategorien): z.B. "Shadow AI & Governance" — KI-generiert, `lockedBy: ai`
+- **L0** (Root): Einzelner Wurzelknoten — uebergeordnetes Thema der Plattform. `locked_by: admin`
+- **L1** (Top-Kategorien): z.B. "Governance & Compliance" — KI-generiert, `locked_by: ai`
+- **L2** (Unterkategorien): z.B. "Shadow AI & Governance" — KI-generiert, `locked_by: ai`
 - **L3–L9**: Tiefere KI-generierte Ebenen, werden erst bei groesseren Datenmengen relevant
-- **L10** (User-Tags): Flach, kein `parentId`, z.B. "shadow-ai", "data-privacy" — `lockedBy: null`
+- **L10** (User-Tags): Flach, kein `parent_id`, z.B. "shadow-ai", "data-privacy" — `locked_by: null`
 
 Beim KI-Clustering werden nur L1–L9 neu generiert. L0 (Root) und L10 (User-Tags) bleiben erhalten.
 
 **`problem_tag`** — Junction: Problem ↔ Tag (n:m) mit optionalem Weight.
 ```
-problemId           FK → problems
-tagId               FK → tags
+problem_id          FK → problems
+tag_id              FK → tags
 weight              float (0.0–1.0, default 1.0)
-PRIMARY KEY (problemId, tagId)
+PRIMARY KEY (problem_id, tag_id)
 ```
 
 **`regions`** — Lookup: geografische Regionen. Probleme ohne Region gelten als global.

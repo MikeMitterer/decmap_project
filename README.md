@@ -62,7 +62,7 @@ KI-Service) ist strukturell vorhanden, aber noch nicht an ein deployed Backend a
 
 ### Nächste Schritte
 
-- Deploy mit echtem Backend (Directus + PostgreSQL + FastAPI KI-Service)
+- Real-Data-Layer anbinden: Frontend gegen lokales Backend (Directus + PostgreSQL) drehen (`USE_FAKE_DATA=false`) — lokale Dev-Umgebung läuft via `make dev-up`
 - KI-gestütztes Clustering (HDBSCAN) zur Generierung der Tag-Hierarchie aus Problem-Embeddings
 - DNSBL + Bot-Erkennung als Middleware
 - Regionsbasierte Filterung und Ranking
@@ -119,7 +119,7 @@ DecisionMap/                     ← Workspace-Root-Repo (Issues, Haupt-Doku, CI
 ├── Makefile                     ← Workspace-Orchestrierung
 ├── .templates/                  ← Wiederverwendbare Templates (Jenkinsfile, Makefile, docker/)
 ├── .libs/                       ← Lokale Symlinks (BashLib, BashTools, MakeLib) — per .gitignore ausgeschlossen
-├── infrastructure/              ← docker-compose, nginx, Seeds, Backups (eigenes Repo)
+├── infrastructure/              ← docker-compose, nginx, Seeds, Backups, Makefile (eigenes Repo)
 ├── frontend/                    ← Nuxt.js App (eigenes Repo)
 └── ai-service/                  ← FastAPI + Alembic (eigenes Repo)
 ```
@@ -192,7 +192,7 @@ users ──< problems ──< solution_approaches
 |---|---|
 | `problems` | KI-Probleme mit Titel/Beschreibung in Original + Englisch, Status-Workflow, Embedding |
 | `solution_approaches` | Lösungsansätze pro Problem, Markdown (eingeschränkt), eigene Moderation |
-| `tags` | Hierarchische Themen-Tags mit Level (L1 Root → L2-L3 KI-Kategorien → L10 User-Tags) |
+| `tags` | Hierarchische Themen-Tags mit Level (L0 Root → L1-L9 KI-Kategorien → L10 User-Tags) |
 | `clusters` | KI-generierte Problemfelder mit Centroid-Vektor |
 | `regions` | Geografische Regionen (EU, US, APAC, GLOBAL) |
 | `votes` | Up-/Downvotes mit Duplikat-Prävention |
@@ -211,11 +211,11 @@ Das Tag-System ist eine mehrstufige Taxonomie — nicht flach:
 
 Jeder Tag hat:
 - `level` — die Hierarchie-Ebene (0–10)
-- `parentId` — Verweis auf den Eltern-Tag (null bei L0 und L10)
-- `lockedBy` — Schutz vor manueller Bearbeitung (`admin`, `ai`, oder null)
+- `parent_id` — Verweis auf den Eltern-Tag (null bei L0 und L10)
+- `locked_by` — Schutz vor manueller Bearbeitung (`admin`, `ai`, oder null)
 
-**Wichtig:** Beim KI-Clustering werden nur die strukturellen Tags (L2–L9) neu generiert.
-L1 (Root) und L10 (User-Tags) bleiben immer erhalten.
+**Wichtig:** Beim KI-Clustering werden nur die strukturellen Tags (L1–L9) neu generiert.
+L0 (Root) und L10 (User-Tags) bleiben immer erhalten.
 
 ### Mehrsprachigkeit im Datenmodell
 
@@ -470,10 +470,11 @@ Vollständige Spezifikation: siehe [`docs/infrastructure.md`](infrastructure.md)
 
 ### Makefile
 
-Alle häufigen Operationen über `make`. `make help` zeigt alle Befehle.
-Kategorien: Setup, Entwicklung, Code-Qualität, Testing, Datenbank, Backup, Build/Deploy.
+Root-Makefile delegiert an Sub-Repos. `make help` zeigt alle Root-Targets (Setup, Entwicklung, Code-Qualität, Testing). Sub-Repo-Makefiles: `make -C infrastructure help` (Docker, DB, Backup), `make -C frontend help` (dev, lint, test, build).
 
 `make setup` — erstellt `.libs/`-Symlinks zu lokalen Entwicklungs-Bibliotheken (BashLib, BashTools, MakeLib). Einmalig nach dem Klonen, benötigt `DEV_LOCAL`-Env-Variable.
+
+`make dev-up` / `make dev-down` — standalone Dev-Umgebung (Postgres + Directus + Mailpit) über `docker-compose.dev.yml`. Logs: `make -C infrastructure dev-logs`. Test-User anlegen: `make -C infrastructure seed-users`.
 
 ### Umgebungsvariablen
 
@@ -499,7 +500,7 @@ Automatisch via Jenkins — nie manuell setzen. Vollständige Spezifikation: [`d
 
 ### Backup
 
-`make backup` (lokal) und `make backup-remote` (vom Server holen).
+`make -C infrastructure backup` (lokal) und `make -C infrastructure backup-remote` (vom Server holen).
 Backups werden nie eingecheckt — `database/backups/` in `.gitignore`.
 
 ---

@@ -300,6 +300,27 @@ class ProblemRepository:
 - Testdatei spiegelt Quelle: `composables/useProblems.ts` → `tests/composables/useProblems.spec.ts`
 - `vi.mock()` muss **vor** den Imports stehen — Vitest hoisted Mocks nicht automatisch wenn Imports davor kommen
 
+### Contract-Tests (Fake → Real)
+
+Jede Fake-Implementierung braucht Contract-Tests, die beim Umstieg auf Real-Data direkt wiederverwendet werden koennen.
+
+```typescript
+// tests/composables/useProblems.contract.spec.ts
+// Dieselben Tests laufen gegen Fake- UND Real-Implementierung
+describe.each([
+  ['fake', useFakeProblems],
+  ['real', useRealProblems],
+])('%s implementation', (_, useImpl) => {
+  it('liefert ein Array von Problems', async () => {
+    const { problems } = useImpl()
+    await nextTick()
+    expect(Array.isArray(problems.value)).toBe(true)
+  })
+})
+```
+
+Ziel: Wenn `USE_FAKE_DATA=false` gesetzt wird, fallen keine neuen Tests noetig — die Contract-Tests greifen.
+
 ### Backend (pytest)
 
 - Unit-Tests fur: Spam-Filter, Embedding-Pipeline, Clustering-Service

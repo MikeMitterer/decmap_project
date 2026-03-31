@@ -40,7 +40,7 @@ Multi-Repo — vier Repos mit eigenem Release-Zyklus.
 | Repo | Inhalt | Deploy |
 |---|---|---|
 | `DecisionMap` (Root) | Issues, Haupt-Doku (CLAUDE.md, docs/), Makefile | — |
-| `infrastructure` | docker-compose, nginx, Seeds, Backups | Hetzner |
+| `infrastructure` | docker-compose, nginx, Seeds, Backups, Makefile | Hetzner |
 | `frontend` | Nuxt.js App | Hetzner (eigenstaendig) |
 | `ai-service` | FastAPI, Alembic, Repositories | Hetzner |
 
@@ -215,11 +215,11 @@ export function useProblems() {
 - **Env-Variablen:** Nie hardcoden, alle in `.env.example`
 - **Feature Flags:** `SHOW_VOTING`, `REQUIRE_AUTH`
 - **Linting:** ESLint + Prettier (TS) / ruff (Python) — automatisch, nicht verhandelbar
-- **Makefile:** `make help` fuer alle Befehle
+- **Makefile:** Jedes Sub-Repo hat ein eigenes Makefile. `make help` (Root: Workspace-Delegation), `make -C infrastructure help` (Docker, DB, Backup). Details: [`docs/infrastructure.md`](docs/infrastructure.md)
 - **Versionierung:** `hashVer` (BashLib) → `<Jahr>.<Quartal>.0-SNAPSHOT<MMDD>.<HASH>` — automatisch via Jenkins. Details: [`docs/infrastructure.md`](docs/infrastructure.md)
 - **Git:** Conventional Commits `<type>(<scope>): <msg>`, direkte Commits auf `main` erlaubt — Jenkins ist die einzige Schranke
 - **Seeds:** `database/seeds/` alphabetisch, idempotent
-- **Backup:** `make backup/backup-remote`, nie einchecken
+- **Backup:** `make -C infrastructure backup` / `make -C infrastructure backup-remote`, nie einchecken
 
 ---
 
