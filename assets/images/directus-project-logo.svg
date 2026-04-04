@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- DecisionMap - Directus Project Logo (square, dark bg) -->
+  <!-- IMPORTANT: "Decision" and "Map" are separate <text> elements for converter compatibility -->
+  <defs>
+    <linearGradient id="pinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF8C00"/>
+      <stop offset="100%" stop-color="#C04FA0"/>
+    </linearGradient>
+    <linearGradient id="mapGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FF8C00"/>
+      <stop offset="100%" stop-color="#C04FA0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="256" height="256" rx="16" fill="#0C0C12"/>
+
+  <!-- Pin icon -->
+  <g transform="translate(78, 30) scale(0.82)">
+    <path d="M60 10 C33 10, 12 31, 12 56 C12 81, 60 150, 60 150 C60 150, 108 81, 108 56 C108 31, 87 10, 60 10 Z" fill="url(#pinGrad)"/>
+    <circle cx="60" cy="56" r="10" fill="#0C0C12"/>
+    <circle cx="60" cy="28" r="6" fill="#0C0C12"/>
+    <circle cx="38" cy="74" r="6" fill="#0C0C12"/>
+    <circle cx="82" cy="74" r="6" fill="#0C0C12"/>
+    <circle cx="32" cy="48" r="5" fill="#0C0C12"/>
+    <circle cx="88" cy="48" r="5" fill="#0C0C12"/>
+    <line x1="60" y1="46" x2="60" y2="34" stroke="#0C0C12" stroke-width="3" stroke-linecap="round"/>
+    <line x1="52" y1="62" x2="42" y2="70" stroke="#0C0C12" stroke-width="3" stroke-linecap="round"/>
+    <line x1="68" y1="62" x2="78" y2="70" stroke="#0C0C12" stroke-width="3" stroke-linecap="round"/>
+    <line x1="51" y1="52" x2="37" y2="50" stroke="#0C0C12" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="69" y1="52" x2="83" y2="50" stroke="#0C0C12" stroke-width="2.5" stroke-linecap="round"/>
+  </g>
+
+  <!--
+    Text positioning: We use a self-measuring script approach in the HTML export.
+    For static SVG, positions are pre-calculated for Montserrat Bold 26px.
+    "Decision" width ≈ 120px, "Map" width ≈ 50px, total ≈ 170px
+    Start x = (256 - 170) / 2 = 43
+  -->
+
+  <!-- "Decision" in white -->
+  <text id="t-decision" x="43" y="204" font-family="Montserrat, Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="26" font-weight="700" letter-spacing="0.3" fill="#FFFFFF">Decision</text>
+
+  <!-- "Map" in gradient, positioned right after "Decision" -->
+  <text id="t-map" x="163" y="204" font-family="Montserrat, Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="26" font-weight="700" letter-spacing="0.3" fill="url(#mapGrad)">Map</text>
+
+  <!-- Tagline -->
+  <text x="128" y="227" text-anchor="middle" font-family="Montserrat, Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="8.5" fill="#A0A0AA" letter-spacing="2.5" font-weight="400">MAP PROBLEMS · FIND SOLUTIONS</text>
+</svg>

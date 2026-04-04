@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" width="1920" height="1080">
+  <!-- DecisionMap - Directus Login Background -->
+  <defs>
+    <!-- Main gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0C0C12"/>
+      <stop offset="40%" stop-color="#12101E"/>
+      <stop offset="100%" stop-color="#1A0F20"/>
+    </linearGradient>
+
+    <!-- Accent glow gradients -->
+    <radialGradient id="glowOrange" cx="15%" cy="30%" r="40%">
+      <stop offset="0%" stop-color="#FF8C00" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#FF8C00" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowLila" cx="85%" cy="70%" r="45%">
+      <stop offset="0%" stop-color="#C04FA0" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#C04FA0" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowCyan" cx="60%" cy="20%" r="30%">
+      <stop offset="0%" stop-color="#00D2E6" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#00D2E6" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Pin gradient -->
+    <linearGradient id="pinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF8C00"/>
+      <stop offset="100%" stop-color="#C04FA0"/>
+    </linearGradient>
+
+    <!-- Subtle grid pattern -->
+    <pattern id="grid" width="60" height="60" patternUnits="userSpaceOnUse">
+      <path d="M 60 0 L 0 0 0 60" fill="none" stroke="#FFFFFF" stroke-width="0.3" stroke-opacity="0.04"/>
+    </pattern>
+
+    <!-- Node connection line gradient -->
+    <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FF8C00" stop-opacity="0.15"/>
+      <stop offset="50%" stop-color="#C04FA0" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#00D2E6" stop-opacity="0.12"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1920" height="1080" fill="url(#bgGrad)"/>
+
+  <!-- Grid overlay -->
+  <rect width="1920" height="1080" fill="url(#grid)"/>
+
+  <!-- Ambient glow effects -->
+  <rect width="1920" height="1080" fill="url(#glowOrange)"/>
+  <rect width="1920" height="1080" fill="url(#glowLila)"/>
+  <rect width="1920" height="1080" fill="url(#glowCyan)"/>
+
+  <!-- Decorative network nodes and connections (decision map metaphor) -->
+  <g opacity="0.25">
+    <!-- Connection lines -->
+    <line x1="200" y1="180" x2="480" y2="320" stroke="url(#lineGrad)" stroke-width="1.5"/>
+    <line x1="480" y1="320" x2="750" y2="250" stroke="url(#lineGrad)" stroke-width="1"/>
+    <line x1="480" y1="320" x2="380" y2="550" stroke="url(#lineGrad)" stroke-width="1"/>
+    <line x1="750" y1="250" x2="950" y2="400" stroke="url(#lineGrad)" stroke-width="1.2"/>
+    <line x1="1400" y1="200" x2="1600" y2="380" stroke="url(#lineGrad)" stroke-width="1"/>
+    <line x1="1600" y1="380" x2="1750" y2="300" stroke="url(#lineGrad)" stroke-width="1"/>
+    <line x1="1600" y1="380" x2="1500" y2="600" stroke="url(#lineGrad)" stroke-width="1.2"/>
+    <line x1="300" y1="750" x2="550" y2="850" stroke="url(#lineGrad)" stroke-width="1"/>
+    <line x1="550" y1="850" x2="700" y2="780" stroke="url(#lineGrad)" stroke-width="1"/>
+    <line x1="1300" y1="700" x2="1500" y2="800" stroke="url(#lineGrad)" stroke-width="1"/>
+    <line x1="1500" y1="800" x2="1700" y2="750" stroke="url(#lineGrad)" stroke-width="1"/>
+    <line x1="1500" y1="800" x2="1550" y2="950" stroke="url(#lineGrad)" stroke-width="0.8"/>
+
+    <!-- Network nodes -->
+    <circle cx="200" cy="180" r="4" fill="#FF8C00" opacity="0.5"/>
+    <circle cx="480" cy="320" r="6" fill="#FF8C00" opacity="0.4"/>
+    <circle cx="750" cy="250" r="3.5" fill="#C04FA0" opacity="0.5"/>
+    <circle cx="380" cy="550" r="3" fill="#C04FA0" opacity="0.35"/>
+    <circle cx="950" cy="400" r="4" fill="#00D2E6" opacity="0.3"/>
+    <circle cx="1400" cy="200" r="3.5" fill="#FF8C00" opacity="0.4"/>
+    <circle cx="1600" cy="380" r="5" fill="#C04FA0" opacity="0.4"/>
+    <circle cx="1750" cy="300" r="3" fill="#FF8C00" opacity="0.35"/>
+    <circle cx="1500" cy="600" r="4" fill="#00D2E6" opacity="0.3"/>
+    <circle cx="300" cy="750" r="3.5" fill="#FF8C00" opacity="0.35"/>
+    <circle cx="550" cy="850" r="5" fill="#C04FA0" opacity="0.4"/>
+    <circle cx="700" cy="780" r="3" fill="#00D2E6" opacity="0.3"/>
+    <circle cx="1300" cy="700" r="4" fill="#FF8C00" opacity="0.35"/>
+    <circle cx="1500" cy="800" r="5.5" fill="#C04FA0" opacity="0.4"/>
+    <circle cx="1700" cy="750" r="3" fill="#FF8C00" opacity="0.3"/>
+    <circle cx="1550" cy="950" r="3.5" fill="#00D2E6" opacity="0.25"/>
+  </g>
+
+  <!-- Subtle floating pin silhouettes -->
+  <g opacity="0.06">
+    <path d="M160 650 C147 650, 137 661, 137 672 C137 683, 160 710, 160 710 C160 710, 183 683, 183 672 C183 661, 173 650, 160 650 Z" fill="#FF8C00"/>
+    <path d="M1780 500 C1763 500, 1750 514, 1750 528 C1750 542, 1780 580, 1780 580 C1780 580, 1810 542, 1810 528 C1810 514, 1797 500, 1780 500 Z" fill="#C04FA0"/>
+    <path d="M900 100 C888 100, 880 108, 880 117 C880 126, 900 148, 900 148 C900 148, 920 126, 920 117 C920 108, 912 100, 900 100 Z" fill="#00D2E6"/>
+    <path d="M1100 900 C1085 900, 1074 912, 1074 924 C1074 936, 1100 966, 1100 966 C1100 966, 1126 936, 1126 924 C1126 912, 1115 900, 1100 900 Z" fill="#FF8C00"/>
+  </g>
+
+  <!-- Vignette overlay for depth -->
+  <radialGradient id="vignette" cx="50%" cy="50%" r="70%">
+    <stop offset="0%" stop-color="#0C0C12" stop-opacity="0"/>
+    <stop offset="100%" stop-color="#0C0C12" stop-opacity="0.5"/>
+  </radialGradient>
+  <rect width="1920" height="1080" fill="url(#vignette)"/>
+</svg>

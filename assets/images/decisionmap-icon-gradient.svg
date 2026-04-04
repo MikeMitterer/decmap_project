@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 160" width="120" height="160">
+  <!-- DecisionMap Icon - Gradient Orange→Lila, transparent bg -->
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF8C00"/>
+      <stop offset="100%" stop-color="#C04FA0"/>
+    </linearGradient>
+  </defs>
+
+  <path d="M60 10 C33 10, 12 31, 12 56 C12 81, 60 150, 60 150 C60 150, 108 81, 108 56 C108 31, 87 10, 60 10 Z" fill="url(#g)"/>
+
+  <!-- Network nodes (white negative space) -->
+  <circle cx="60" cy="56" r="10" fill="white"/>
+  <circle cx="60" cy="28" r="6" fill="white"/>
+  <circle cx="38" cy="74" r="6" fill="white"/>
+  <circle cx="82" cy="74" r="6" fill="white"/>
+  <circle cx="32" cy="48" r="5" fill="white"/>
+  <circle cx="88" cy="48" r="5" fill="white"/>
+
+  <!-- Connections -->
+  <line x1="60" y1="46" x2="60" y2="34" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  <line x1="52" y1="62" x2="42" y2="70" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  <line x1="68" y1="62" x2="78" y2="70" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  <line x1="51" y1="52" x2="37" y2="50" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="69" y1="52" x2="83" y2="50" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

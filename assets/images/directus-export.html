@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>DecisionMap – Directus Assets Export</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  body {
+    margin: 0;
+    background: #1a1a2e;
+    color: #fff;
+    font-family: 'Montserrat', sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 40px 20px;
+    gap: 40px;
+  }
+  h1 { font-size: 18px; font-weight: 400; color: #A0A0AA; margin: 0; }
+  h2 { font-size: 14px; font-weight: 400; color: #A0A0AA; margin: 0 0 12px 0; }
+  .export-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+  }
+  button {
+    background: linear-gradient(90deg, #FF8C00, #C04FA0);
+    border: none;
+    color: white;
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-family: 'Montserrat', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  button:hover { opacity: 0.9; }
+  .buttons { display: flex; gap: 12px; }
+  .bg-preview {
+    border: 1px solid #333;
+    border-radius: 8px;
+    overflow: hidden;
+    max-width: 100%;
+  }
+  .bg-preview img {
+    width: 960px;
+    max-width: 100%;
+    height: auto;
+    display: block;
+  }
+  .hint {
+    font-size: 12px;
+    color: #666;
+    max-width: 500px;
+    text-align: center;
+    line-height: 1.5;
+  }
+  #logoSvg { border-radius: 16px; }
+</style>
+</head>
+<body>
+
+<h1>DecisionMap – Directus Assets</h1>
+
+<!-- ===== PROJECT LOGO (inline SVG = single source of truth) ===== -->
+<div class="export-section">
+  <h2>Projekt-Logo</h2>
+
+  <svg id="logoSvg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+    <defs>
+      <linearGradient id="pinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#FF8C00"/>
+        <stop offset="100%" stop-color="#C04FA0"/>
+      </linearGradient>
+      <linearGradient id="mapGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#FF8C00"/>
+        <stop offset="100%" stop-color="#C04FA0"/>
+      </linearGradient>
+    </defs>
+    <rect width="256" height="256" rx="16" fill="#0C0C12"/>
+    <g transform="translate(78, 30) scale(0.82)">
+      <path d="M60 10 C33 10, 12 31, 12 56 C12 81, 60 150, 60 150 C60 150, 108 81, 108 56 C108 31, 87 10, 60 10 Z" fill="url(#pinGrad)"/>
+      <circle cx="60" cy="56" r="10" fill="#0C0C12"/>
+      <circle cx="60" cy="28" r="6" fill="#0C0C12"/>
+      <circle cx="38" cy="74" r="6" fill="#0C0C12"/>
+      <circle cx="82" cy="74" r="6" fill="#0C0C12"/>
+      <circle cx="32" cy="48" r="5" fill="#0C0C12"/>
+      <circle cx="88" cy="48" r="5" fill="#0C0C12"/>
+      <line x1="60" y1="46" x2="60" y2="34" stroke="#0C0C12" stroke-width="3" stroke-linecap="round"/>
+      <line x1="52" y1="62" x2="42" y2="70" stroke="#0C0C12" stroke-width="3" stroke-linecap="round"/>
+      <line x1="68" y1="62" x2="78" y2="70" stroke="#0C0C12" stroke-width="3" stroke-linecap="round"/>
+      <line x1="51" y1="52" x2="37" y2="50" stroke="#0C0C12" stroke-width="2.5" stroke-linecap="round"/>
+      <line x1="69" y1="52" x2="83" y2="50" stroke="#0C0C12" stroke-width="2.5" stroke-linecap="round"/>
+    </g>
+    <text id="t-decision" x="43" y="204" font-family="Montserrat, Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="26" font-weight="700" letter-spacing="0.3" fill="#FFFFFF">Decision</text>
+    <text id="t-map" x="163" y="204" font-family="Montserrat, Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="26" font-weight="700" letter-spacing="0.3" fill="url(#mapGrad)">Map</text>
+    <text x="128" y="227" text-anchor="middle" font-family="Montserrat, Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="8.5" fill="#A0A0AA" letter-spacing="2.5" font-weight="400">MAP PROBLEMS · FIND SOLUTIONS</text>
+  </svg>
+
+  <div class="buttons">
+    <button onclick="exportLogo(256, 'directus-project-logo.png')">PNG 256×256</button>
+    <button onclick="exportLogo(512, 'directus-project-logo@2x.png')">PNG 512×512</button>
+  </div>
+</div>
+
+<!-- ===== LOGIN BACKGROUND ===== -->
+<div class="export-section">
+  <h2>Login-Hintergrund</h2>
+  <div class="bg-preview">
+    <img id="bgImg" src="directus-login-background.svg" alt="Login Background" />
+  </div>
+  <button onclick="exportBg()">PNG 1920×1080</button>
+</div>
+
+<p class="hint">
+  Das SVG ist direkt inline — Vorschau und Export sind identisch.
+</p>
+
+<script>
+function exportLogo(size, filename) {
+  const svgEl = document.getElementById('logoSvg');
+
+  // Serialize the inline SVG to a string
+  const serializer = new XMLSerializer();
+  const svgString = serializer.serializeToString(svgEl);
+
+  // Create blob URL (avoids CORS / taint issues with file://)
+  const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  const img = new Image();
+  img.onload = () => {
+    ctx.drawImage(img, 0, 0, size, size);
+    URL.revokeObjectURL(url);
+    const a = document.createElement('a');
+    a.download = filename;
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  };
+  img.src = url;
+}
+
+function exportBg() {
+  // Background SVG has no text/font issues, embed inline via XMLHttpRequest workaround
+  const svgEl = document.getElementById('bgImg');
+
+  // For the background: read it as data URL from the img directly
+  const canvas = document.createElement('canvas');
+  canvas.width = 1920;
+  canvas.height = 1080;
+  const ctx = canvas.getContext('2d');
+
+  // Use the already-loaded img element
+  ctx.drawImage(svgEl, 0, 0, 1920, 1080);
+  try {
+    const a = document.createElement('a');
+    a.download = 'directus-login-background.png';
+    a.href = canvas.toDataURL('image/png');
+    a.click();
+  } catch(e) {
+    // Fallback: inline the background SVG too
+    alert('Background-Export fehlgeschlagen. Bitte Rechtsklick → Bild speichern unter auf die Vorschau.');
+  }
+}
+</script>
+</body>
+</html>
