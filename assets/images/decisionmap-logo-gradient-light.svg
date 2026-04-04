@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 120" width="560" height="120">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="10 16 510 84" width="510" height="84">
   <!-- DecisionMap Logo - Gradient Variant (Orange → Lila), transparent background, light text -->
   <defs>
     <linearGradient id="pinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -33,5 +33,5 @@
   <text x="82" y="68" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="48" font-weight="700" letter-spacing="2">
     <tspan fill="#0C0C12">Decision</tspan><tspan fill="url(#mapGrad)">Map</tspan>
   </text>
-  <text x="83" y="92" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="11" fill="#666670" letter-spacing="3" font-weight="400">MAP PROBLEMS · FIND SOLUTIONS</text>
+  <text x="83" y="84" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" fill="#666670" letter-spacing="3" font-weight="400">MAP PROBLEMS · FIND SOLUTIONS</text>
 </svg>
