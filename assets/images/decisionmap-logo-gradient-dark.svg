@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="10 16 510 84" width="510" height="84">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="6 20 380 78" width="380" height="78">
   <!-- DecisionMap Logo - Gradient Variant (Orange → Lila), transparent background, dark text -->
   <defs>
     <linearGradient id="pinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
@@ -26,12 +26,12 @@
     </mask>
   </defs>
 
-  <g transform="translate(20, 22) scale(0.48)">
+  <g transform="translate(8, 22) scale(0.48)">
     <path d="M60 10 C33 10, 12 31, 12 56 C12 81, 60 150, 60 150 C60 150, 108 81, 108 56 C108 31, 87 10, 60 10 Z" fill="url(#pinGrad)" mask="url(#pinMask)"/>
   </g>
 
-  <text x="82" y="68" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="48" font-weight="700" letter-spacing="2">
+  <text x="68" y="68" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="48" font-weight="700" letter-spacing="2">
     <tspan fill="#FFFFFF">Decision</tspan><tspan fill="url(#mapGrad)">Map</tspan>
   </text>
-  <text x="83" y="84" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" fill="#A0A0AA" letter-spacing="3" font-weight="400">MAP PROBLEMS · FIND SOLUTIONS</text>
+  <text x="69" y="90" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif" font-size="13" fill="#A0A0AA" letter-spacing="3" font-weight="400">MAP PROBLEMS · FIND SOLUTIONS</text>
 </svg>
