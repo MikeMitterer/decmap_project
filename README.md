@@ -40,7 +40,11 @@ mit Community-Validierung durch Voting.
 
 Das Frontend ist im **Fake-Data-Modus** (`USE_FAKE_DATA=true`) vollständig funktionsfähig.
 Alle UI-Flows arbeiten End-to-End gegen In-Memory-Daten. Der Real-Data-Layer (Directus + FastAPI
-KI-Service) ist strukturell vorhanden, aber noch nicht an ein deployed Backend angebunden.
+KI-Service) ist vollständig implementiert — `USE_FAKE_DATA=false` aktiviert ihn ohne weiteren Code-Eingriff,
+sobald Directus eingerichtet und `DIRECTUS_TOKEN` gesetzt ist.
+
+Der **AI-Service** (FastAPI, Python 3.11+) ist vollständig implementiert und getestet (31 Unit-Tests grün).
+Manuelle Endpunkt-Tests per `curl`: [`docs/cmdline.md`](docs/cmdline.md)
 
 ### Was funktioniert
 
@@ -62,9 +66,9 @@ KI-Service) ist strukturell vorhanden, aber noch nicht an ein deployed Backend a
 
 ### Nächste Schritte
 
-- Real-Data-Layer anbinden: Frontend gegen lokales Backend (Directus + PostgreSQL) drehen (`USE_FAKE_DATA=false`) — lokale Dev-Umgebung läuft via `make dev-up`
-- KI-gestütztes Clustering (HDBSCAN) zur Generierung der Tag-Hierarchie aus Problem-Embeddings
-- DNSBL + Bot-Erkennung als Middleware
+- **Directus einrichten (einmalig):** Schema-Import via `docker exec decisionmap-directus npx directus schema apply /directus/schema.json` (Snapshot im Repo), dann API-Token generieren + in `.env` eintragen — Details: `docs/infrastructure.md`
+- **Directus Flows konfigurieren:** HTTP-Request-Actions für `problem-submitted`, `problem-approved`, `solution-approved`, `vote-changed` auf `http://ai-service:8000/hooks/*` einrichten
+- DNSBL-Check (aiodnsbl) als zweite Schicht im Spam-Filter aktivieren
 - Regionsbasierte Filterung und Ranking
 - UI-Tests (aktuell: nur Unit-Tests für Composables)
 
@@ -89,7 +93,7 @@ KI-Service) ist strukturell vorhanden, aber noch nicht an ein deployed Backend a
 | Echtzeit | WebSocket (FastAPI native) | REST für CRUD, WebSocket für Live-Updates |
 | Logging Frontend | consola | Nuxt-nativ, strukturiert |
 | Logging Backend | structlog | Key-Value-Ausgabe, async-kompatibel |
-| Testing Frontend | Vitest | Unit-Tests für Composables |
+| Testing Frontend | Vitest | Unit-Tests + Contract-Tests für alle Composables (Fake & Real) |
 | Testing Backend | pytest | Unit-Tests für Services |
 | Hosting | Hetzner + Docker + nginx | Europäisch (DSGVO), günstig |
 | CI/CD | Jenkins (lokal) → SSH → Hetzner | Bestehende Infrastruktur |
@@ -162,6 +166,8 @@ export function useProblems() {
 ```
 
 Das vereinfacht die UI-Entwicklung erheblich: Man kann das gesamte Frontend testen, ohne ein Backend zu brauchen.
+Contract-Tests (`tests/composables/*.contract.spec.ts`) laufen mit `describe.each` gegen beide Layer gleichzeitig
+und stellen sicher, dass Fake und Real dasselbe Verhalten zeigen.
 
 ### Trennung UI und Business Logic
 
@@ -417,6 +423,16 @@ User wählt eine Akzentfarbe → das System generiert daraus alle UI-Farben auto
 - Komplementärfarben für Graph-Knoten (Blätter: Farbton +120°, Lösungen: +160°)
 - Über 30 CSS Custom Properties werden dynamisch gesetzt
 
+### Theme-aware Logo
+
+Der Header wechselt automatisch zwischen `decisionmap-logo-gradient-light.svg` (heller Modus)
+und `decisionmap-logo-gradient-dark.svg` (dunkler Modus) über `isDark` aus `useTheme()`.
+Beide SVG-Varianten liegen in `assets/images/` (Gradient Orange→Lila).
+
+Die SVGs haben keinen `<rect>`-Hintergrund — die Pin-Cutouts (Kreise + Linien) sind als
+`<mask>` implementiert, was echte transparente Löcher erzeugt und auf jedem Theme-Hintergrund
+funktioniert. Header-Höhe: `h-16` (64 px), Logo-Höhe: `h-11` (44 px).
+
 ### FOUC-Prävention
 
 Ein blockierendes Inline-Script im `<head>` liest das Theme aus `localStorage` und setzt das
@@ -483,7 +499,8 @@ Nie hardcoden — alle in `.env.example` dokumentiert. Wichtigste:
 | Variable | Beschreibung |
 |---|---|
 | `USE_FAKE_DATA` | `true` = In-Memory, `false` = echter Server |
-| `OPENAI_API_KEY` | Für Embeddings, Spam-Filter, Übersetzung |
+| `LLM_PROVIDER` / `EMBEDDING_PROVIDER` | `openai` (Standard) oder `anthropic` |
+| `OPENAI_API_KEY` | Für Embeddings + LLM (wenn Provider = openai) |
 | `SIMILARITY_THRESHOLD` | Schwellenwert Ähnlichkeitserkennung (0.85) |
 | `SHOW_VOTING` | Feature Flag: Vote-Scores im Graph |
 | `REQUIRE_AUTH` | Feature Flag: Login für Submissions erzwingen |
@@ -555,4 +572,3 @@ Basis: 4 Stunden produktive Arbeitszeit pro Tag.
 - **Clustering-Job implementieren** — HDBSCAN + LLM-Labeling im ai-service (siehe Abschnitt 6)
 - **Domain registrieren** — `decisionmap.ai` + `frictionmap.ai` sichern
 - **DNSBL aktivieren** — nach Launch wenn Bot-Aktivität zunimmt
-- **Real-Data-Layer** — `useFakeTags()` wird aktuell auch bei `USE_FAKE_DATA=false` zurückgegeben (TODO)

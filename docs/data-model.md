@@ -53,10 +53,11 @@ updated_at          timestamp
 
 **`problem_cluster`** — Junction: Problem ↔ Cluster (n:m). Ein Problem kann in mehreren Clustern vorkommen. Weight ist der Soft-Clustering-Score aus HDBSCAN.
 ```
+id                  uuid (PK, uuid_generate_v4())  — Directus benoetigt Single-Column-PK fuer M2M
 problem_id          FK → problems
 cluster_id          FK → clusters
 weight              float (Soft-Clustering-Score, 0.0–1.0)
-PRIMARY KEY (problem_id, cluster_id)
+UNIQUE (problem_id, cluster_id)
 ```
 
 **`tags`** — Hierarchische Themen-Tags. Level bestimmt die Ebene in der Taxonomie: L0 Root, L1-L9 KI-generierte Kategorien, L10 User-Tags. Strukturelle Tags (L0-L9) haben ein `parent_id`, User-Tags (L10) sind flach.
@@ -80,10 +81,11 @@ Beim KI-Clustering werden nur L1–L9 neu generiert. L0 (Root) und L10 (User-Tag
 
 **`problem_tag`** — Junction: Problem ↔ Tag (n:m) mit optionalem Weight.
 ```
+id                  uuid (PK, uuid_generate_v4())  — Directus benoetigt Single-Column-PK fuer M2M
 problem_id          FK → problems
 tag_id              FK → tags
 weight              float (0.0–1.0, default 1.0)
-PRIMARY KEY (problem_id, tag_id)
+UNIQUE (problem_id, tag_id)
 ```
 
 **`regions`** — Lookup: geografische Regionen. Probleme ohne Region gelten als global.
@@ -93,11 +95,12 @@ code                string (unique) — z.B. EU, US, APAC, GLOBAL
 name                string           — z.B. "European Union", "United States"
 ```
 
-**`region`** — Junction: Problem ↔ Region (n:m). Beeinflusst Ranking und optionale Filterung im Graph.
+**`problem_region`** — Junction: Problem ↔ Region (n:m). Beeinflusst Ranking und optionale Filterung im Graph.
 ```
+id                  uuid (PK, uuid_generate_v4())  — Directus benoetigt Single-Column-PK fuer M2M
 problem_id          FK → problems
 region_id           FK → regions
-PRIMARY KEY (problem_id, region_id)
+UNIQUE (problem_id, region_id)
 ```
 
 **`votes`** — Up/Downvotes auf Problems und Solution Approaches. Anonyme Votes uber session_id und ip_hash nachverfolgbar. Duplicate-Vote-Prevention per UNIQUE Constraint.
@@ -148,7 +151,15 @@ users ──< problems ──< solution_approaches
 
 ## Datenbank-Versionierung (Alembic)
 
-Alembic verwaltet alle Schema-Anderungen an den Custom-Tabellen.
+Alembic verwaltet **Schema-Aenderungen** nach dem initialen Setup.
+Der initiale Zustand gehoert Directus (`schema.json`) — Alembic greift erst danach.
+
+```
+database/init/000_schema.sql  → nur PostgreSQL-Extensions (uuid-ossp, vector)
+directus/schema.json          → Tabellen + Directus-Metadaten (single source of truth)
+database/constraints.sql      → vector(1536), CHECK-Constraints, custom Indizes
+```
+
 Directus-System-Tabellen sind ausgenommen — die verwaltet Directus selbst.
 
 ### Regeln

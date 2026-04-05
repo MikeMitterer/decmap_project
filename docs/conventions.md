@@ -161,6 +161,64 @@ async def filter_problem(payload: ProblemPayload) -> FilterResult:
     return spam_filter.evaluate(payload.text)
 ```
 
+**Background Tasks — eigene DB-Connection:**
+Request-scoped Connections sind geschlossen, bevor Background Tasks laufen.
+Jeder Background Task oeffnet deshalb seine eigene `psycopg.AsyncConnection`.
+
+```python
+# falsch — Connection aus Request-Scope ist beim Task-Start geschlossen
+async def my_task(conn: AsyncConnection) -> None:
+    await conn.execute(...)
+
+# richtig — Task oeffnet eigene Connection
+async def my_task(postgres_url: str) -> None:
+    async with await psycopg.AsyncConnection.connect(postgres_url) as conn:
+        await conn.execute(...)
+```
+
+**CORS:**
+`allow_credentials=True` ist mit `allow_origins=["*"]` browser-invalid.
+Konfigurierbarer Origin aus Settings, `allow_credentials=False`.
+
+```python
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,  # aus .env, nie "*" mit credentials
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+**Webhook-Security:**
+Alle Hook-Endpoints verwenden `_verify_webhook_secret()` als Dependency.
+Leeres `WEBHOOK_SECRET` = Dev-Mode (kein Check). Niemals Secrets in Code hardcoden.
+
+```python
+async def _verify_webhook_secret(
+    x_webhook_secret: str | None = Header(None),
+    settings: Settings = Depends(get_settings),
+) -> None:
+    if settings.webhook_secret and x_webhook_secret != settings.webhook_secret:
+        raise HTTPException(status_code=403)
+
+@router.post("/hooks/problem-submitted", dependencies=[Depends(_verify_webhook_secret)])
+async def on_problem_submitted(...): ...
+```
+
+**Modul-Level-Imports fur Testbarkeit:**
+Optionale Dependencies (z.B. `hdbscan`) auf Modul-Level importieren, nicht lokal in Funktionen.
+Nur so kann `patch("module.hdbscan")` in Tests greifen.
+
+```python
+# richtig
+import hdbscan  # Modul-Level — patchbar in Tests
+
+# falsch
+def cluster(...):
+    import hdbscan  # lokaler Import — patch() greift nicht
+```
+
 ---
 
 ## Klassenstruktur
@@ -320,6 +378,26 @@ describe.each([
 ```
 
 Ziel: Wenn `USE_FAKE_DATA=false` gesetzt wird, fallen keine neuen Tests noetig — die Contract-Tests greifen.
+
+**Implementiert fuer:** `useAuth`, `useProblems`, `useVoting`, `useSimilarity`, `useSolutions`, `useTags`, `useClusters`
+(`tests/composables/*.contract.spec.ts` — je mit `describe.each` gegen Fake und Real)
+
+**Vitest-Konfiguration:** `vitest.config.ts` schliesst nur `directusClient.ts` aus Coverage aus —
+der gesamte Real-Layer (auth, problems, voting, similarity, tags, solutions, clusters) wird gemessen.
+`tests/setup.ts` stellt `useRuntimeConfig`-Stub und `import.meta.client = true` bereit.
+
+**Test-Umgebung (Env-Variablen):**
+Prioritaetskette: Shell/Jenkins-Env → `.env.test.local` → `.env.test` → Hardcoded-Fallback.
+`.env.test` ist committed (sichere Defaults fuer lokale Entwicklung); `.env.test.local` bleibt gitignored.
+`vitest.config.ts` laedt `.env.test` via `loadEnv`, respektiert bereits gesetzte `process.env`.
+`tests/setup.ts` liest alle URLs/Schwellenwerte aus `process.env` — keine hardcodierten Strings.
+Jenkins: Env-Variablen im Build-Job setzen (`DIRECTUS_URL`, `WS_URL`, `SIMILARITY_THRESHOLD`) —
+sie ueberschreiben automatisch die `.env.test`-Defaults, ohne dass eine Datei noetig waere.
+
+**Konkreter Fund:** `realVoting.ts` hatte keinen Duplicate-Vote-Guard — ein zweiter Vote
+lieferte einen Delta statt 0. Der Contract-Test hat das aufgedeckt; die Implementierung wurde
+vor dem Merge korrigiert. Dieses Muster bestaetigt den Ansatz: Contract-Tests finden echte Bugs
+in der Real-Implementierung, nicht nur strukturelle Abweichungen.
 
 ### Backend (pytest)
 
