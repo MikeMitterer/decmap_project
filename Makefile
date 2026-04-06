@@ -5,7 +5,7 @@ SHELL := /bin/bash
 WORKSPACE    := $(realpath $(shell pwd))
 PROJECT_NAME := $(notdir $(WORKSPACE))
 
-INFRA    := backend
+BACKEND    := backend
 FRONTEND := frontend
 
 include ${DEV_MAKE}/colours.mk
@@ -26,7 +26,7 @@ help: ## Alle verfügbaren Befehle anzeigen
 	    /^[^#]/ { printf "    ${BLUE}%-18s ${GREEN}%s${RESET}\n", $$1, $$2 }'
 	@echo
 	@echo "  ${YELLOW}Sub-Repo Makefiles${RESET}"
-	@echo "    ${BLUE}make -C $(INFRA) help${RESET}    ${GREEN}Alle Infra-Befehle (Docker, DB, Backup)${RESET}"
+	@echo "    ${BLUE}make -C $(BACKEND) help${RESET}    ${GREEN}Alle Backend-Befehle (Docker, DB, Backup)${RESET}"
 	@echo "    ${BLUE}make -C $(FRONTEND) help${RESET}  ${GREEN}Alle Frontend-Befehle (dev, lint, test, build)${RESET}"
 	@echo
 
@@ -56,11 +56,11 @@ setup: ## Lokale .libs/-Symlinks erstellen (DEV_LOCAL muss gesetzt sein)
 
 .PHONY: dev-up
 dev-up: ## Dev-Umgebung starten → backend/
-	$(MAKE) -C $(INFRA) dev-up
+	$(MAKE) -C $(BACKEND) dev-up
 
 .PHONY: dev-down
 dev-down: ## Dev-Umgebung stoppen → backend/
-	$(MAKE) -C $(INFRA) dev-down
+	$(MAKE) -C $(BACKEND) dev-down
 
 ##@ Code-Qualität (alle Repos)
 
