@@ -66,7 +66,7 @@ Manuelle Endpunkt-Tests per `curl`: [`docs/cmdline.md`](docs/cmdline.md)
 
 ### Nächste Schritte
 
-- **Directus einrichten (einmalig):** Schema-Import via `docker exec decisionmap-directus npx directus schema apply /directus/schema.json` (Snapshot im Repo), dann API-Token generieren + in `.env` eintragen — Details: `docs/infrastructure.md`
+- **Directus einrichten (einmalig):** Schema-Import via `docker exec decisionmap-directus npx directus schema apply /directus/schema.json` (Snapshot im Repo), dann API-Token generieren + in `.env` eintragen — Details: `docs/backend.md`
 - **Directus Flows konfigurieren:** HTTP-Request-Actions für `problem-submitted`, `problem-approved`, `solution-approved`, `vote-changed` auf `http://ai-service:8000/hooks/*` einrichten
 - DNSBL-Check (aiodnsbl) als zweite Schicht im Spam-Filter aktivieren
 - Regionsbasierte Filterung und Ranking
@@ -123,12 +123,12 @@ DecisionMap/                     ← Workspace-Root-Repo (Issues, Haupt-Doku, CI
 ├── Makefile                     ← Workspace-Orchestrierung
 ├── .templates/                  ← Wiederverwendbare Templates (Jenkinsfile, Makefile, docker/)
 ├── .libs/                       ← Lokale Symlinks (BashLib, BashTools, MakeLib) — per .gitignore ausgeschlossen
-├── infrastructure/              ← docker-compose, nginx, Seeds, Backups, Makefile (eigenes Repo)
+├── backend/                     ← docker-compose, nginx, Seeds, Backups, Makefile (eigenes Repo)
 ├── frontend/                    ← Nuxt.js App (eigenes Repo)
 └── ai-service/                  ← FastAPI + Alembic (eigenes Repo)
 ```
 
-`infrastructure/`, `frontend/` und `ai-service/` sind im Workspace-Root per `.gitignore` ausgeschlossen —
+`backend/`, `frontend/` und `ai-service/` sind im Workspace-Root per `.gitignore` ausgeschlossen —
 sie haben eigene Repos. Das Workspace-Root-Repo dient als zentraler Ort für Issues und Projektdokumentation.
 
 Jedes Repo hat eine eigene Jenkins-Pipeline — ein Frontend-Deploy triggert keinen Backend-Build.
@@ -136,7 +136,7 @@ Jedes Repo hat eine eigene Jenkins-Pipeline — ein Frontend-Deploy triggert kei
 ```
 frontend     → build → test → deploy frontend
 ai-service   → test → build → db-migrate → deploy ai-service
-infrastructure → deploy compose + config
+backend      → deploy compose + config
 ```
 
 ### Rendering-Strategie
@@ -482,15 +482,15 @@ Jedes Problem hat einen teilbaren Link: `/?problem=<id>`
 
 ## 11. Infrastructure und Betrieb
 
-Vollständige Spezifikation: siehe [`docs/infrastructure.md`](infrastructure.md)
+Vollständige Spezifikation: siehe [`docs/backend.md`](backend.md)
 
 ### Makefile
 
-Root-Makefile delegiert an Sub-Repos. `make help` zeigt alle Root-Targets (Setup, Entwicklung, Code-Qualität, Testing). Sub-Repo-Makefiles: `make -C infrastructure help` (Docker, DB, Backup), `make -C frontend help` (dev, lint, test, build).
+Root-Makefile delegiert an Sub-Repos. `make help` zeigt alle Root-Targets (Setup, Entwicklung, Code-Qualität, Testing). Sub-Repo-Makefiles: `make -C backend help` (Docker, DB, Backup), `make -C frontend help` (dev, lint, test, build).
 
 `make setup` — erstellt `.libs/`-Symlinks zu lokalen Entwicklungs-Bibliotheken (BashLib, BashTools, MakeLib). Einmalig nach dem Klonen, benötigt `DEV_LOCAL`-Env-Variable.
 
-`make dev-up` / `make dev-down` — standalone Dev-Umgebung (Postgres + Directus + Mailpit) über `docker-compose.dev.yml`. Logs: `make -C infrastructure dev-logs`. Test-User anlegen: `make -C infrastructure seed-users`.
+`make dev-up` / `make dev-down` — standalone Dev-Umgebung (Postgres + Directus + Mailpit) über `docker-compose.dev.yml`. Logs: `make -C backend dev-logs`. Test-User anlegen: `make -C backend seed-users`.
 
 ### Umgebungsvariablen
 
@@ -513,11 +513,11 @@ Dieselben Files für Entwicklung und Tests.
 ### Versionierung
 
 Build-Scripts verwenden `hashVer` (BashLib) — Format: `<Jahr>.<Quartal>.0-SNAPSHOT<MMDD>.<HASH>` (z.B. `26.1.0-SNAPSHOT0327.a3f9`).
-Automatisch via Jenkins — nie manuell setzen. Vollständige Spezifikation: [`docs/infrastructure.md`](docs/infrastructure.md).
+Automatisch via Jenkins — nie manuell setzen. Vollständige Spezifikation: [`docs/backend.md`](docs/backend.md).
 
 ### Backup
 
-`make -C infrastructure backup` (lokal) und `make -C infrastructure backup-remote` (vom Server holen).
+`make -C backend backup` (lokal) und `make -C backend backup-remote` (vom Server holen).
 Backups werden nie eingecheckt — `database/backups/` in `.gitignore`.
 
 ---

@@ -187,7 +187,7 @@ funktionieren nicht sauber mit statischer Generierung.
 
 **Naming-Konvention:** Image- und Container-Namen folgen dem Schema `decisionmap-<service>`
 (z.B. `decisionmap-frontend`, `decisionmap-ai-service`, `decisionmap-postgres`).
-Definiert in `infrastructure/docker-compose.yml`.
+Definiert in `backend/docker-compose.yml`.
 
 **Jenkinsfile:** Lint + Test laufen auf allen Branches. Build + Deploy nur auf `main`.
 Lokales Build-Image wird nach dem Deploy auf dem Jenkins-Agent geloescht.
@@ -221,7 +221,7 @@ Jedes Sub-Repo hat ein eigenes Makefile fuer seinen Kontext. `make help` zeigt d
 | Makefile | Zustandig fuer |
 |---|---|
 | `Makefile` (Root) | Workspace-Setup, Delegation an Sub-Repos, Cross-Repo lint/test |
-| `infrastructure/Makefile` | Docker, Datenbank, Backup, Deploy, Versioning |
+| `backend/Makefile` | Docker, Datenbank, Backup, Deploy, Versioning |
 | `frontend/Makefile` | Dev-Server, Lint, Test, Build, Versioning |
 | `ai-service/Makefile` | Dev-Server, Lint, Test, Build, DB-Migrationen, Versioning |
 
@@ -231,18 +231,18 @@ Jedes Sub-Repo hat ein eigenes Makefile fuer seinen Kontext. `make help` zeigt d
 
 | Repo | Versionsdatei |
 |---|---|
-| `infrastructure/` | `VERSION` |
+| `backend/` | `VERSION` |
 | `frontend/` | `package.json` |
 | `ai-service/` | `pyproject.toml` |
 
 ```bash
 # Workspace-Root
 make setup             # .libs/-Symlinks erstellen (einmalig, benoetigt DEV_LOCAL)
-make dev-up            # → delegiert an infrastructure/Makefile
+make dev-up            # → delegiert an backend/Makefile
 make lint              # → delegiert an frontend/ und ai-service/
 make test              # → delegiert an frontend/ und ai-service/
 
-# Infrastructure (aus infrastructure/ oder via make -C infrastructure ...)
+# Backend (aus backend/ oder via make -C backend ...)
 make up / down / logs                                 # Alle Services
 make dev-up / dev-down / dev-logs                     # Dev-Umgebung (Directus + Mailpit)
 make db-reset                                         # DB zurücksetzen (schema → constraints → seed)

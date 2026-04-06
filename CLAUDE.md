@@ -40,16 +40,16 @@ Multi-Repo — vier Repos mit eigenem Release-Zyklus.
 | Repo | Inhalt | Deploy |
 |---|---|---|
 | `DecisionMap` (Root) | Issues, Haupt-Doku (CLAUDE.md, docs/), Makefile | — |
-| `infrastructure` | docker-compose, nginx, Seeds, Backups, Makefile | Hetzner |
+| `backend` | docker-compose, nginx, Seeds, Backups, Makefile | Hetzner |
 | `frontend` | Nuxt.js App | Hetzner (eigenstaendig) |
 | `ai-service` | FastAPI, Alembic, Repositories | Hetzner |
 
-`infrastructure/`, `frontend/` und `ai-service/` sind im Workspace-Root per `.gitignore` ausgeschlossen.
+`backend/`, `frontend/` und `ai-service/` sind im Workspace-Root per `.gitignore` ausgeschlossen.
 
 ```
 frontend     → build → test → deploy frontend
 ai-service   → test → build → db-migrate → deploy ai-service
-infrastructure → deploy compose + config
+backend      → deploy compose + config
 ```
 
 ---
@@ -63,7 +63,7 @@ DecisionMap/                     ← Workspace-Root-Repo (Issues, Haupt-Doku)
 ├── Makefile                     ← Workspace-Orchestrierung
 ├── .templates/                  ← Wiederverwendbare Templates (Jenkinsfile, Makefile, docker/)
 ├── .libs/                       ← Lokale Symlinks (BashLib, BashTools, MakeLib) — per .gitignore ausgeschlossen
-├── infrastructure/              ← Deployment-Konfiguration
+├── backend/                     ← Deployment-Konfiguration
 ├── frontend/                    ← Nuxt.js App
 └── ai-service/                  ← FastAPI + Alembic
 ```
@@ -210,16 +210,16 @@ export function useProblems() {
 
 ## Infrastructure
 
-→ **Ausfuehrliche Spezifikation:** [`docs/infrastructure.md`](docs/infrastructure.md)
+→ **Ausfuehrliche Spezifikation:** [`docs/backend.md`](docs/backend.md)
 
 - **Env-Variablen:** Nie hardcoden, alle in `.env.example`
 - **Feature Flags:** `SHOW_VOTING`, `REQUIRE_AUTH`
 - **Linting:** ESLint + Prettier (TS) / ruff (Python) — automatisch, nicht verhandelbar
-- **Makefile:** Jedes Sub-Repo hat ein eigenes Makefile. `make help` (Root: Workspace-Delegation), `make -C infrastructure help` (Docker, DB, Backup). Details: [`docs/infrastructure.md`](docs/infrastructure.md)
-- **Versionierung:** `hashVer` (BashLib) → `<Jahr>.<Quartal>.0-SNAPSHOT<MMDD>.<HASH>` — automatisch via Jenkins. Details: [`docs/infrastructure.md`](docs/infrastructure.md)
+- **Makefile:** Jedes Sub-Repo hat ein eigenes Makefile. `make help` (Root: Workspace-Delegation), `make -C backend help` (Docker, DB, Backup). Details: [`docs/backend.md`](docs/backend.md)
+- **Versionierung:** `hashVer` (BashLib) → `<Jahr>.<Quartal>.0-SNAPSHOT<MMDD>.<HASH>` — automatisch via Jenkins. Details: [`docs/backend.md`](docs/backend.md)
 - **Git:** Conventional Commits `<type>(<scope>): <msg>`, direkte Commits auf `main` erlaubt — Jenkins ist die einzige Schranke
 - **Seeds:** `database/seeds/` alphabetisch, idempotent
-- **Backup:** `make -C infrastructure backup` / `make -C infrastructure backup-remote`, nie einchecken
+- **Backup:** `make -C backend backup` / `make -C backend backup-remote`, nie einchecken
 
 ---
 

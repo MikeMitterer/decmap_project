@@ -5,7 +5,7 @@ SHELL := /bin/bash
 WORKSPACE    := $(realpath $(shell pwd))
 PROJECT_NAME := $(notdir $(WORKSPACE))
 
-INFRA    := infrastructure
+INFRA    := backend
 FRONTEND := frontend
 
 include ${DEV_MAKE}/colours.mk
@@ -55,11 +55,11 @@ setup: ## Lokale .libs/-Symlinks erstellen (DEV_LOCAL muss gesetzt sein)
 ##@ Entwicklung
 
 .PHONY: dev-up
-dev-up: ## Dev-Umgebung starten → infrastructure/
+dev-up: ## Dev-Umgebung starten → backend/
 	$(MAKE) -C $(INFRA) dev-up
 
 .PHONY: dev-down
-dev-down: ## Dev-Umgebung stoppen → infrastructure/
+dev-down: ## Dev-Umgebung stoppen → backend/
 	$(MAKE) -C $(INFRA) dev-down
 
 ##@ Code-Qualität (alle Repos)
