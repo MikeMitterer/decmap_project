@@ -103,6 +103,28 @@ async function fetchApprovedProblems(): Promise<Problem[]> {
 - Keine direkten API-Aufrufe in Komponenten — alle Datenzugriffe uber Composables
 - Props und Emits immer typisiert
 
+**Gotcha — `v-if`/`v-else-if`/`v-else`-Kette darf nicht unterbrochen werden:**
+Ein neues `v-if` auf einem Element innerhalb einer laufenden Kette bricht die Kette auf. Alle nachfolgenden `v-else-if`/`v-else` beziehen sich dann auf das innere `v-if` — nicht auf das aeussere. Symptom: Branches werden nie oder immer gerendert.
+
+```vue
+<!-- falsch — Toolbar-v-if unterbricht die loading/error/content-Kette -->
+<div v-if="loading">...</div>
+<div v-else-if="error">...</div>
+<div v-if="!loading && !error">  <!-- neue Kette! -->
+  <Toolbar />
+</div>
+<div v-else-if="activeTab === 'queue'">...</div>  <!-- bezieht sich auf inneres v-if -->
+
+<!-- richtig — alles innerhalb eines v-else -->
+<div v-if="loading">...</div>
+<div v-else-if="error">...</div>
+<div v-else>
+  <Toolbar />  <!-- immer sichtbar wenn Daten geladen -->
+  <div v-if="activeTab === 'queue'">...</div>
+  <div v-else>...</div>
+</div>
+```
+
 ```vue
 <script setup lang="ts">
 const props = defineProps<{
@@ -394,10 +416,56 @@ Prioritaetskette: Shell/Jenkins-Env → `.env.test.local` → `.env.test` → Ha
 Jenkins: Env-Variablen im Build-Job setzen (`DIRECTUS_URL`, `WS_URL`, `SIMILARITY_THRESHOLD`) —
 sie ueberschreiben automatisch die `.env.test`-Defaults, ohne dass eine Datei noetig waere.
 
-**Konkreter Fund:** `realVoting.ts` hatte keinen Duplicate-Vote-Guard — ein zweiter Vote
+**Konkreter Fund 1:** `realVoting.ts` hatte keinen Duplicate-Vote-Guard — ein zweiter Vote
 lieferte einen Delta statt 0. Der Contract-Test hat das aufgedeckt; die Implementierung wurde
-vor dem Merge korrigiert. Dieses Muster bestaetigt den Ansatz: Contract-Tests finden echte Bugs
-in der Real-Implementierung, nicht nur strukturelle Abweichungen.
+vor dem Merge korrigiert.
+
+**Konkreter Fund 2:** `useSimilarity.ts` hatte `try/finally` ohne `catch` — unhandled Promise
+rejection wenn der Data-Layer wirft. Aufgedeckt beim Schreiben von Verhaltens-Tests; `catch` ergaenzt
+(loggt Warnung, setzt State leer).
+
+**Konkreter Fund 3:** `useLogin.ts` pruefte Directus-Fehlermeldungen nicht prazise genug —
+"email already taken" wurde nicht als `login.errorEmailTaken` erkannt (Directus liefert
+`"Value for email has to be unique."`). Fix: `includes('unique')` ergaenzt. Ausserdem:
+Fallback zeigte immer `"Something went wrong"` statt der tatsaechlichen Directus-Meldung —
+jetzt wird `error.message` direkt angezeigt, generischer Fallback nur wenn kein Text vorhanden.
+
+**Konkreter Fund 4:** `useLogin.ts` (`verify-email`-Pfad) — Directus gibt **302** zurueck, nicht 200.
+`fetch` ohne `redirect: 'manual'` folgt dem Redirect, bekommt HTML und wirft einen Parse-Fehler.
+Fix: `fetch(url, { redirect: 'manual' })` + `response.ok || response.type === 'opaqueredirect'` als Erfolg-Check.
+I18n-Fallout: `login.loading` existierte nicht — Composable nutzt jetzt `login.verifying`.
+
+**Konkreter Fund 5:** `default.vue` Layout — Auth-Token-Race-Condition.
+`loadPersistedTokens()` war in `onMounted` — damit war der Token noch nicht gesetzt, wenn `index.vue`'s
+`onMounted` (z.B. `fetchTags()`) lief und 403 zurueckbekam. Fix: `loadPersistedTokens()` synchron im
+`setup()`-Block aufrufen; `restoreSession()` (API-Aufruf) bleibt in `onMounted`. Reihenfolge:
+`setup()` → Token aus localStorage → `onMounted` fetchTags (Token vorhanden) → `onMounted` restoreSession.
+
+**Konkreter Fund 6:** `realProblems.ts` — Directus M2M Virtual-Field-Naming.
+`PROBLEM_FIELDS` und `DirectusProblem`-Interface verwendeten `problem_tag.tag_id` / `problem_region.region_id`,
+aber Directus benennt M2M-Aliasfelder nach `one_field` in der Relation-Definition (`tags`, `regions`).
+Fix: `problem_tag` → `tags`, `problem_region` → `regions` in Fields-Liste und Interface;
+`mapProblem` nutzt `raw.tags ?? []` / `raw.regions ?? []` (defensiver Null-Guard).
+Gleichzeitig: `tags.deleted_by` fehlte im Directus-Schema (selbes Muster wie `deleted_at`) — via REST hinzugefuegt und `schema.json` aktualisiert.
+
+**Konkreter Fund 7:** `realAuth.ts` — Directus 11 `admin_access` auf Policy, nicht Role.
+`role.admin_access` liefert immer `undefined` in Directus 11 (Feld auf `directus_roles` entfernt).
+Korrekt: `role.policies.policy.admin_access` abfragen — `USER_FIELDS` um `"role.policies.policy.admin_access"` ergaenzt, `mapUser` prueft `raw.role?.policies?.some(p => p.policy?.admin_access)`.
+Gleichzeitig: `date_created` existiert nicht auf `directus_users` in Directus 11 — `createdAt` nutzt `''`-Fallback. `display_name` / `company` sind Custom-Felder die `seed-users.sh` anlegt; fehlen sie, ist das Profil leer ohne Fehler.
+
+Diese Faelle bestaetigen: Contract-Tests und Implementierungsdetails finden echte Bugs, nicht nur strukturelle Abweichungen.
+
+**Verhaltens-Tests fuer zustandsbehaftete Composables** (`*.composable.spec.ts`):
+Composables mit reaktivem State (Debounce, isChecking, reset()) bekommen dedizierte Verhaltens-Tests
+zusaetzlich zu den Contract-Tests. Konvention: spiegeln die entsprechenden Python-Service-Tests
+(`useSimilarity.composable.spec.ts` ↔ `test_similarity_service.py`,
+`useTranslation.spec.ts` ↔ `test_translation_service.py`).
+
+**Template-Logik gehoert in Composables, nicht in Komponenten:**
+Filterfunktionen, Sortierlogik und andere zustandsbehaftete Berechnungen die in Komponenten inline landen,
+sind per CLAUDE.md-Konvention in Composables zu extrahieren — nur so sind sie testbar.
+Konkretes Beispiel: `filterAndSort` in `moderation.vue` → `useModerationFilter.ts` (13 Unit-Tests in `useModerationFilter.spec.ts`).
+Erkennungsmerkmal: Funktion nutzt reaktive Props/State und waere sonst nur ueber Template-Snapshots testbar.
 
 ### Backend (pytest)
 

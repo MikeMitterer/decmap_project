@@ -38,10 +38,16 @@ mit Community-Validierung durch Voting.
 
 ## 2. Aktueller Stand
 
-Das Frontend ist im **Fake-Data-Modus** (`USE_FAKE_DATA=true`) vollständig funktionsfähig.
-Alle UI-Flows arbeiten End-to-End gegen In-Memory-Daten. Der Real-Data-Layer (Directus + FastAPI
-KI-Service) ist vollständig implementiert — `USE_FAKE_DATA=false` aktiviert ihn ohne weiteren Code-Eingriff,
-sobald Directus eingerichtet und `DIRECTUS_TOKEN` gesetzt ist.
+Beide Layer — Fake (In-Memory) und Real (Directus + FastAPI) — sind vollständig implementiert.
+`USE_FAKE_DATA=false` aktiviert den Real-Data-Layer ohne Code-Eingriff, sobald Directus eingerichtet
+und `DIRECTUS_TOKEN` gesetzt ist.
+
+Der **Frontend** (Nuxt.js) ist vollständig getestet: **172 Tests in 14 Dateien grün** — Unit-Tests und
+Contract-Tests für alle Composables (Fake & Real Layer, HTTP-gemockt). `tests/setup.ts` konfiguriert
+`useFakeData: false`, d.h. Contract-Tests validieren immer die Real-Data-Layer-Implementierung.
+`useSimilarity` und `useTranslation` haben dedizierte Contract-Tests spiegelbildlich zu den Python-Tests
+in `test_similarity_service.py` / `test_translation_service.py`.
+`useModerationFilter` (extrahiert aus `moderation.vue`) hat 13 dedizierte Unit-Tests.
 
 Der **AI-Service** (FastAPI, Python 3.11+) ist vollständig implementiert und getestet (31 Unit-Tests grün).
 Manuelle Endpunkt-Tests per `curl`: [`docs/cmdline.md`](docs/cmdline.md)
@@ -54,7 +60,7 @@ Manuelle Endpunkt-Tests per `curl`: [`docs/cmdline.md`](docs/cmdline.md)
 | **Table-View** | Virtuell gescrollte Tabelle (@tanstack/vue-virtual) mit Sortierung und Tag-/User-/Firmen-Filtern |
 | **Problem-CRUD** | Erfassen, Bearbeiten, Moderieren von Problemen mit Titel/Beschreibung in Originalsprache + automatischer englischer Übersetzung |
 | **Lösungsansätze** | Hinzufügen, Anzeigen und Bewerten von Lösungsansätzen pro Problem (Markdown: Links + Fettschrift) |
-| **Moderation** | Admin-Queue zum Freigeben/Ablehnen von Problemen und Lösungen, Status-Workflow (pending → needs_review → approved/rejected) |
+| **Moderation** | Admin-Queue zum Freigeben/Ablehnen von Problemen und Lösungen, Status-Workflow (pending → needs_review → approved/rejected), Suche + Sortierung (neueste/älteste) |
 | **Voting** | Up-/Downvotes auf Probleme und Lösungen mit Duplikat-Prävention |
 | **Ähnlichkeitserkennung** | Debounced-Prüfung gegen bestehende Probleme während der Erfassung |
 | **Permalinks** | `/?problem=<id>` navigiert Graph/Tabelle zum konkreten Problem, öffnet Detail-Panel, teilbar als Link |
@@ -62,7 +68,7 @@ Manuelle Endpunkt-Tests per `curl`: [`docs/cmdline.md`](docs/cmdline.md)
 | **Echtzeit-Updates** | WebSocket-Composable für Live-UI-Aktualisierungen |
 | **i18n** | Alle UI-Texte über Nuxt i18n (Englisch, Struktur bereit für weitere Sprachen) |
 | **Übersetzung** | Automatische Spracherkennung + Übersetzung ins Englische beim Einreichen |
-| **Auth** | Login/Registrierung mit Magic-Link-Support (Fake: sofortiger Mock-Login, Real: Directus Auth) |
+| **Auth** | Login/Registrierung mit E-Mail-Verifizierung + Passwort-Stärke-Checklist (Fake: sofortiger Mock-Login, Real: Directus Auth + Verifizierungsmail via Mailpit in Dev) |
 
 ### Nächste Schritte
 
@@ -70,7 +76,7 @@ Manuelle Endpunkt-Tests per `curl`: [`docs/cmdline.md`](docs/cmdline.md)
 - **Directus Flows konfigurieren:** HTTP-Request-Actions für `problem-submitted`, `problem-approved`, `solution-approved`, `vote-changed` auf `http://ai-service:8000/hooks/*` einrichten
 - DNSBL-Check (aiodnsbl) als zweite Schicht im Spam-Filter aktivieren
 - Regionsbasierte Filterung und Ranking
-- UI-Tests (aktuell: nur Unit-Tests für Composables)
+- E2E-Tests (Playwright) — aktuell nur Unit- und Contract-Tests auf Composable-Ebene
 
 ---
 
@@ -150,7 +156,7 @@ Hybrides Rendering per Route — SPA wo App-Feeling gebraucht wird, statisch wo 
 | `/admin/**` | SPA | Interner Bereich |
 | `/problem/**` | Prerender | SEO — Suchmaschinen sollen Probleme finden |
 
-Deploy-Artefakt: `nuxt build` (Node.js-Server), nicht `nuxt generate` — SPA-Routes und dynamische Daten funktionieren nicht sauber mit statischer Generierung. Details: [`docs/infrastructure.md`](docs/infrastructure.md).
+Deploy-Artefakt: `nuxt build` (Node.js-Server), nicht `nuxt generate` — SPA-Routes und dynamische Daten funktionieren nicht sauber mit statischer Generierung. Details: [`docs/backend.md`](docs/backend.md).
 
 ### Data Layer — Fake/Real Switch
 
@@ -482,7 +488,7 @@ Jedes Problem hat einen teilbaren Link: `/?problem=<id>`
 
 ## 11. Infrastructure und Betrieb
 
-Vollständige Spezifikation: siehe [`docs/backend.md`](backend.md)
+Vollständige Spezifikation: siehe [`docs/backend.md`](docs/backend.md)
 
 ### Makefile
 
@@ -490,7 +496,7 @@ Root-Makefile delegiert an Sub-Repos. `make help` zeigt alle Root-Targets (Setup
 
 `make setup` — erstellt `.libs/`-Symlinks zu lokalen Entwicklungs-Bibliotheken (BashLib, BashTools, MakeLib). Einmalig nach dem Klonen, benötigt `DEV_LOCAL`-Env-Variable.
 
-`make dev-up` / `make dev-down` — standalone Dev-Umgebung (Postgres + Directus + Mailpit) über `docker-compose.dev.yml`. Logs: `make -C backend dev-logs`. Test-User anlegen: `make -C backend seed-users`.
+`make dev-up` / `make dev-down` — standalone Dev-Umgebung (Postgres + Directus + Mailpit) über `docker-compose.dev.yml`. Logs: `make -C backend dev-logs`. Test-User anlegen: `make -C backend seed-users`. Anschliessend Permissions setzen: `make -C backend db-permissions` (Public-Policy + User-Policy).
 
 ### Umgebungsvariablen
 

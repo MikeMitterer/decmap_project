@@ -392,6 +392,70 @@ Feedback: „Link copied!" fuer 2 Sekunden.
 
 ---
 
+## Authentifizierung
+
+Directus built-in Auth — kein eigener Auth-Service.
+
+### Registrierung
+
+```
+User füllt Register-Formular aus (E-Mail + Passwort)
+      ↓
+Passwort-Stärke-Checklist live (✓/○ pro Regel, Submit gesperrt bis alle grün)
+      ↓
+POST /users/register → Directus schickt Verifizierungsmail
+      ↓
+Frontend zeigt „registrationSent"-State (kein Auto-Login)
+      ↓
+User klickt Link in Mail → /verify-email.vue → GET /users/register/verify-email?token=XXX
+      ↓
+Directus antwortet 302 (redirect: 'manual' + opaqueredirect = Erfolg)
+      ↓
+Frontend leitet weiter auf /login?verified=true → grünes Banner
+```
+
+### Passwort-Stärke-Regeln
+
+| Regel | Min |
+|---|---|
+| Länge | ≥ 8 Zeichen |
+| Großbuchstabe | ≥ 1 |
+| Zahl | ≥ 1 |
+| Sonderzeichen | ≥ 1 |
+
+Submit bleibt gesperrt bis alle vier Regeln erfüllt sind.
+
+### Login / Logout
+
+- POST `/auth/login` → JWT-Token in `localStorage`
+- Token wird synchron im `setup()`-Block geladen (`loadPersistedTokens()` vor `onMounted`) — kein Race mit ersten API-Calls
+- `restoreSession()` (API-Aufruf zur Session-Validierung) in `onMounted`
+
+### Dev-Umgebung
+
+Mailpit als SMTP-Sink — alle Mails landen auf `http://localhost:8025`, kein echter Mailversand.
+
+### Konfiguration
+
+Details zur Directus-Konfiguration (`USERS_REGISTER_ALLOW_PUBLIC`, `USER_REGISTER_URL_ALLOW_LIST`, Permissions): [`backend.md`](backend.md)
+
+---
+
+## Admin-Moderations-Queue
+
+`/admin/moderation` — Freigabe/Ablehnung von Problemen und Loesungsansaetzen.
+
+- Zwei Tabs: **Pending** / **Rejected** (Tab-Badge zeigt Gesamt-Anzahl, ungefiltert)
+- **Suche:** Filtert live nach Titel, Titel (EN), Beschreibung und Beschreibung (EN)
+- **Sortierung:** Toggle "Newest first" / "Oldest first" (`createdAt`)
+- Status-Workflow: `pending → needs_review → approved / rejected`
+
+Filter- und Sortierlogik ist in `useModerationFilter.ts` gekapselt (nicht inline in der Komponente) — 13 Unit-Tests in `useModerationFilter.spec.ts`.
+
+i18n-Keys: `admin.searchPlaceholder`, `admin.sortNewest`, `admin.sortOldest`
+
+---
+
 ## Virtuelles Scrollen (Table-View)
 
 `@tanstack/vue-virtual` fuer performante Tabellendarstellung:

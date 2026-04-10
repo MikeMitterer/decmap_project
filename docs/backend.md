@@ -28,6 +28,7 @@ REQUIRE_AUTH=false             # Feature Flag: Login fuer Einreichungen erzwinge
 # Directus
 DIRECTUS_URL=                  # Directus-Instanz URL
 DIRECTUS_TOKEN=                # Directus Admin-Token
+CORS_ORIGIN=http://localhost:3000  # Erlaubter Browser-Origin fuer Directus (nicht Wildcard — browser-invalid mit credentials)
 
 # Datenbank
 POSTGRES_URL=                  # PostgreSQL Connection String (ai-service)
@@ -91,8 +92,73 @@ fuer M2M-Relationen. M2M-Relationen und Alias-Felder sind in `schema.json` entha
 make directus-schema-apply   # Tabellen + Metadaten via schema.json
 make db-constraints          # vector-Spalten, Constraints, Junction-Tables, Indizes
 make db-seed                 # Seed-Daten
-make seed-users              # Test-User in Directus
+make seed-users              # Test-User + Rolle + Policy in Directus
+make db-permissions          # Public-Policy (Anon-READ) + User-Policy (CREATE/UPDATE/DELETE) anlegen
 ```
+
+**Gotcha — schema apply nach Alembic-Migration:**
+Wenn Alembic zuerst laeuft und dabei Directus-Tabellen anlegt, hinterlaesst es verwaiste `directus_*` Metadata-Eintraege. Ein anschliessendes `make directus-schema-apply` schlaegt dann mit Konflikt-Fehler fehl. Loesung: verwaiste `directus_*` Metadata-Eintraege aus den betroffenen Tabellen loeschen, dann erneut `make directus-schema-apply`.
+
+**Gotcha — Direktus Benutzer-Registrierung:**
+`USERS_REGISTER_ALLOW_PUBLIC: "true"` muss im Directus-Container gesetzt sein (docker-compose.yml), damit der `/users/register`-Endpunkt fuer anonyme Requests freigegeben ist. Ohne diesen Flag liefert Directus 403 — auch wenn alle anderen Permissions korrekt konfiguriert sind.
+`make seed-users` setzt `public_registration: true` automatisch via `PATCH /settings` — kein manueller UI-Schritt noetig. `make db-reset` ruft `seed-users` mit auf.
+
+**Gotcha — E-Mail-Verifizierung:**
+E-Mail-Verifizierung und Auto-Login nach Register sind inkompatibel: Directus schickt nach `/users/register` eine Verifizierungsmail — ein unmittelbarer Login-Versuch schlaegt fehl, weil der Account noch unverifiziert ist.
+`make seed-users` setzt `public_registration_verify_email: true` — in allen Umgebungen aktiv. Dev nutzt Mailpit als SMTP-Sink. Auto-Login nach Register entfaellt komplett; stattdessen zeigt das Frontend eine "Check your email"-Box (`registrationSent`-Flag in `login.vue`). User klickt Verifizierungslink → dann erst einloggen.
+Directus 11: `/users/verify-email?token=XXX` ist ein reiner API-Endpunkt — nach erfolgreichem Verify erfolgt ein Redirect auf `PUBLIC_URL`. Der Token wird beim ersten Aufruf verbraucht; ein zweiter Klick liefert "Invalid verification code". `PUBLIC_URL` in der Directus-Konfiguration auf `http://localhost:3000/login` (Dev) bzw. die Produktions-URL setzen, damit der Browser nach der Verifizierung direkt zum Login weitergeleitet wird.
+Frontend-seitig: `/verify-email.vue` ruft `GET /users/register/verify-email?token=XXX` an Directus auf und leitet bei Erfolg auf `/login?verified=true` weiter. Die Login-Seite zeigt dort ein gruenes Banner "Email verified — you can now sign in."
+Directus antwortet auf den Verify-Endpunkt mit **302** (nicht 200) — fetch muss daher mit `redirect: 'manual'` aufgerufen werden, sonst folgt es dem Redirect, bekommt HTML statt JSON und die Fehlerbehandlung schlaegt fehl. Status-Check: `response.ok || response.type === 'opaqueredirect'` (2xx + Redirect = Erfolg).
+
+**Security:** `USER_REGISTER_URL_ALLOW_LIST` im Directus-Container setzen (kommagetrennte erlaubte URL-Prefixes, z.B. `http://localhost:3000,https://decisionmap.example.com`). Ohne diesen Guard akzeptiert Directus jede beliebige `verification_url` im Register-Request — Phishing-Vektor. Directus prueft nur, ob die URL mit einem der erlaubten Prefixes beginnt.
+
+**Gotcha — Directus Permissions nie per direktem SQL setzen:**
+`INSERT INTO directus_permissions ...` umgeht den Directus-In-Memory-Cache. Permissions greifen dann erst nach einem Neustart — ohne sichtbare Fehlermeldung erscheint trotzdem 403. Permissions immer ueber die Directus REST API setzen (`PATCH /policies/{id}` oder `POST /permissions`). `make db-permissions` und `make seed-users` verwenden ausschliesslich REST-Aufrufe.
+
+**Gotcha — Alembic-Spalten fehlen im Directus-Schema:**
+Spalten die Alembic anlegt (z.B. `deleted_at`, `deleted_by` auf `tags`), sind Directus nicht bekannt, solange sie nicht explizit in `schema.json` definiert oder via Directus API hinzugefuegt werden. Fehlt die Definition, lehnt Directus Filter auf diese Spalte (z.B. `filter[deleted_at][_null]=true`) mit einem Validierungsfehler ab. Fix: Feld via `POST /fields/{collection}` hinzufuegen und `schema.json` aktualisieren, damit es bei `make directus-schema-apply` reproduzierbar ist. Gilt fuer alle Alembic-Spalten — nicht nur `deleted_at`, sondern auch `deleted_by` und andere Audit-Felder.
+
+**Gotcha — Directus M2M Virtual-Field-Naming:**
+Directus benennt M2M-Aliasfelder auf der "One"-Seite nach dem `one_field`-Wert in der Relation-Definition — nicht nach dem Junction-Table-Namen. Beispiel: die Relation `problems` → `problem_tag` → `tags` heisst im `readItems`-Ergebnis `tags` (nicht `problem_tag`), weil `one_field: "tags"` gesetzt ist. Ebenso `regions` statt `problem_region`. In `PROBLEM_FIELDS` und `DirectusProblem`-Interface deshalb `tags.tag_id` (nicht `problem_tag.tag_id`) und `regions.region_id` (nicht `problem_region.region_id`) verwenden. Defensiver Null-Guard im Mapper: `raw.tags ?? []` statt direktem Zugriff.
+
+**Gotcha — Directus 11 Nullable-FK-Validierungsbug:**
+Directus 11 validiert nullable Foreign-Key-Felder (z.B. `tags.parent_id`, `problems.deleted_by`, `solution_approaches.deleted_by`) zur Laufzeit gegen seine eigene Relation-Metadata — auch wenn PostgreSQL `NULL` erlaubt. Ein `PATCH`-Request mit `null` auf einem solchen Feld schlaegt mit einem Validierungsfehler fehl, obwohl die DB die `NULL`-Schreibung akzeptieren wuerde. Fix: die Directus-Relation-Metadata fuer diese Felder ueber die REST API entfernen (`DELETE /relations/{collection}/{field}`). Die PostgreSQL-FK-Constraint bleibt erhalten — nur Directus prueft nicht mehr. `make db-permissions` / `make seed-users` enthalten diesen Fix idempotent. Symptom: `PATCH` auf Item mit Soft-Delete oder selbst-referenzierendem Parent schlaegt mit 400 fehl.
+
+**Gotcha — Directus Filter-Queries in curl / Shell-Scripts:**
+Directus-Filterpfade enthalten eckige Klammern (`filter[field][_eq]=value`). curl interpretiert diese als URL-Bereich und schlaegt mit "URL rejected" fehl. Loesung: `--get --data-urlencode` verwenden oder die gesamte URL in Anfuehrungszeichen setzen und die Klammern mit `%5B`/`%5D` encoden. Beides gilt auch fuer `filter[_and][]`-Arrays.
+
+**Gotcha — Directus User-Rollen und Permissions (Directus 11):**
+Neu registrierte User erhalten automatisch die Rolle "User" (`app_access: false`) — sie koennen sich nicht im Directus-Admin-Backend einloggen. Nur der Admin-User hat `admin_access: true`.
+Directus 11: Permissions sind nicht direkt an Rollen geknuepft, sondern an **Policy-Objekte** (`directus_policies`), die dann der Rolle (oder direkt dem Public-Access) zugewiesen werden. `make seed-users` legt Role + Policy idempotent an; `make db-permissions` richtet Public- und User-Policy ein.
+
+Permission-Matrix:
+
+| Rolle | READ | CREATE/UPDATE | DELETE |
+|---|---|---|---|
+| **Public (anonym)** | `problems`, `solution_approaches`, `clusters`, `tags`, `regions`, `problem_cluster`, `problem_tag`, `problem_region` | — | — |
+| **User (eingeloggt)** | wie Public + `votes` | `problems`, `solution_approaches`, `tags`, `votes`, `problem_tag` (M2M), `problem_region` (M2M) | `votes`, `problem_tag`, `problem_region` |
+| **Admin** | alle | alle | alle |
+
+`votes` ist bewusst nicht in der Public-Policy — Vote-Scores sind in `problems.vote_score` eingebettet, einzelne Stimmen muessen anonym nicht abrufbar sein.
+
+**Wichtig — `fields: ["*"]`:** Jede Permission in der Public-Policy muss `fields: ["*"]` (alle Felder) gesetzt haben. Fehlt diese Angabe, antwortet Directus zwar mit 200, liefert aber leere Objekte — der Graph bleibt leer ohne sichtbaren Fehler. `make db-permissions` setzt dies automatisch.
+
+**Debugging — User bekommt 403 obwohl Permissions korrekt konfiguriert sind:**
+Wenn Role → Policy → Permissions alle korrekt gesetzt sind, aber der eingeloggte User trotzdem 403 bekommt, hat er wahrscheinlich **keine Rolle zugewiesen** (`"role": null`). Pruefung:
+```bash
+curl -s "http://localhost:8055/users?fields=id,email,role&limit=20" \
+  -H "Authorization: Bearer $TOKEN"
+```
+Fehlende Rolle kann passieren wenn `make seed-users` nicht `default_role` in Directus-Settings setzt oder der User vor dem Seed-Lauf angelegt wurde. Loesung: Rolle im Directus-Admin manuell zuweisen oder User loeschen und neu registrieren (nach `make seed-users`).
+
+**Gotcha — Directus 11: `admin_access` nicht mehr auf Role-Objekt:**
+In Directus 11 ist `admin_access` von `directus_roles` nach `directus_policies` gewandert. `role.admin_access` existiert nicht mehr und gibt immer `undefined` zurueck — das Admin-Menue bleibt unsichtbar ohne Fehlermeldung.
+Korrekte Pruefung: `role.policies?.some(p => p.policy?.admin_access === true)` (Directus gibt `role.policies` als Array von `{policy: {admin_access: boolean}}` zurueck, wenn `policies.policy.admin_access` in `USER_FIELDS` requested wird). In `realAuth.ts`: `USER_FIELDS` muss `"role.policies.policy.admin_access"` enthalten; `mapUser` liest `raw.role?.policies?.some(p => p.policy?.admin_access)`.
+
+**Gotcha — Directus 11: Custom-Felder auf `directus_users` und fehlende Systemfelder:**
+`directus_users` hat in Directus 11 kein `date_created`-Feld — `createdAt` muss auf `''` als Fallback gemappt werden (kein Query-Fehler, aber `undefined` wenn requested).
+`display_name` und `company` sind nicht im Standard-Schema — sie muessen als Custom-Felder via API (`POST /fields/directus_users`) oder `seed-users.sh` angelegt werden. Fehlen sie, gibt Directus beim Lesen `undefined` zurueck (kein Fehler).
+User-Policy braucht ausserdem READ auf `directus_users` (filter: `id == $CURRENT_USER`, alle Felder) und UPDATE auf `directus_users` (filter: `id == $CURRENT_USER`, Felder: `display_name, company`) — ohne diese Permissions schlaegt das Laden und Speichern des User-Profils mit 403 fehl. `make seed-users` richtet beides idempotent ein.
 
 **Flows einrichten (einmalig manuell — nicht im Snapshot):**
 Directus Flows verbinden Datenereignisse mit dem AI-Service.
