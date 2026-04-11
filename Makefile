@@ -41,12 +41,6 @@ info: ## Workspace-Umgebungsvariablen anzeigen
 	@echo "    ${YELLOW}BASH_LIBS${RESET}    = ${BLUE}$${BASH_LIBS}${RESET}"
 	@echo
 
-##@ Workspace
-
-.PHONY: loc
-loc: ## Lines of Code zählen (tokei, alle Sub-Repos + Root)
-	@tokei --hidden . apps/backend apps/frontend apps/ai-service infrastructure
-
 ##@ Setup
 
 .PHONY: setup
@@ -57,11 +51,16 @@ setup: ## Lokale .libs/-Symlinks erstellen (DEV_LOCAL muss gesetzt sein)
 	ln -sf $${DEV_LOCAL}/DevMake/Production/MakeLib   .libs/MakeLib
 	@echo "${GREEN}Setup abgeschlossen.${RESET}"
 
+
 ##@ Workspace
 
 .PHONY: status
 status: ## Git-Status aller Repos (dirty + ahead/behind Remote)
 	@bash scripts/repo-status.sh --show
+
+.PHONY: loc
+loc: ## Lines of Code zählen (tokei, alle Sub-Repos + Root)
+	@tokei --hidden . apps/backend apps/frontend apps/ai-service infrastructure
 
 ##@ Daten
 
