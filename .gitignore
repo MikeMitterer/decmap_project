@@ -28,7 +28,7 @@ database/backups/
 
 # Build-Logs (generiert von .templates/docker/build.sh)
 .templates/docker/logs/
-frontend/
-backend/
-ai-service/
+apps/frontend/
+apps/backend/
+apps/ai-service/
 infrastructure/

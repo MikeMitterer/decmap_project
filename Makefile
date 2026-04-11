@@ -23,10 +23,10 @@ help: ## Alle verfügbaren Befehle anzeigen
 	    /^[^#]/ { printf "    ${BLUE}%-22s ${GREEN}%s${RESET}\n", $$1, $$2 }'
 	@echo
 	@echo "  ${YELLOW}Sub-Repo Makefiles${RESET}"
-	@echo "    ${BLUE}make -C backend help${RESET}          ${GREEN}Directus-Image, DB-Schema, Dev-Umgebung${RESET}"
-	@echo "    ${BLUE}make -C frontend help${RESET}         ${GREEN}Nuxt.js App (dev, lint, test, build)${RESET}"
-	@echo "    ${BLUE}make -C ai-service help${RESET}       ${GREEN}FastAPI (dev, test, build)${RESET}"
-	@echo "    ${BLUE}make -C infrastructure help${RESET}   ${GREEN}Server-Orchestrierung, Backup${RESET}"
+	@echo "    ${BLUE}make -C apps/backend help${RESET}          ${GREEN}Directus-Image, DB-Schema, Dev-Umgebung${RESET}"
+	@echo "    ${BLUE}make -C apps/frontend help${RESET}         ${GREEN}Nuxt.js App (dev, lint, test, build)${RESET}"
+	@echo "    ${BLUE}make -C apps/ai-service help${RESET}       ${GREEN}FastAPI (dev, test, build)${RESET}"
+	@echo "    ${BLUE}make -C infrastructure help${RESET}        ${GREEN}Server-Orchestrierung, Backup${RESET}"
 	@echo
 
 # ─── Info ────────────────────────────────────────────────────────────────────
@@ -55,21 +55,21 @@ setup: ## Lokale .libs/-Symlinks erstellen (DEV_LOCAL muss gesetzt sein)
 
 .PHONY: build-all
 build-all: ## Alle Docker-Images bauen (backend + frontend + ai-service)
-	$(MAKE) -C backend build
-	$(MAKE) -C frontend build
-	$(MAKE) -C ai-service build
+	$(MAKE) -C apps/backend build
+	$(MAKE) -C apps/frontend build
+	$(MAKE) -C apps/ai-service build
 
 .PHONY: push-all
 push-all: ## Alle Images nach ghcr.io pushen
-	$(MAKE) -C backend push
-	$(MAKE) -C frontend push
-	$(MAKE) -C ai-service push
+	$(MAKE) -C apps/backend push
+	$(MAKE) -C apps/frontend push
+	$(MAKE) -C apps/ai-service push
 
 .PHONY: test-all
 test-all: ## Alle Tests ausführen (backend + frontend + ai-service)
-	$(MAKE) -C backend test
-	$(MAKE) -C frontend test
-	$(MAKE) -C ai-service test
+	$(MAKE) -C apps/backend test
+	$(MAKE) -C apps/frontend test
+	$(MAKE) -C apps/ai-service test
 
 .PHONY: deploy
 deploy: ## Full-Stack Deploy → infrastructure/

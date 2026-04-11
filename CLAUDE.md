@@ -40,18 +40,18 @@ Multi-Repo — fuenf Repos mit eigenem Release-Zyklus.
 | Repo | Inhalt | Deploy |
 |---|---|---|
 | `DecisionMap` (Root) | Issues, Haupt-Doku (CLAUDE.md, docs/), Makefile | — |
-| `infrastructure` | docker-compose, nginx, Orchestrierung, Backups | Hetzner |
-| `backend` | Directus-Konfiguration, Seeds, Makefile | Hetzner |
-| `frontend` | Nuxt.js App | Hetzner (eigenstaendig) |
-| `ai-service` | FastAPI, Alembic, Repositories | Hetzner |
+| `infrastructure/` | docker-compose, nginx, Orchestrierung, Backups | Hetzner |
+| `apps/backend/` | Directus-Konfiguration, Seeds, Makefile | Hetzner |
+| `apps/frontend/` | Nuxt.js App | Hetzner (eigenstaendig) |
+| `apps/ai-service/` | FastAPI, Alembic, Repositories | Hetzner |
 
-`backend/`, `frontend/`, `ai-service/` und `infrastructure/` sind im Workspace-Root per `.gitignore` ausgeschlossen.
+`apps/backend/`, `apps/frontend/`, `apps/ai-service/` sind per `.gitignore` ausgeschlossen. `infrastructure/` liegt im Root.
 
 ```
-frontend       → build → test → deploy frontend
-ai-service     → test → build → db-migrate → deploy ai-service
-backend        → deploy Directus-Konfiguration + Seeds
-infrastructure → deploy compose + nginx + Orchestrierung
+apps/frontend       → build → test → deploy frontend
+apps/ai-service     → test → build → db-migrate → deploy ai-service
+apps/backend        → deploy Directus-Konfiguration + Seeds
+infrastructure      → deploy compose + nginx + Orchestrierung
 ```
 
 ---
@@ -61,14 +61,17 @@ infrastructure → deploy compose + nginx + Orchestrierung
 ```
 DecisionMap/                     ← Workspace-Root-Repo (Issues, Haupt-Doku)
 ├── CLAUDE.md                    ← Haupt-Referenz (dieses File)
-├── docs/                        ← Detaillierte Spezifikationen
 ├── Makefile                     ← Workspace-Orchestrierung
+├── data/                        ← Shared Seed/Fixture-Daten (SSoT, snake_case JSON)
+├── docs/                        ← Detaillierte Spezifikationen
+├── scripts/                     ← Workspace-Skripte (z.B. gen-fixtures.py)
 ├── .templates/                  ← Wiederverwendbare Templates (Jenkinsfile, Makefile, docker/)
 ├── .libs/                       ← Lokale Symlinks (BashLib, BashTools, MakeLib) — per .gitignore ausgeschlossen
-├── infrastructure/              ← Server-Orchestrierung (docker-compose, nginx)
-├── backend/                     ← Directus-Konfiguration + Seeds
-├── frontend/                    ← Nuxt.js App
-└── ai-service/                  ← FastAPI + Alembic
+├── apps/                        ← Service-Repos (gitignored)
+│   ├── backend/                 ← Directus-Konfiguration + Seeds
+│   ├── frontend/                ← Nuxt.js App
+│   └── ai-service/              ← FastAPI + Alembic
+└── infrastructure/              ← Server-Orchestrierung (docker-compose, nginx)
 ```
 
 Detaillierte Verzeichnisbaeme: siehe jeweilige Sub-CLAUDE.md.
@@ -180,11 +183,11 @@ export function useProblems() {
 - **Env-Variablen:** Nie hardcoden, alle in `.env.example`
 - **Feature Flags:** `SHOW_VOTING`, `REQUIRE_AUTH`
 - **Linting:** ESLint + Prettier (TS) / ruff (Python) — automatisch, nicht verhandelbar
-- **Makefile:** Jedes Sub-Repo hat ein eigenes Makefile. `make help` (Root: Workspace-Delegation), `make -C backend help` (Docker, DB, Backup). Details: [`docs/backend.md`](docs/backend.md)
+- **Makefile:** Jedes Sub-Repo hat ein eigenes Makefile. `make help` (Root: Workspace-Delegation), `make -C apps/backend help` (Docker, DB, Backup). Details: [`docs/backend.md`](docs/backend.md)
 - **Versionierung:** SemVer + Datum (`bumpVer`): `v<MAJOR>.<MINOR>.<PATCH>+<YYMMDD>.<HHMM>`, Start bei `0.1.0`. Docker-Snapshots: `hashVer` → `<MAJOR>.<MINOR>.<PATCH>-SNAPSHOT<MMDD>.<HASH>` — automatisch via Jenkins. Details: [`docs/backend.md`](docs/backend.md)
 - **Git:** Conventional Commits `<type>(<scope>): <msg>`, direkte Commits auf `master` erlaubt — Jenkins ist die einzige Schranke
 - **Seeds:** `database/seeds/` alphabetisch, idempotent
-- **Backup:** `make -C backend backup` / `make -C backend backup-remote`, nie einchecken
+- **Backup:** `make -C apps/backend backup` / `make -C apps/backend backup-remote`, nie einchecken
 
 ---
 
