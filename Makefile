@@ -99,6 +99,15 @@ tags: ## Letzte 10 Git-Tags anzeigen
 
 ##@ Cross-Repo
 
+.PHONY: git-push-all
+git-push-all: ## Git-Push in allen Sub-Repos (backend + frontend + ai-service + infrastructure)
+	@for repo in apps/backend apps/frontend apps/ai-service infrastructure; do \
+		if [ -d "$$repo/.git" ]; then \
+			echo "  → git push $$repo"; \
+			git -C "$$repo" push || echo "  ✗ Fehler bei $$repo"; \
+		fi; \
+	done
+
 .PHONY: build-all
 build-all: ## Alle Docker-Images bauen (backend + frontend + ai-service)
 	$(MAKE) -C apps/backend build
