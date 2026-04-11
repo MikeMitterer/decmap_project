@@ -1,0 +1,8 @@
+# Externe Bibliotheks-Symlinks
+.libs/
+
+# Generierte / gecachte Dateien
+.templates/docker/logs/
+
+# Seed-Daten (JSON) — keine Code-Dateien
+data/
