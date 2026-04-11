@@ -186,7 +186,8 @@ export function useProblems() {
 - **Makefile:** Jedes Sub-Repo hat ein eigenes Makefile. `make help` (Root: Workspace-Delegation), `make -C apps/backend help` (Docker, DB, Backup). Details: [`docs/backend.md`](docs/backend.md)
 - **Versionierung:** SemVer + Datum (`bumpVer`): `v<MAJOR>.<MINOR>.<PATCH>+<YYMMDD>.<HHMM>`, Start bei `0.1.0`. Docker-Snapshots: `hashVer` → `<MAJOR>.<MINOR>.<PATCH>-SNAPSHOT<MMDD>.<HASH>` — automatisch via Jenkins. Details: [`docs/backend.md`](docs/backend.md)
 - **Git:** Conventional Commits `<type>(<scope>): <msg>`, direkte Commits auf `master` erlaubt — Jenkins ist die einzige Schranke
-- **Seeds:** `database/seeds/` alphabetisch, idempotent
+- **Seed-Daten (SSoT):** `data/*.json` (snake_case, UUIDs) — nie direkt in Consumer-Repos editieren. `make fixtures-sync` verteilt an `apps/frontend/.../seeds.json` (camelCase) und `apps/ai-service/tests/fixtures/` (snake_case + embedding).
+- **Seeds:** `apps/backend/database/seeds/` alphabetisch, idempotent
 - **Backup:** `make -C apps/backend backup` / `make -C apps/backend backup-remote`, nie einchecken
 
 ---

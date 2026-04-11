@@ -51,6 +51,12 @@ setup: ## Lokale .libs/-Symlinks erstellen (DEV_LOCAL muss gesetzt sein)
 	ln -sf $${DEV_LOCAL}/DevMake/Production/MakeLib   .libs/MakeLib
 	@echo "${GREEN}Setup abgeschlossen.${RESET}"
 
+##@ Daten
+
+.PHONY: fixtures-sync
+fixtures-sync: ## Fixtures aus data/ generieren (frontend + ai-service)
+	python3 scripts/gen-fixtures.py
+
 ##@ Cross-Repo
 
 .PHONY: build-all

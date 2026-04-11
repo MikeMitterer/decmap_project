@@ -1,0 +1,170 @@
+[
+  {
+    "id": "48818f17-7b08-479f-ac9f-5d96ad572c74",
+    "name": "AI Problem Map",
+    "level": 1,
+    "parent_id": null,
+    "locked_by": "admin"
+  },
+  {
+    "id": "b315609b-d6f1-43cb-98be-a80f32b35a40",
+    "name": "Governance & Compliance",
+    "level": 2,
+    "parent_id": "48818f17-7b08-479f-ac9f-5d96ad572c74",
+    "locked_by": "admin"
+  },
+  {
+    "id": "8376c4d0-7f6e-42aa-9b48-41bd1fed04b0",
+    "name": "Technical Reliability",
+    "level": 2,
+    "parent_id": "48818f17-7b08-479f-ac9f-5d96ad572c74",
+    "locked_by": "admin"
+  },
+  {
+    "id": "badb0804-5f33-45fa-8fbe-d89578c2a444",
+    "name": "Strategy & Operations",
+    "level": 2,
+    "parent_id": "48818f17-7b08-479f-ac9f-5d96ad572c74",
+    "locked_by": "admin"
+  },
+  {
+    "id": "30c94fb4-426e-4792-b8d8-d69e128b8688",
+    "name": "Shadow AI & Governance",
+    "level": 3,
+    "parent_id": "b315609b-d6f1-43cb-98be-a80f32b35a40",
+    "locked_by": "admin"
+  },
+  {
+    "id": "7cb0b16c-66c7-4508-b847-3618ef896e88",
+    "name": "Compliance & Regulation",
+    "level": 3,
+    "parent_id": "b315609b-d6f1-43cb-98be-a80f32b35a40",
+    "locked_by": "admin"
+  },
+  {
+    "id": "c89f3d40-6586-4d05-858b-939e207f81a2",
+    "name": "Model Quality & Safety",
+    "level": 3,
+    "parent_id": "8376c4d0-7f6e-42aa-9b48-41bd1fed04b0",
+    "locked_by": "admin"
+  },
+  {
+    "id": "d0e984f7-0894-4ee8-838e-1da8c100bf09",
+    "name": "Fairness & Explainability",
+    "level": 3,
+    "parent_id": "8376c4d0-7f6e-42aa-9b48-41bd1fed04b0",
+    "locked_by": "admin"
+  },
+  {
+    "id": "3e65e0fd-5065-4cf0-be3d-1d587233e5c8",
+    "name": "Strategic Execution",
+    "level": 3,
+    "parent_id": "badb0804-5f33-45fa-8fbe-d89578c2a444",
+    "locked_by": "admin"
+  },
+  {
+    "id": "87b11ff6-7e2a-4408-a6f0-ac453bfb4016",
+    "name": "shadow-ai",
+    "level": 10,
+    "parent_id": null,
+    "locked_by": null
+  },
+  {
+    "id": "d7513d90-d3ef-4b11-a9ad-b2fbff42fabd",
+    "name": "data-privacy",
+    "level": 10,
+    "parent_id": null,
+    "locked_by": null
+  },
+  {
+    "id": "74ea4605-4872-452e-9757-9e981da6ea1d",
+    "name": "risk-management",
+    "level": 10,
+    "parent_id": null,
+    "locked_by": null
+  },
+  {
+    "id": "63ecfd13-7a80-4b55-94c7-3a8af8c84775",
+    "name": "governance",
+    "level": 10,
+    "parent_id": null,
+    "locked_by": null
+  },
+  {
+    "id": "d0b09752-fb2f-4774-9250-88d45b5b9ce3",
+    "name": "regulatory",
+    "level": 10,
+    "parent_id": null,
+    "locked_by": null
+  },
+  {
+    "id": "13ff4299-34e7-41df-8743-7375bcb2d939",
+    "name": "hallucination",
+    "level": 10,
+    "parent_id": null,
+    "locked_by": null
+  },
+  {
+    "id": "330066a4-e9ba-46c4-aad5-76a9f74101df",
+    "name": "model-quality",
+    "level": 10,
+    "parent_id": null,
+    "locked_by": null
+  },
+  {
+    "id": "5e10b56e-091f-4d20-b47d-8578de87c5b6",
+    "name": "bias",
+    "level": 10,
+    "parent_id": null,
+    "locked_by": null
+  },
+  {
+    "id": "c9555244-e258-46d7-8051-5c1f2cd3e0e2",
+    "name": "open-source",
+    "level": 10,
+    "parent_id": null,
+    "locked_by": null
+  },
+  {
+    "id": "0dea6f19-5442-43e9-8108-1415f576992e",
+    "name": "content-labeling",
+    "level": 10,
+    "parent_id": null,
+    "locked_by": null
+  },
+  {
+    "id": "f60d2a39-e398-4235-b917-601a7c5d86a6",
+    "name": "ai-literacy",
+    "level": 10,
+    "parent_id": null,
+    "locked_by": null
+  },
+  {
+    "id": "d2670122-dc4b-438a-bba4-62cde1bc6c15",
+    "name": "monitoring",
+    "level": 10,
+    "parent_id": null,
+    "locked_by": null
+  },
+  {
+    "id": "0bd56101-32f9-4eca-9e73-22189d2e4ae2",
+    "name": "security",
+    "level": 10,
+    "parent_id": null,
+    "locked_by": null
+  },
+  {
+    "id": "cf3d8fcc-d217-47d2-96c5-74df5c2b2efd",
+    "name": "knowledge-management",
+    "level": 10,
+    "parent_id": null,
+    "locked_by": null
+  },
+  {
+    "id": "b0a70f18-9e67-4927-98ab-5c9d4d380afd",
+    "name": "mlops",
+    "level": 10,
+    "parent_id": null,
+    "locked_by": null
+  }
+]

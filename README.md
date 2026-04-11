@@ -77,7 +77,7 @@ Manuelle Endpunkt-Tests per `curl`: [`docs/cmdline.md`](docs/cmdline.md)
 - DNSBL-Check (aiodnsbl) als zweite Schicht im Spam-Filter aktivieren
 - Regionsbasierte Filterung und Ranking
 - E2E-Tests (Playwright) — aktuell nur Unit- und Contract-Tests auf Composable-Ebene
-- **AI-Service Fixtures synchronisieren:** `apps/ai-service/tests/fixtures/` ist eigenständig (5 Problems, `prob-001`-IDs) — nicht konsistent mit `data/` (SSoT, 45 Problems, echte UUIDs). Backend-SQL-Seeds sind bereits konsistent. Geplant: `scripts/gen-fixtures.py`.
+- **Backend SQL-Seeds synchron halten:** `apps/backend/database/seeds/` manuell anpassen wenn `data/` sich ändert (oder Skript ergänzen).
 
 ---
 
