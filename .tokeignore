@@ -1,8 +1,14 @@
 # Externe Bibliotheks-Symlinks
 .libs/
 
+# Claude Code — Skills, Commands, Settings
+.claude/
+
 # Generierte / gecachte Dateien
 .templates/docker/logs/
 
 # Seed-Daten (JSON) — keine Code-Dateien
 data/
+
+# Design-Assets
+assets/

@@ -41,6 +41,12 @@ info: ## Workspace-Umgebungsvariablen anzeigen
 	@echo "    ${YELLOW}BASH_LIBS${RESET}    = ${BLUE}$${BASH_LIBS}${RESET}"
 	@echo
 
+##@ Workspace
+
+.PHONY: loc
+loc: ## Lines of Code zählen (tokei, inkl. .templates/)
+	@tokei --hidden
+
 ##@ Setup
 
 .PHONY: setup
