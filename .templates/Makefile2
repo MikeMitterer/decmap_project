@@ -1,0 +1,145 @@
+# Basics zum Makefile:
+#	https://makefiletutorial.com/#getting-started
+#
+# You can set these variables from the command line.
+# BUILDDIR      = _build
+
+.PHONY: help info colors build bt docker cdb prepare install deploy
+
+.DEFAULT_GOAL := help
+
+include ${DEV_MAKE}/colours.mk
+
+TARGET_SSH_HOST=mobicast.local
+
+DEBIAN_FOLDER=./debian
+SYSTEM_CONFIG_FOLDER=${DEBIAN_FOLDER}/config
+SOURCE_FOLDER=${DEBIAN_FOLDER}/package/usr/share/java/mobicast
+TARGET_FOLDER=/usr/share/java/mobicast
+
+# Date muss an 'shell' weitergereicht werden
+BACKUP_FILE=".backup/data_$(shell date +'%Y%m%d_%H%M%S').tgz"
+
+# Include wird nur ausgeführt wenn das
+# File auch vorhanden ist
+EXTRA_INCLUDES:=$(wildcard .config.*)
+ifneq ($(strip $(EXTRA_INCLUDES)),)
+  include $(EXTRA_INCLUDES)
+endif
+
+help:
+	@echo
+	@echo "Please use \`make <${YELLOW}target${RESET}>' where <target> is one of"
+	@echo
+	@echo "    ${YELLOW}help          ${GREEN}This help message${RESET}"
+	@echo "    ${YELLOW}info          ${GREEN}Shows config-Info${RESET}"
+	@echo "    ${YELLOW}colors        ${GREEN}For testing only - show the available colors${RESET}"
+	@echo
+	@echo "    ${YELLOW}cdb           ${GREEN}(Re)create SQLITE3-DB in ${PURPLE}'resources/db'${RESET}"
+	@echo "    ${YELLOW}prepare       ${GREEN}Erstellt die BASIS-Verzeichnisse usw. am ${WHITE}${TARGET_SSH_HOST}${GREEN}-Server${RESET}"
+	@echo
+	@echo "    ${YELLOW}bt            ${GREEN}Build + Test your application package${RESET}"
+	@echo "    ${WHITE}                  Builds and deploys to Docker- + Debian-Structure${RESET}"
+	@echo "    ${WHITE}                  run './docker/_ci/run.sh start' first${RESET}"
+	@echo
+	@echo "    ${YELLOW}build         ${GREEN}Build + Deploys your application package${RESET} (no tests)"
+	@echo
+	@echo "    ${YELLOW}install       ${GREEN}Installs application to ${WHITE}${TARGET_SSH_HOST}${GREEN}-Server (${WHITE}${TARGET_FOLDER}${NC}${GREEN})${NC}"
+	@echo
+	@echo "    ${YELLOW}docker        ${GREEN}Builds Docker-Container and deploys it to AWS${NC}"
+	@echo "    ${YELLOW}deploy        ${GREEN}Builds package and deploys (${WHITE}install${GREEN}) it to ${TARGET_SSH_HOST}-Server${RESET}"
+	@echo
+	@echo "${BLUE}Hints:${NC}"
+	@echo
+	@echo "    Open Browser on '${YELLOW}http://mobicast.local:8060/${NC}' to see the host-Screen"
+	@echo
+	@echo "    ${BLUE}gradle build${RESET} - to build without tests"
+	@echo
+	@echo "    Restart MobiCast-Server"
+	@echo "        ${BLUE}ssh root@mobicast.local 'systemctl restart mobicast'${RESET}"
+	@echo
+	@echo "    Show Log on Server for MobiCast-Server"
+	@echo "        ${BLUE}ssh root@mobicast.local 'journalctl -n 100 -u mobicast'${RESET}"
+	@echo
+
+
+	@echo "${BLUE}Debug:${NC}"
+	@echo
+
+
+info:
+	@echo
+	@echo "Theses settings can be overwritten in '.config.mk':"
+	@echo
+	@echo "    ${YELLOW}System-Config-Folder:   ${BLUE}${SYSTEM_CONFIG_FOLDER}${RESET}"
+	@echo "    ${YELLOW}Source-Folder:          ${BLUE}${SOURCE_FOLDER}${RESET}"
+	@echo
+	@echo "    ${YELLOW}SSH-Host:               ${BLUE}${TARGET_SSH_HOST}${RESET}"
+	@echo "    ${YELLOW}Target-Folder:          ${BLUE}${TARGET_FOLDER}${RESET}"
+	@echo
+	@echo "Test-URLs:"
+	@echo "    ${YELLOW}Basic-UI   :            ${BLUE}http://${TARGET_SSH_HOST}:8060/${RESET}"
+	@echo "    ${YELLOW}Device-Info:            ${BLUE}http://${TARGET_SSH_HOST}:8060/api/v1/service/id${RESET}"
+	@echo
+
+colors: ## show all the colors
+	$(call print_colours)
+
+cdb: ## (Re)Creates SQLITE DB
+	cd resources/db && sqlite3 mobicast.db < sqlite-1-schema.sql && cd -
+	ls -la resources/db/*.db
+
+bt:
+	gradle build
+	gradle deploy
+
+build:
+	gradle deploy
+
+docker:
+	cd ./docker/server/app && ./build -b  && build -p && cd -
+
+prepare:
+	# Die für den Betrieb von MobiCast notwendigen Files (inkl. SystemD) und Dirs werden
+	# am Server angelegt.
+	#
+	# Voraussetzung ist dass am Server die notwendigen Packages installiert sind!
+	#     Siehe README.md#Preconditions
+
+	ssh root@${TARGET_SSH_HOST} "mkdir -p ${TARGET_FOLDER} && cd ${TARGET_FOLDER}/.. && chgrp -R kiosk mobicast && chmod -R 775 mobicast"
+
+	ssh ${TARGET_SSH_HOST} "mkdir -p ${TARGET_FOLDER}/bin"
+	ssh ${TARGET_SSH_HOST} "mkdir -p ${TARGET_FOLDER}/config"
+	ssh ${TARGET_SSH_HOST} "mkdir -p ${TARGET_FOLDER}/resources/db"
+
+	scp ${SYSTEM_CONFIG_FOLDER}/etc/systemd/system/mobicast.* root@${TARGET_SSH_HOST}:/etc/systemd/system
+
+	scp ${SOURCE_FOLDER}/bin/* ${TARGET_SSH_HOST}:${TARGET_FOLDER}/bin
+	scp ${SOURCE_FOLDER}/config/* ${TARGET_SSH_HOST}:${TARGET_FOLDER}/config
+	scp ${SOURCE_FOLDER}/resources/db/* ${TARGET_SSH_HOST}:${TARGET_FOLDER}/resources/db
+
+	ssh ${TARGET_SSH_HOST} "cd ${TARGET_FOLDER}/config && test ! -f application.properties && cp application.tmpl.properties application.properties || ls -la"
+	ssh ${TARGET_SSH_HOST} "cd ${TARGET_FOLDER}/resources/db && test ! -f mobicast.db && cp mobicast.tmpl.db mobicast.db || ls -la"
+
+	ssh root@${TARGET_SSH_HOST} "systemctl enable mobicast"
+	ssh root@${TARGET_SSH_HOST} "systemctl reenable --now mobicast.watchdog.timer"
+
+install:
+	# Kopieren in ein "Install-Dir"...
+	# https://explainshell.com/explain?cmd=rsync+-e+-rlz+--delete
+	# rsync -e ssh -rlz --delete "${SOURCE_FOLDER}/" "${TARGET_SSH_HOST}:${TARGET_FOLDER}/install"
+	ssh ${TARGET_SSH_HOST} 'cd ${TARGET_FOLDER} && find -name "MobiCast-Server-*.jar" -name "start.py" -exec rm -f {} \;'
+	scp ${SOURCE_FOLDER}/MobiCast-Server-*.jar ${TARGET_SSH_HOST}:${TARGET_FOLDER}
+	scp ${SOURCE_FOLDER}/start.py ${TARGET_SSH_HOST}:${TARGET_FOLDER}
+
+	@echo
+	@echo "${RED}ACHTUNG${RESET}: Um am Server die Applikation neu zu starten"
+	@echo "    ist ${BLUE}sudo systemctl restart mobicast${RESET} notwendig!"
+	@echo
+	@echo "        ${BLUE}ssh root@mobicast.local 'systemctl restart mobicast'${RESET}"
+	@echo "        ${BLUE}ssh root@mobicast.local 'journalctl -n 100 -u mobicast'${RESET}"
+
+deploy: build install
+
+all: deploy
+

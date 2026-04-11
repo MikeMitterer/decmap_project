@@ -282,7 +282,9 @@ NUXT_PUBLIC_API_BASE=https://...
 
 ## Makefile-Struktur
 
-Jedes Sub-Repo hat ein eigenes Makefile fuer seinen Kontext. `make help` zeigt die Befehle des jeweiligen Repos.
+Jedes Sub-Repo hat ein eigenes Makefile fuer seinen Kontext. `make help` zeigt die Befehle des jeweiligen Repos, `make hints` zeigt Service-URLs, SSH-Befehle und Abhaengigkeiten.
+
+Konventionen (Struktur, `##@`-Gruppen, `.PHONY`, `info`/`hints`-Targets, Farben): `/code-standards`
 
 | Makefile | Zustandig fuer |
 |---|---|
