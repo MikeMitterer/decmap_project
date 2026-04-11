@@ -88,14 +88,181 @@ checkIfToolIsAvailable "${JQ}"
 ### MakeLib einbinden
 
 ```makefile
-include ../.libs/MakeLib/colours.mk
-include ../.libs/MakeLib/tools.mk
-
-help: ## Diese Hilfe anzeigen
-    @$(call usageLine, "help", "Diese Hilfe anzeigen")
+include ${DEV_MAKE}/colours.mk
+include ${DEV_MAKE}/tools.mk
 ```
 
+Farben aus MakeLib: `${YELLOW}`, `${GREEN}`, `${BLUE}`, `${WHITE}`, `${RED}`, `${RESET}` / `${NC}`
+
 **Neue Funktionen:** Prüfen ob sie generisch in eine BashLib-Datei passen → dort ergänzen.
+
+---
+
+## Makefiles
+
+### Struktur & Pflicht-Header
+
+```makefile
+SHELL := /bin/bash
+
+.DEFAULT_GOAL := help
+
+WORKSPACE    := $(realpath $(shell pwd))
+PROJECT_NAME := $(notdir $(WORKSPACE))
+
+include ${DEV_MAKE}/colours.mk
+include ${DEV_MAKE}/tools.mk
+```
+
+### Self-Documenting Help mit ##@ und ##
+
+Gruppen mit `##@`, Targets mit `## Beschreibung` — `grep`+`awk` generiert die Ausgabe automatisch:
+
+```makefile
+.PHONY: help
+help: ## Alle verfügbaren Befehle anzeigen
+	@echo
+	@echo "Please use \`make <${YELLOW}target${RESET}>' where <target> is one of"
+	@echo
+	@echo "Project: ${YELLOW}$(PROJECT_NAME)${RESET}"
+	@echo
+	@grep -hE '^(##@|[a-zA-Z_-]+:.*?## )' $(MAKEFILE_LIST) | \
+	  awk 'BEGIN {FS = ":.*?## "}; \
+	    /^##@/ { printf "\n  ${YELLOW}%s${RESET}\n", substr($$0, 4) }; \
+	    /^[^#]/ { printf "    ${BLUE}%-22s ${GREEN}%s${RESET}\n", $$1, $$2 }'
+	@echo
+	@$(MAKE) hints   # Hints immer am Ende von help ausgeben
+
+##@ Setup
+
+.PHONY: setup
+setup: ## Lokale Symlinks erstellen
+	...
+
+##@ Entwicklung
+
+.PHONY: dev-up
+dev-up: ## Dev-Umgebung starten (Docker)
+	...
+```
+
+**Ergebnis:**
+```
+  Setup
+    setup                  Lokale Symlinks erstellen
+
+  Entwicklung
+    dev-up                 Dev-Umgebung starten (Docker)
+```
+
+Farben: Gruppe (`##@`) → `${YELLOW}`, Target → `${BLUE}`, Beschreibung → `${GREEN}`
+
+### .PHONY — immer deklarieren
+
+Jedes Target das keine Datei erzeugt bekommt `.PHONY`:
+
+```makefile
+.PHONY: help info hints setup dev-up dev-down test build deploy
+```
+
+### info — Umgebungsvariablen anzeigen
+
+```makefile
+.PHONY: info
+info: ## Workspace-Umgebungsvariablen anzeigen
+	@echo
+	@echo "    ${YELLOW}PROJECT_NAME${RESET} = ${BLUE}$(PROJECT_NAME)${RESET}"
+	@echo "    ${YELLOW}WORKSPACE${RESET}    = ${BLUE}$(WORKSPACE)${RESET}"
+	@echo "    ${YELLOW}DEV_LOCAL${RESET}    = ${BLUE}$${DEV_LOCAL}${RESET}"
+	@echo
+	@echo "Test-URLs:"
+	@echo "    ${YELLOW}Frontend : ${BLUE}http://localhost:3000/${RESET}"
+	@echo "    ${YELLOW}Directus : ${BLUE}http://localhost:8055/${RESET}"
+	@echo
+```
+
+### hints — eigenes Target, von help aufgerufen
+
+`hints:` ist ein **separates Target** — wird von `help` via `@$(MAKE) hints` eingebunden.
+So können Sub-Makefiles ihre eigenen Hints liefern, und `hints` kann auch standalone aufgerufen werden.
+
+```makefile
+.PHONY: hints
+hints: ## Nützliche Hinweise und URLs anzeigen
+	@echo "${BLUE}Hints:${RESET}"
+	@echo
+	@echo "    Project    - ${YELLOW}$(PROJECT_NAME)${RESET}"
+	@echo
+	@echo "    ${YELLOW}URLs (nach make dev-up):${RESET}"
+	@echo "        Frontend  - ${BLUE}http://localhost:3000/${RESET}"
+	@echo "        Directus  - ${BLUE}http://localhost:8055/${RESET}"
+	@echo "        Mailpit   - ${BLUE}http://localhost:8025/${RESET}"
+	@echo
+	@echo "    ${YELLOW}Server-Befehle:${RESET}"
+	@echo "        ${BLUE}ssh deploy@hetzner 'systemctl restart decisionmap'${RESET}"
+	@echo "        ${BLUE}ssh deploy@hetzner 'journalctl -n 100 -u decisionmap'${RESET}"
+	@echo
+```
+
+**Was in Hints gehört:**
+- URLs zu laufenden Services (lokal und Remote)
+- SSH-Befehle zum Server (restart, logs)
+- Hinweise auf abhängige Schritte (`make setup` zuerst)
+- Referenz auf Sub-Repo Makefiles
+
+**Was nicht in Hints gehört:** Target-Beschreibungen — die gehören in `## Kommentar` beim Target.
+
+### Vollständiges Minimal-Makefile
+
+```makefile
+SHELL := /bin/bash
+
+.DEFAULT_GOAL := help
+
+WORKSPACE    := $(realpath $(shell pwd))
+PROJECT_NAME := $(notdir $(WORKSPACE))
+
+include ${DEV_MAKE}/colours.mk
+include ${DEV_MAKE}/tools.mk
+
+# ─── Hilfe ───────────────────────────────────────────────────────────────────
+
+.PHONY: help
+help: ## Alle verfügbaren Befehle anzeigen
+	@echo
+	@echo "Please use \`make <${YELLOW}target${RESET}>' where <target> is one of"
+	@echo
+	@echo "Project: ${YELLOW}$(PROJECT_NAME)${RESET}"
+	@echo
+	@grep -hE '^(##@|[a-zA-Z_-]+:.*?## )' $(MAKEFILE_LIST) | \
+	  awk 'BEGIN {FS = ":.*?## "}; \
+	    /^##@/ { printf "\n  ${YELLOW}%s${RESET}\n", substr($$0, 4) }; \
+	    /^[^#]/ { printf "    ${BLUE}%-22s ${GREEN}%s${RESET}\n", $$1, $$2 }'
+	@echo
+	@$(MAKE) hints
+
+.PHONY: info
+info: ## Umgebungsvariablen und URLs anzeigen
+	@echo
+	@echo "    ${YELLOW}PROJECT_NAME${RESET} = ${BLUE}$(PROJECT_NAME)${RESET}"
+	@echo "    ${YELLOW}WORKSPACE${RESET}    = ${BLUE}$(WORKSPACE)${RESET}"
+	@echo
+
+.PHONY: hints
+hints: ## Nützliche Hinweise und URLs
+	@echo "${BLUE}Hints:${RESET}"
+	@echo "    ${YELLOW}URLs:${RESET}"
+	@echo "        ${BLUE}http://localhost:3000/${RESET}"
+	@echo
+
+# ─── Setup ───────────────────────────────────────────────────────────────────
+
+##@ Setup
+
+.PHONY: setup
+setup: ## Lokale .libs/-Symlinks erstellen
+	...
+```
 
 ---
 
