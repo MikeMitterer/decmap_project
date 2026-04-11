@@ -108,6 +108,9 @@ routeRules: {
   '/':            { ssr: false },      // Graph-View — SPA
   '/table':       { ssr: false },      // Table-View — SPA
   '/admin/**':    { ssr: false },      // Admin — SPA
+  '/login':       { ssr: false },      // Login — SPA
+  '/settings':    { ssr: false },      // Settings — SPA
+  '/status':      { ssr: false },      // Status-Page — SPA
   '/problem/**':  { prerender: true }, // Problem-Detail — SEO
   '/cluster/**':  { prerender: true }, // Cluster-Seiten — SEO
 }
@@ -206,6 +209,7 @@ export function useProblems() {
 - **Editieren:** Nur eigene Eintraege, setzt Status zurueck, Edit-History fuer Moderatoren
 - **KI-Loesungen:** Automatisch bei Approval, visuell getrennt, separates Ranking
 - **Auth:** E-Mail-Verifizierung nach Registrierung (`registrationSent`-Flag, kein Auto-Login). Passwort-Staerke-Checklist live im Register-Tab (✓/○ pro Regel, Submit gesperrt bis alle gruen). `/verify-email.vue` → Redirect auf `/login?verified=true`. Dev: Mailpit als SMTP-Sink.
+- **Status-Page:** `/status` zeigt Live-Status von Backend (Directus) und AI-Service (FastAPI). Browser-seitige Health-Checks via `fetch` direkt gegen die Services (kein Server-Route-Proxy — Browser laeuft auf dem Host wo Docker-Port-Mappings greifen). Polling alle 30s, `useServiceStatus` Composable mit Shared State (Modul-Level Refs). StatusBar zeigt Farbindikator: gruen (alle ok), orange (nur Backend), rot (Backend down). Directus `/server/health` liefert ohne Auth keine Version.
 
 ---
 
@@ -240,6 +244,7 @@ export function useProblems() {
 - **Directus 11 Nullable-FK-Validierungsbug:** Directus validiert nullable FK-Felder (`tags.parent_id`, `*.deleted_by`) gegen eigene Relation-Metadata — `PATCH` mit `null` schlaegt mit 400 fehl obwohl PostgreSQL `NULL` erlaubt. Fix: `DELETE /relations/{collection}/{field}`. PostgreSQL-Constraint bleibt, Directus-Validierung entfaellt.
 - **Directus 11 `admin_access` auf Policy, nicht Role:** `role.admin_access` gibt immer `undefined` — das Feld ist nach `directus_policies` gewandert. Korrekt: `role.policies.policy.admin_access` in `USER_FIELDS` requesten und per `policies.some(p => p.policy?.admin_access)` auswerten.
 - **Directus 11 `directus_users` Custom-Felder:** `date_created` existiert nicht (Fallback `''`). `display_name` und `company` sind Custom-Felder die `seed-users.sh` anlegt. User-Policy braucht READ + UPDATE auf `directus_users` (eigener Account, `id == $CURRENT_USER`) — sonst 403 beim Profil-Laden/-Speichern.
+- **Health-Checks nur Browser-seitig:** Nitro Server-Routes auf macOS koennen Docker-Desktop-gemappte localhost-Ports nicht erreichen (TCP verbindet, aber 0 Bytes Antwort). Health-Checks muessen daher per `fetch()` direkt aus dem Browser laufen (`useServiceStatus` Composable). Browser laeuft auf dem Host wo Docker-Port-Mappings greifen. `AbortSignal.timeout(10_000)` verwenden — kuerzere Timeouts koennen Chrome Private Network Access (PNA) Preflight-Probleme ausloesen.
 
 ---
 
