@@ -19,9 +19,10 @@ database/backups/
 *.swo
 *.backup
 
-# Claude Code (lokale Einstellungen — ausser geteilte Skills)
+# Claude Code (lokale Einstellungen — ausser geteilte Skills und Commands)
 .claude/*
 !.claude/commands/
+!.claude/skills/
 
 # Externe Bibliotheks-Symlinks (lokal via DEV_LOCAL setzen)
 .libs/*

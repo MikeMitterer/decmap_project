@@ -243,6 +243,52 @@ def cluster(...):
 
 ---
 
+## Workspace Scripts (scripts/)
+
+Alle Skripte in `scripts/` — Bash und Python — folgen derselben CLI-Konvention:
+
+- Kein Argument → Help anzeigen (`exit 0`)
+- `-h | --help` → Help anzeigen (`exit 0`)
+- Aktions-Flags explizit angeben (z.B. `--generate`, `--show`)
+- `APPNAME` aus dem Dateinamen ableiten — nie hardcoden
+
+**Python-Scripts:**
+
+```python
+APPNAME = Path(__file__).name   # aus Dateiname, nicht hardcodiert
+
+class Colors:
+    YELLOW     = "\033[38;5;11m"   # angelehnt an BashLib colors.lib.sh
+    GREEN      = "\033[38;5;10m"
+    CYAN       = "\033[38;5;51m"
+    LIGHT_BLUE = "\033[38;5;45m"
+    BLUE       = "\033[38;5;33m"
+    RED        = "\033[38;5;196m"
+    BOLD       = "\033[1m"
+    RESET      = "\033[0m"
+
+def usage() -> None:
+    print(f"\nUsage: {APPNAME} [ options ]\n")
+    usage_line("-g | --generate", "...")
+    usage_line("-h | --help",     "Diese Hilfe anzeigen")
+    print(f"\n{Colors.LIGHT_BLUE}Hints:{Colors.RESET}")
+    print(f"    {Colors.GREEN}{APPNAME} --generate{Colors.RESET}")
+    print()
+
+def main() -> None:
+    if len(sys.argv) == 1 or sys.argv[1] in ("-h", "--help"):
+        usage(); sys.exit(0)
+    args = parse_args(sys.argv[1:])
+    ...
+
+# argparse nur zum Parsen — add_help=False, eigene usage() statt argparse-Help
+parser = argparse.ArgumentParser(add_help=False)
+```
+
+**Bash-Scripts:** BashLib `usageLine()` und `colors.lib.sh` verwenden; gleicher Aufbau.
+
+---
+
 ## Klassenstruktur
 
 Einheitliche Reihenfolge: 1. Konstruktor 2. Public-Methoden 3. Private-Methoden

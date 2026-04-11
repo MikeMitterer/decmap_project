@@ -147,6 +147,7 @@ export function useProblems() {
 ## Kern-Konventionen
 
 → Details on demand: `/conventions` | Ausfuehrliche Beispiele: [`docs/conventions.md`](docs/conventions.md)
+→ Code-Standards (Stil, Struktur, Scripts, BashLib): `/code-standards`
 
 - **Architektur:** Komponenten = Darstellung, Composables = Logic (Frontend) | Router = HTTP, Services = Logic (Backend)
 - **Naming:** TS/Vue `camelCase`/`PascalCase`/`SCREAMING_SNAKE_CASE` | Python `snake_case`/`PascalCase` | DB `snake_case`
@@ -207,12 +208,7 @@ export function useProblems() {
 
 ## Was nicht gemacht wird
 
-- Keine Options API — nur Composition API
 - Kein direktes CSS — Tailwind Utility Classes
-- Keine Directus-Aufrufe in Komponenten — nur Composables
-- Kein `console.log` — `consola` verwenden
-- Kein `any` — `unknown` verwenden
-- Keine Magic Strings — Enums verwenden
 - Kein Hard Delete — Soft Delete ueber `deleted_at`/`deleted_by`
 - Keine rohen IP-Adressen — `ip_hash` verwenden
 - Kein Markdown ohne DOMPurify-Sanitizing

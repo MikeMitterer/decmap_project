@@ -55,13 +55,13 @@ setup: ## Lokale .libs/-Symlinks erstellen (DEV_LOCAL muss gesetzt sein)
 
 .PHONY: status
 status: ## Git-Status aller Repos (dirty + ahead/behind Remote)
-	@bash scripts/repo-status.sh
+	@bash scripts/repo-status.sh --show
 
 ##@ Daten
 
 .PHONY: fakedata-sync
 fakedata-sync: ## Fake-Daten aus data/ generieren (frontend + ai-service)
-	python3 scripts/gen-fakedata.py
+	python3 scripts/gen-fakedata.py --generate
 
 ##@ Cross-Repo
 

@@ -77,7 +77,7 @@ Manuelle Endpunkt-Tests per `curl`: [`docs/cmdline.md`](docs/cmdline.md)
 - DNSBL-Check (aiodnsbl) als zweite Schicht im Spam-Filter aktivieren
 - Regionsbasierte Filterung und Ranking
 - E2E-Tests (Playwright) — aktuell nur Unit- und Contract-Tests auf Composable-Ebene
-- **Backend SQL-Seeds synchron halten:** `apps/backend/database/seeds/` manuell anpassen wenn `data/` sich ändert (oder Skript ergänzen).
+- **Fake-Daten synchron halten:** `make fakedata-sync` verteilt `data/*.json` an `apps/frontend` (camelCase) und `apps/ai-service/tests/fakedata/` (snake_case + embedding). Backend SQL-Seeds (`apps/backend/database/seeds/`) müssen weiterhin manuell angepasst werden.
 
 ---
 
@@ -128,6 +128,8 @@ DecisionMap/                     ← Workspace-Root-Repo (Issues, Haupt-Doku, CI
 ├── CLAUDE.md                    ← Haupt-Referenz
 ├── docs/                        ← Detaillierte Spezifikationen
 ├── Makefile                     ← Workspace-Orchestrierung
+├── data/                        ← Shared Seed/Fixture-Daten (SSoT, snake_case JSON)
+├── scripts/                     ← Workspace-Skripte (gen-fakedata.py, repo-status.sh)
 ├── .templates/                  ← Wiederverwendbare Templates (Jenkinsfile, Makefile, docker/)
 ├── .libs/                       ← Lokale Symlinks (BashLib, BashTools, MakeLib) — per .gitignore ausgeschlossen
 ├── apps/                        ← Service-Repos (gitignored)
@@ -498,6 +500,8 @@ Vollständige Spezifikation: siehe [`docs/backend.md`](docs/backend.md)
 
 Root-Makefile delegiert an Sub-Repos. `make help` zeigt alle Root-Targets (Setup, Entwicklung, Code-Qualität, Testing). Sub-Repo-Makefiles: `make -C backend help` (Docker, DB, Backup), `make -C frontend help` (dev, lint, test, build).
 
+`make status` — Git-Status aller Workspace-Repos als Tabelle (dirty-Files + ahead/behind Remote). Benötigt BashLib (via `make setup`).
+
 `make setup` — erstellt `.libs/`-Symlinks zu lokalen Entwicklungs-Bibliotheken (BashLib, BashTools, MakeLib). Einmalig nach dem Klonen, benötigt `DEV_LOCAL`-Env-Variable.
 
 `make dev-up` / `make dev-down` — standalone Dev-Umgebung (Postgres + Directus + Mailpit) über `docker-compose.dev.yml`. Logs: `make -C backend dev-logs`. Test-User anlegen: `make -C backend seed-users`. Anschliessend Permissions setzen: `make -C backend db-permissions` (Public-Policy + User-Policy).
@@ -517,8 +521,10 @@ Nie hardcoden — alle in `.env.example` dokumentiert. Wichtigste:
 
 ### Seed-Daten
 
-SQL-Files in `database/seeds/` — alphabetisch importiert, idempotent via `ON CONFLICT DO NOTHING`.
-Dieselben Files für Entwicklung und Tests.
+**SSoT:** `data/*.json` im Root-Repo (snake_case, UUIDs) — nie direkt in Consumer-Repos editieren.
+`make fakedata-sync` verteilt an `apps/frontend` (camelCase) und `apps/ai-service/tests/fakedata/` (snake_case + embedding-Stub).
+
+**Backend SQL-Seeds** (`database/seeds/`) — alphabetisch, idempotent (`ON CONFLICT DO NOTHING`), manuell anpassen wenn `data/*.json` sich ändert.
 
 ### Versionierung
 

@@ -305,6 +305,8 @@ Jedes Sub-Repo hat ein eigenes Makefile fuer seinen Kontext. `make help` zeigt d
 ```bash
 # Workspace-Root
 make setup             # .libs/-Symlinks erstellen (einmalig, benoetigt DEV_LOCAL)
+make status            # Git-Status aller Workspace-Repos (dirty + ahead/behind Remote)
+make fakedata-sync     # Fake-Daten aus data/ generieren und an Consumer-Repos verteilen
 make dev-up            # → delegiert an apps/backend/Makefile
 make lint              # → delegiert an apps/frontend/ und apps/ai-service/
 make test              # → delegiert an apps/frontend/ und apps/ai-service/
@@ -426,7 +428,17 @@ chore/<kurze-beschreibung>
 
 ## Seed-Daten
 
-SQL-Files in `database/seeds/` — alphabetisch importiert, idempotent (`ON CONFLICT DO NOTHING`).
+**SSoT:** `data/*.json` im Root-Repo (snake_case, UUIDs). Nie direkt in Consumer-Repos editieren.
+
+```bash
+make fakedata-sync                           # generieren + verteilen
+python3 scripts/gen-fakedata.py -n               # --dry-run: pruefen ohne schreiben
+```
+
+`make fakedata-sync` verteilt an `apps/frontend` (camelCase) und `apps/ai-service/tests/fakedata/` (snake_case + embedding-Stub).
+
+**Backend SQL-Seeds** in `database/seeds/` — alphabetisch importiert, idempotent (`ON CONFLICT DO NOTHING`).
+Manuell anpassen wenn sich `data/*.json` aendert (kein automatisches Sync fuer SQL-Seeds).
 
 ```
 database/seeds/
