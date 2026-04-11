@@ -253,13 +253,13 @@ funktionieren nicht sauber mit statischer Generierung.
 
 **Naming-Konvention:** Image- und Container-Namen folgen dem Schema `decisionmap-<service>`
 (z.B. `decisionmap-frontend`, `decisionmap-ai-service`, `decisionmap-postgres`).
-Definiert in `backend/docker-compose.yml`.
+Definiert in `infrastructure/docker-compose.yml`.
 
 **Jenkinsfile:** Lint + Test laufen auf allen Branches. Build + Deploy nur auf `main`.
 Lokales Build-Image wird nach dem Deploy auf dem Jenkins-Agent geloescht.
 [`.templates/Jenkinsfile`](../.templates/Jenkinsfile) ist ein generisches Ausgangs-Template — muss fuer die oben beschriebene Deploy-Strategie (docker save|ssh|load) angepasst werden. Konkret: `sh './docker/app/build --build'` → `sh './docker/build.sh --build'` (Pfad auf `docker/build.sh` des Sub-Repos anpassen).
 
-**Build-Script:** [`.templates/docker/build.sh`](../.templates/docker/build.sh) ist das generische Bash-Template fuer Sub-Repo-Build-Skripte. (Das ebenfalls vorhandene `.templates/docker/Dockerfile` ist ein generisches Debian/certbot-Base-Image fuer Tooling — kein Nuxt-Template.) Enthaelt Platform-Erkennung, BashLib-Includes, `--build`/`--push`/`--images`-Flags und TAG-Erzeugung via `hashVer 4 "" .` (→ `26.1.0-SNAPSHOT0327.a3f9`). Benoetigt `DEV_DOCKER`-Env-Variable auf der Build-Maschine (zeigt auf Docker-Hilfsskripte). Pro Sub-Repo nach `docker/build.sh` kopieren und `NAMESPACE`/`NAME`/Deploy-Logik anpassen. **Wichtig:** Der `--push`-Zweig im Template ruft `pushImage2DockerHub` auf — dieser Block muss vollstaendig durch `docker save | ssh | docker load` ersetzt werden (Docker Hub wird nicht verwendet). Das Dockerfile liegt in `docker/`, der Build-Context ist das Parent-Verzeichnis des Sub-Repos (`docker build -f Dockerfile ..`). **Achtung:** Da der Build-Context das gesamte Sub-Repo-Verzeichnis umfasst, muss `docker/` in `.dockerignore` ausgeschlossen werden — sonst landet das Build-Verzeichnis selbst im Image.
+**Build-Script:** [`.templates/docker/build.sh`](../.templates/docker/build.sh) ist das generische Bash-Template fuer Sub-Repo-Build-Skripte. (Das ebenfalls vorhandene `.templates/docker/Dockerfile` ist ein generisches Debian/certbot-Base-Image fuer Tooling — kein Nuxt-Template.) Enthaelt Platform-Erkennung, BashLib-Includes, `--build`/`--push`/`--images`-Flags und TAG-Erzeugung via `hashVer 4 "" .` (→ `0.1.0-SNAPSHOT0327.a3f9`). Benoetigt `DEV_DOCKER`-Env-Variable auf der Build-Maschine (zeigt auf Docker-Hilfsskripte). Pro Sub-Repo nach `docker/build.sh` kopieren und `NAMESPACE`/`NAME`/Deploy-Logik anpassen. **Wichtig:** Der `--push`-Zweig im Template ruft `pushImage2DockerHub` auf — dieser Block muss vollstaendig durch `docker save | ssh | docker load` ersetzt werden (Docker Hub wird nicht verwendet). Das Dockerfile liegt in `docker/`, der Build-Context ist das Parent-Verzeichnis des Sub-Repos (`docker build -f Dockerfile ..`). **Achtung:** Da der Build-Context das gesamte Sub-Repo-Verzeichnis umfasst, muss `docker/` in `.dockerignore` ausgeschlossen werden — sonst landet das Build-Verzeichnis selbst im Image.
 
 **`.dockerignore` fuer Multi-Stage-Builds:** `.output/` muss in `.dockerignore` stehen — nicht weil `COPY --from=builder` den Host liest (das tut es nicht, es greift auf Stage 1 zu), sondern weil `COPY . .` in Stage 1 ein lokales `.output/` (vom Host) in den Build-Context uebertraegt. Das kann ein veraltetes lokales Artefakt in Stage 1 einschleppen, bevor `npm run build` laeuft. `node_modules/` und `.output/` gehoeren daher beide in `.dockerignore`.
 
@@ -320,7 +320,7 @@ make seed-users                                       # Test-User in Directus
 make backup / backup-schema / backup-restore          # Backup
 make build / deploy                                   # Build & Deploy
 make precheck / version / tags                        # Versioning
-make tag-patch / tag-minor / tag-major                # Git-Tag setzen + pushen
+make tag-patch / tag-minor / tag-major                # SemVer Git-Tag setzen + pushen
 
 # AI-Service (aus ai-service/ oder via make -C ai-service ...)
 make install / install-dev                            # Abhaengigkeiten
@@ -330,7 +330,7 @@ make dev                                              # uvicorn mit --reload
 make build / docker-up / docker-down                  # Docker
 make db-migrate / db-migrate-create / db-rollback     # Alembic
 make precheck / version / tags                        # Versioning
-make tag-patch / tag-minor / tag-major                # Git-Tag setzen + pushen
+make tag-patch / tag-minor / tag-major                # SemVer Git-Tag setzen + pushen
 # → Manuelle curl-Tests aller Endpunkte: docs/cmdline.md
 
 # Frontend (aus frontend/ oder via make -C frontend ...)
@@ -343,43 +343,42 @@ make tag-patch / tag-minor / tag-major                # Versioning
 
 ## Versionierung
 
-### Release-Tags (CalVer)
+### Release-Tags (SemVer + Datum)
 
-**Format:** `YY.Q.BUILD` — Jahr und Quartal aus dem Kalender, BUILD inkrementiert pro Release.
+**Format:** `v<MAJOR>.<MINOR>.<PATCH>+<YYMMDD>.<HHMM>` — klassisches SemVer, Datum als Build-Metadata.
 
 ```
-v26.2.0+260415.0930     # Erstes Release in Q2 2026
-v26.2.1+260422.1400     # Zweites Release (Patch) in Q2
-v26.2.2+260510.1115     # Drittes Release in Q2
-v26.3.0+260701.0900     # Quartalwechsel → BUILD reset auf 0
-v26.3.0-rc1+260628.1600 # Release Candidate
+v0.1.0+260411.1430      # Erstes Release
+v0.2.0+260422.1400      # Minor-Bump (neues Feature)
+v0.2.1+260510.1115      # Patch-Bump (Bugfix)
+v1.0.0+260701.0900      # Major-Bump (Breaking Change)
+v0.3.0-rc1+260628.1600  # Release Candidate
 ```
 
-Quartalwechsel passiert automatisch — kein manuelles Major/Minor-Bumping.
-Jedes Release im selben Quartal erhoet BUILD (= Patch-Aequivalent).
+Alle Repos starten bei `0.1.0`. Major/Minor/Patch wird manuell gewaehlt.
 
 **Makefile-Targets:**
 
 ```makefile
-make tag                # Release-Tag erstellen (naechster BUILD)
-make tag MSG="..."      # mit Tag-Message
-make tag-rc             # Release Candidate (-rc1)
-make tag-dry            # Naechste Version anzeigen (ohne Aenderung)
+make tag-major          # Major-Bump (0.1.0 → 1.0.0)
+make tag-minor          # Minor-Bump (0.1.0 → 0.2.0)
+make tag-patch          # Patch-Bump (0.1.0 → 0.1.1)
+make tag-minor MSG="…"  # mit Tag-Message
 make version            # Aktuelle Version anzeigen
 make tags               # Letzte 10 Tags anzeigen
 ```
 
-`calVerBump` (BashLib) schreibt die Version in die Datei (`VERSION`, `package.json` oder `pyproject.toml`),
+`bumpVer` (BashLib) schreibt die Version in die Datei (`VERSION`, `package.json` oder `pyproject.toml`),
 erstellt einen Git-Commit und setzt den Tag. Reihenfolge: Version berechnen → Datei schreiben → Commit → Tag.
 
 ### Snapshot-Tags (Docker)
 
 Build-Scripts verwenden `hashVer` (BashLib) fuer Docker-Image-Tags — automatisch via Jenkins.
 
-**Format:** `<Jahr>.<Quartal>.0[-<PRERELEASE><MMDD>][<META_SEP><HASH>]`
+**Format:** `<MAJOR>.<MINOR>.<PATCH>-<PRERELEASE><MMDD><META_SEP><HASH>`
 
 ```
-26.1.0-SNAPSHOT0327.a3f9     # Snapshot-Build (Docker-Image-Tag)
+0.1.0-SNAPSHOT0327.a3f9     # Snapshot-Build (Docker-Image-Tag)
 ```
 
 **`hashVer`-Parameter:**
@@ -390,7 +389,7 @@ Build-Scripts verwenden `hashVer` (BashLib) fuer Docker-Image-Tags — automatis
 | `PRERELEASE_IDENTIFIER` | `SNAPSHOT` | Praefix vor MMDD; leer = kein Praefix |
 | `META_SEPARATOR` | `+` | Trenner vor Hash; `.` fuer Docker (`+` ist in Image-Tags ungueltig) |
 
-`hashVer 4 "" .` → `26.1.0-SNAPSHOT0327.a3f9` — `META_SEPARATOR` muss `.` sein (Docker lehnt `+` ab).
+`hashVer 4 "" .` → `0.1.0-SNAPSHOT0327.a3f9` — `META_SEPARATOR` muss `.` sein (Docker lehnt `+` ab).
 Snapshot-Tags werden automatisch vom Jenkins-Build erzeugt — nie manuell.
 
 ---

@@ -35,21 +35,23 @@ visualisiert sie als interaktiven Graph. Zielgruppe: IT-Entscheider, CDOs, KI-Pr
 
 ## Repositories
 
-Multi-Repo — vier Repos mit eigenem Release-Zyklus.
+Multi-Repo — fuenf Repos mit eigenem Release-Zyklus.
 
 | Repo | Inhalt | Deploy |
 |---|---|---|
 | `DecisionMap` (Root) | Issues, Haupt-Doku (CLAUDE.md, docs/), Makefile | — |
-| `backend` | docker-compose, nginx, Seeds, Backups, Makefile | Hetzner |
+| `infrastructure` | docker-compose, nginx, Orchestrierung, Backups | Hetzner |
+| `backend` | Directus-Konfiguration, Seeds, Makefile | Hetzner |
 | `frontend` | Nuxt.js App | Hetzner (eigenstaendig) |
 | `ai-service` | FastAPI, Alembic, Repositories | Hetzner |
 
-`backend/`, `frontend/` und `ai-service/` sind im Workspace-Root per `.gitignore` ausgeschlossen.
+`backend/`, `frontend/`, `ai-service/` und `infrastructure/` sind im Workspace-Root per `.gitignore` ausgeschlossen.
 
 ```
-frontend     → build → test → deploy frontend
-ai-service   → test → build → db-migrate → deploy ai-service
-backend      → deploy compose + config
+frontend       → build → test → deploy frontend
+ai-service     → test → build → db-migrate → deploy ai-service
+backend        → deploy Directus-Konfiguration + Seeds
+infrastructure → deploy compose + nginx + Orchestrierung
 ```
 
 ---
@@ -63,7 +65,8 @@ DecisionMap/                     ← Workspace-Root-Repo (Issues, Haupt-Doku)
 ├── Makefile                     ← Workspace-Orchestrierung
 ├── .templates/                  ← Wiederverwendbare Templates (Jenkinsfile, Makefile, docker/)
 ├── .libs/                       ← Lokale Symlinks (BashLib, BashTools, MakeLib) — per .gitignore ausgeschlossen
-├── backend/                     ← Deployment-Konfiguration
+├── infrastructure/              ← Server-Orchestrierung (docker-compose, nginx)
+├── backend/                     ← Directus-Konfiguration + Seeds
 ├── frontend/                    ← Nuxt.js App
 └── ai-service/                  ← FastAPI + Alembic
 ```
@@ -221,7 +224,7 @@ export function useProblems() {
 - **Feature Flags:** `SHOW_VOTING`, `REQUIRE_AUTH`
 - **Linting:** ESLint + Prettier (TS) / ruff (Python) — automatisch, nicht verhandelbar
 - **Makefile:** Jedes Sub-Repo hat ein eigenes Makefile. `make help` (Root: Workspace-Delegation), `make -C backend help` (Docker, DB, Backup). Details: [`docs/backend.md`](docs/backend.md)
-- **Versionierung:** `hashVer` (BashLib) → `<Jahr>.<Quartal>.0-SNAPSHOT<MMDD>.<HASH>` — automatisch via Jenkins. Details: [`docs/backend.md`](docs/backend.md)
+- **Versionierung:** SemVer + Datum (`bumpVer`): `v<MAJOR>.<MINOR>.<PATCH>+<YYMMDD>.<HHMM>`, Start bei `0.1.0`. Docker-Snapshots: `hashVer` → `<MAJOR>.<MINOR>.<PATCH>-SNAPSHOT<MMDD>.<HASH>` — automatisch via Jenkins. Details: [`docs/backend.md`](docs/backend.md)
 - **Git:** Conventional Commits `<type>(<scope>): <msg>`, direkte Commits auf `master` erlaubt — Jenkins ist die einzige Schranke
 - **Seeds:** `database/seeds/` alphabetisch, idempotent
 - **Backup:** `make -C backend backup` / `make -C backend backup-remote`, nie einchecken
