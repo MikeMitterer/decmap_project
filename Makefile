@@ -44,8 +44,8 @@ info: ## Workspace-Umgebungsvariablen anzeigen
 ##@ Workspace
 
 .PHONY: loc
-loc: ## Lines of Code zählen (tokei, inkl. .templates/)
-	@tokei --hidden
+loc: ## Lines of Code zählen (tokei, alle Sub-Repos + Root)
+	@tokei --hidden . apps/backend apps/frontend apps/ai-service infrastructure
 
 ##@ Setup
 

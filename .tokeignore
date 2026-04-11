@@ -12,3 +12,8 @@ data/
 
 # Design-Assets
 assets/
+
+# Generierte / nicht handgeschriebene Dateien
+**/package-lock.json
+**/directus/schema.json
+**/directus/current.json
