@@ -97,21 +97,6 @@ tags: ## Letzte 10 Git-Tags anzeigen
 	done
 	@echo
 
-.PHONY: tag-patch
-tag-patch: ## Patch-Bump in Sub-Repo: make tag-patch REPO=frontend
-	@test -n "$(REPO)" || (echo "${RED}Fehler: REPO nicht gesetzt. Beispiel: make tag-patch REPO=frontend${RESET}" && exit 1)
-	$(MAKE) -C apps/$(REPO) tag-patch
-
-.PHONY: tag-minor
-tag-minor: ## Minor-Bump in Sub-Repo: make tag-minor REPO=frontend
-	@test -n "$(REPO)" || (echo "${RED}Fehler: REPO nicht gesetzt. Beispiel: make tag-minor REPO=frontend${RESET}" && exit 1)
-	$(MAKE) -C apps/$(REPO) tag-minor
-
-.PHONY: tag-major
-tag-major: ## Major-Bump in Sub-Repo: make tag-major REPO=frontend
-	@test -n "$(REPO)" || (echo "${RED}Fehler: REPO nicht gesetzt. Beispiel: make tag-major REPO=frontend${RESET}" && exit 1)
-	$(MAKE) -C apps/$(REPO) tag-major
-
 ##@ Cross-Repo
 
 .PHONY: build-all
