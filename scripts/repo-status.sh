@@ -109,6 +109,17 @@ print_header() {
         "${separator_local}"
 }
 
+# Entfernt ANSI-Escape-Codes aus einem String.
+#
+# Params:
+#   $1 - String mit ANSI-Codes
+#
+# Returns:
+#   Reiner Text ohne Escape-Sequenzen
+strip_ansi() {
+    echo -e "$1" | sed 's/\x1b\[[0-9;]*m//g'
+}
+
 # Gibt eine einzelne Repo-Zeile aus.
 #
 # Params:
@@ -128,8 +139,14 @@ print_repo_row() {
     local_status=$(get_local_status "${repo_path}")
     remote_status=$(get_remote_status "${repo_path}")
 
-    printf "    ${BLUE}%-${COL_WIDTH_NAME}s${NC}  %b  %b\n" \
-        "${repo_name}" "${local_status}" "${remote_status}"
+    # Sichtbare Länge ohne ANSI berechnen, Lücke manuell auffüllen
+    local visible_len pad_len padding
+    visible_len=$(strip_ansi "${local_status}" | tr -d '\n' | wc -c | tr -d ' ')
+    pad_len=$(( COL_WIDTH_LOCAL - visible_len ))
+    padding="$(repeat ' ' "${pad_len}")"
+
+    printf "    ${BLUE}%-${COL_WIDTH_NAME}s${NC}  %b%s  %b\n" \
+        "${repo_name}" "${local_status}" "${padding}" "${remote_status}"
 }
 
 # Gibt die Status-Tabelle aller konfigurierten Repos aus.
