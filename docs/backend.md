@@ -343,14 +343,43 @@ make tag-patch / tag-minor / tag-major                # Versioning
 
 ## Versionierung
 
-Build-Scripts verwenden `hashVer` (BashLib-Funktion) — kein klassisches SemVer.
+### Release-Tags (CalVer)
+
+**Format:** `YY.Q.BUILD` — Jahr und Quartal aus dem Kalender, BUILD inkrementiert pro Release.
+
+```
+v26.2.0+260415.0930     # Erstes Release in Q2 2026
+v26.2.1+260422.1400     # Zweites Release (Patch) in Q2
+v26.2.2+260510.1115     # Drittes Release in Q2
+v26.3.0+260701.0900     # Quartalwechsel → BUILD reset auf 0
+v26.3.0-rc1+260628.1600 # Release Candidate
+```
+
+Quartalwechsel passiert automatisch — kein manuelles Major/Minor-Bumping.
+Jedes Release im selben Quartal erhoet BUILD (= Patch-Aequivalent).
+
+**Makefile-Targets:**
+
+```makefile
+make tag                # Release-Tag erstellen (naechster BUILD)
+make tag MSG="..."      # mit Tag-Message
+make tag-rc             # Release Candidate (-rc1)
+make tag-dry            # Naechste Version anzeigen (ohne Aenderung)
+make version            # Aktuelle Version anzeigen
+make tags               # Letzte 10 Tags anzeigen
+```
+
+`calVerBump` (BashLib) schreibt die Version in die Datei (`VERSION`, `package.json` oder `pyproject.toml`),
+erstellt einen Git-Commit und setzt den Tag. Reihenfolge: Version berechnen → Datei schreiben → Commit → Tag.
+
+### Snapshot-Tags (Docker)
+
+Build-Scripts verwenden `hashVer` (BashLib) fuer Docker-Image-Tags — automatisch via Jenkins.
 
 **Format:** `<Jahr>.<Quartal>.0[-<PRERELEASE><MMDD>][<META_SEP><HASH>]`
 
 ```
 26.1.0-SNAPSHOT0327.a3f9     # Snapshot-Build (Docker-Image-Tag)
-26.1.0-SNAPSHOT0327+a3f9     # Snapshot-Build (SemVer-konform, nicht fuer Docker)
-26.1.0                        # Release-Tag (manuell gesetzt)
 ```
 
 **`hashVer`-Parameter:**
@@ -361,38 +390,8 @@ Build-Scripts verwenden `hashVer` (BashLib-Funktion) — kein klassisches SemVer
 | `PRERELEASE_IDENTIFIER` | `SNAPSHOT` | Praefix vor MMDD; leer = kein Praefix |
 | `META_SEPARATOR` | `+` | Trenner vor Hash; `.` fuer Docker (`+` ist in Image-Tags ungueltig) |
 
-**Docker-Image-Tags:** `hashVer 4 "" .` → `26.1.0-SNAPSHOT0327.a3f9`
-`META_SEPARATOR` muss `.` sein — Docker lehnt `+` in Tags ab.
-
-**Alternative: `semVerWithDate`** — wenn `package.json`-Version als Basis benoetigt wird:
-`semVerWithDate "" . 1 4` → `1.2.3-build-260327.1445.a3f9` (+ `.dirty` bei uncommitted changes).
-Vorteil: Version stammt aus dem Git-Tag (`vX.Y.Z`), enthaelt Datum+Uhrzeit und dirty-Flag.
-Voraussetzung: Git-Tag bei jedem `package.json`-Versionssprung setzen.
-
-**`bumpVer` / `gitUpdateVersionTag`** — fuer Git-Tags und Versionsdateien (`package.json`, `pyproject.toml`, `VERSION`):
-
-```
-v26.3.0+260327.1445     # Release-Tag mit Timestamp (SemVer Build-Metadata)
-v26.3.0-rc1+260327.1445 # Pre-Release
-```
-
-Format: `v<YY>.<minor>.<patch>[+<YYMMDD.HHMM>]` — kein Hash-Anteil, kein Quartal-Zwang.
-`gitUpdateVersionTag` ist idempotent: Falls HEAD bereits getaggt ist, wird der bestehende Tag zurueckgegeben.
-
-**Tag-Ordering bei `bumpVer`:** Git-Tag immer **nach** dem Commit setzen, nicht davor.
-Begruendung: `git checkout v26.1.0` muss einen konsistenten Stand liefern — `package.json` und Tag zeigen auf denselben Commit.
-Reihenfolge: `_gitCalcNextVersion` → Datei schreiben → `git commit` → `_gitSetVersionTag`.
-
-**Makefile-Targets fuer Version-Bumping (Sub-Repos):**
-
-```makefile
-tag-patch   # Patch hochzaehlen  (26.3.0 → 26.3.1)
-tag-minor   # Minor hochzaehlen  (26.3.0 → 26.4.0)
-tag-major   # Major hochzaehlen  (26.3.0 → 27.0.0)
-```
-
-Diese Targets rufen `bumpVer` auf und setzen den Git-Tag automatisch nach dem Commit.
-Snapshot-Tags (Docker-Image-Tags via `hashVer`) werden automatisch vom Jenkins-Build erzeugt — nie manuell.
+`hashVer 4 "" .` → `26.1.0-SNAPSHOT0327.a3f9` — `META_SEPARATOR` muss `.` sein (Docker lehnt `+` ab).
+Snapshot-Tags werden automatisch vom Jenkins-Build erzeugt — nie manuell.
 
 ---
 
