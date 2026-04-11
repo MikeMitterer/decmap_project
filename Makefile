@@ -63,6 +63,55 @@ status: ## Git-Status aller Repos (dirty + ahead/behind Remote)
 fakedata-sync: ## Fake-Daten aus data/ generieren (frontend + ai-service)
 	python3 scripts/gen-fakedata.py --generate
 
+##@ Versionierung
+
+.PHONY: version
+version: ## Aktuelle Versionen aller Sub-Repos anzeigen
+	@echo
+	@echo "  ${YELLOW}Versionen${RESET}"
+	@echo
+	@if [ -f apps/backend/VERSION ]; then \
+		printf "    ${BLUE}%-20s${RESET} ${GREEN}%s${RESET}\n" "backend" "$$(cat apps/backend/VERSION)"; \
+	else \
+		printf "    ${BLUE}%-20s${RESET} ${WHITE}%s${RESET}\n" "backend" "(nicht ausgecheckt)"; \
+	fi
+	@if [ -f apps/frontend/package.json ]; then \
+		printf "    ${BLUE}%-20s${RESET} ${GREEN}%s${RESET}\n" "frontend" "$$(grep '"version"' apps/frontend/package.json | head -1 | sed 's/.*"version": *"\(.*\)".*/\1/')"; \
+	else \
+		printf "    ${BLUE}%-20s${RESET} ${WHITE}%s${RESET}\n" "frontend" "(nicht ausgecheckt)"; \
+	fi
+	@if [ -f apps/ai-service/pyproject.toml ]; then \
+		printf "    ${BLUE}%-20s${RESET} ${GREEN}%s${RESET}\n" "ai-service" "$$(grep '^version' apps/ai-service/pyproject.toml | head -1 | sed 's/version *= *"\(.*\)"/\1/')"; \
+	else \
+		printf "    ${BLUE}%-20s${RESET} ${WHITE}%s${RESET}\n" "ai-service" "(nicht ausgecheckt)"; \
+	fi
+	@echo
+
+.PHONY: tags
+tags: ## Letzte 10 Git-Tags anzeigen
+	@echo
+	@echo "  ${YELLOW}Letzte Tags — $(PROJECT_NAME)${RESET}"
+	@echo
+	@git tag --sort=-creatordate | head -10 | while read tag; do \
+		printf "    ${BLUE}%-30s${RESET} ${WHITE}%s${RESET}\n" "$$tag" "$$(git log -1 --format='%ci' $$tag | cut -d' ' -f1)"; \
+	done
+	@echo
+
+.PHONY: tag-patch
+tag-patch: ## Patch-Bump in Sub-Repo: make tag-patch REPO=frontend
+	@test -n "$(REPO)" || (echo "${RED}Fehler: REPO nicht gesetzt. Beispiel: make tag-patch REPO=frontend${RESET}" && exit 1)
+	$(MAKE) -C apps/$(REPO) tag-patch
+
+.PHONY: tag-minor
+tag-minor: ## Minor-Bump in Sub-Repo: make tag-minor REPO=frontend
+	@test -n "$(REPO)" || (echo "${RED}Fehler: REPO nicht gesetzt. Beispiel: make tag-minor REPO=frontend${RESET}" && exit 1)
+	$(MAKE) -C apps/$(REPO) tag-minor
+
+.PHONY: tag-major
+tag-major: ## Major-Bump in Sub-Repo: make tag-major REPO=frontend
+	@test -n "$(REPO)" || (echo "${RED}Fehler: REPO nicht gesetzt. Beispiel: make tag-major REPO=frontend${RESET}" && exit 1)
+	$(MAKE) -C apps/$(REPO) tag-major
+
 ##@ Cross-Repo
 
 .PHONY: build-all
