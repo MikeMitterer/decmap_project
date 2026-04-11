@@ -64,7 +64,7 @@ DecisionMap/                     ← Workspace-Root-Repo (Issues, Haupt-Doku)
 ├── Makefile                     ← Workspace-Orchestrierung
 ├── data/                        ← Shared Seed/Fixture-Daten (SSoT, snake_case JSON)
 ├── docs/                        ← Detaillierte Spezifikationen
-├── scripts/                     ← Workspace-Skripte (z.B. gen-fixtures.py)
+├── scripts/                     ← Workspace-Skripte (z.B. gen-fakedata.py)
 ├── .templates/                  ← Wiederverwendbare Templates (Jenkinsfile, Makefile, docker/)
 ├── .libs/                       ← Lokale Symlinks (BashLib, BashTools, MakeLib) — per .gitignore ausgeschlossen
 ├── apps/                        ← Service-Repos (gitignored)
@@ -154,7 +154,7 @@ export function useProblems() {
 - **Vue:** Nur Composition API + `<script setup lang="ts">`, keine API-Aufrufe in Komponenten
 - **Python:** Type Hints ueberall, Pydantic Request/Response, Router pro Fachbereich
 - **Logging:** `consola` (Frontend) / `structlog` (Backend) — kein `console.log` / `logging`
-- **Testing:** Vitest (nur Composables, API mocken) / pytest (OpenAI mocken, Fixtures in `tests/fixtures/`)
+- **Testing:** Vitest (nur Composables, API mocken) / pytest (OpenAI mocken, Fixtures in `tests/fakedata/`)
 
 ---
 
@@ -186,7 +186,7 @@ export function useProblems() {
 - **Makefile:** Jedes Sub-Repo hat ein eigenes Makefile. `make help` (Root: Workspace-Delegation), `make -C apps/backend help` (Docker, DB, Backup). Details: [`docs/backend.md`](docs/backend.md)
 - **Versionierung:** SemVer + Datum (`bumpVer`): `v<MAJOR>.<MINOR>.<PATCH>+<YYMMDD>.<HHMM>`, Start bei `0.1.0`. Docker-Snapshots: `hashVer` → `<MAJOR>.<MINOR>.<PATCH>-SNAPSHOT<MMDD>.<HASH>` — automatisch via Jenkins. Details: [`docs/backend.md`](docs/backend.md)
 - **Git:** Conventional Commits `<type>(<scope>): <msg>`, direkte Commits auf `master` erlaubt — Jenkins ist die einzige Schranke
-- **Seed-Daten (SSoT):** `data/*.json` (snake_case, UUIDs) — nie direkt in Consumer-Repos editieren. `make fixtures-sync` verteilt an `apps/frontend/.../seeds.json` (camelCase) und `apps/ai-service/tests/fixtures/` (snake_case + embedding).
+- **Seed-Daten (SSoT):** `data/*.json` (snake_case, UUIDs) — nie direkt in Consumer-Repos editieren. `make fakedata-sync` verteilt an `apps/frontend/.../seeds.json` (camelCase) und `apps/ai-service/tests/fakedata/` (snake_case + embedding).
 - **Seeds:** `apps/backend/database/seeds/` alphabetisch, idempotent
 - **Backup:** `make -C apps/backend backup` / `make -C apps/backend backup-remote`, nie einchecken
 

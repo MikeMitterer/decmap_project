@@ -471,5 +471,5 @@ Erkennungsmerkmal: Funktion nutzt reaktive Props/State und waere sonst nur ueber
 
 - Unit-Tests fur: Spam-Filter, Embedding-Pipeline, Clustering-Service
 - Keine echten OpenAI-Aufrufe — Client mocken
-- Fixtures in `tests/fixtures/`
+- Fake-Daten in `tests/fakedata/`
 - Testdatei spiegelt Quelle: `services/spam_filter.py` → `tests/test_spam_filter.py`

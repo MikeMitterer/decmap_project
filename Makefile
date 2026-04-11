@@ -54,8 +54,8 @@ setup: ## Lokale .libs/-Symlinks erstellen (DEV_LOCAL muss gesetzt sein)
 ##@ Daten
 
 .PHONY: fixtures-sync
-fixtures-sync: ## Fixtures aus data/ generieren (frontend + ai-service)
-	python3 scripts/gen-fixtures.py
+fakedata-sync: ## Fake-Daten aus data/ generieren (frontend + ai-service)
+	python3 scripts/gen-fakedata.py
 
 ##@ Cross-Repo
 
