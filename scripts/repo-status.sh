@@ -140,9 +140,10 @@ print_repo_row() {
     remote_status=$(get_remote_status "${repo_path}")
 
     # Sichtbare Länge ohne ANSI berechnen, Lücke manuell auffüllen
-    local visible_len pad_len padding
-    visible_len=$(strip_ansi "${local_status}" | tr -d '\n' | wc -c | tr -d ' ')
-    pad_len=$(( COL_WIDTH_LOCAL - visible_len ))
+    # ${#var} zählt Zeichen (nicht Bytes) — korrekt für UTF-8 Symbole wie ✓/✗
+    local visible_text pad_len padding
+    visible_text=$(strip_ansi "${local_status}" | tr -d '\n')
+    pad_len=$(( COL_WIDTH_LOCAL - ${#visible_text} ))
     padding="$(repeat ' ' "${pad_len}")"
 
     printf "    ${BLUE}%-${COL_WIDTH_NAME}s${NC}  %b%s  %b\n" \
