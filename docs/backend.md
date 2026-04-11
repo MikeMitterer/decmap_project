@@ -287,9 +287,10 @@ Jedes Sub-Repo hat ein eigenes Makefile fuer seinen Kontext. `make help` zeigt d
 | Makefile | Zustandig fuer |
 |---|---|
 | `Makefile` (Root) | Workspace-Setup, Delegation an Sub-Repos, Cross-Repo lint/test |
-| `backend/Makefile` | Docker, Datenbank, Backup, Deploy, Versioning |
-| `frontend/Makefile` | Dev-Server, Lint, Test, Build, Versioning |
-| `ai-service/Makefile` | Dev-Server, Lint, Test, Build, DB-Migrationen, Versioning |
+| `infrastructure/Makefile` | docker-compose, nginx, Server-Orchestrierung |
+| `apps/backend/Makefile` | Directus, Datenbank, Backup, Seeds, Versioning |
+| `apps/frontend/Makefile` | Dev-Server, Lint, Test, Build, Versioning |
+| `apps/ai-service/Makefile` | Dev-Server, Lint, Test, Build, DB-Migrationen, Versioning |
 
 [`.templates/Makefile`](../.templates/Makefile) ist ein generisches Ausgangs-Template. Benoetigt `DEV_MAKE`-Env-Variable (zeigt auf `MakeLib`).
 
@@ -297,18 +298,18 @@ Jedes Sub-Repo hat ein eigenes Makefile fuer seinen Kontext. `make help` zeigt d
 
 | Repo | Versionsdatei |
 |---|---|
-| `backend/` | `VERSION` |
-| `frontend/` | `package.json` |
-| `ai-service/` | `pyproject.toml` |
+| `apps/backend/` | `VERSION` |
+| `apps/frontend/` | `package.json` |
+| `apps/ai-service/` | `pyproject.toml` |
 
 ```bash
 # Workspace-Root
 make setup             # .libs/-Symlinks erstellen (einmalig, benoetigt DEV_LOCAL)
-make dev-up            # → delegiert an backend/Makefile
-make lint              # → delegiert an frontend/ und ai-service/
-make test              # → delegiert an frontend/ und ai-service/
+make dev-up            # → delegiert an apps/backend/Makefile
+make lint              # → delegiert an apps/frontend/ und apps/ai-service/
+make test              # → delegiert an apps/frontend/ und apps/ai-service/
 
-# Backend (aus backend/ oder via make -C backend ...)
+# Backend (aus apps/backend/ oder via make -C apps/backend ...)
 make up / down / logs                                 # Alle Services
 make dev-up / dev-down / dev-logs                     # Dev-Umgebung (Directus + Mailpit)
 make db-reset                                         # DB zurücksetzen (schema → constraints → seed)
@@ -322,7 +323,7 @@ make build / deploy                                   # Build & Deploy
 make precheck / version / tags                        # Versioning
 make tag-patch / tag-minor / tag-major                # SemVer Git-Tag setzen + pushen
 
-# AI-Service (aus ai-service/ oder via make -C ai-service ...)
+# AI-Service (aus apps/ai-service/ oder via make -C apps/ai-service ...)
 make install / install-dev                            # Abhaengigkeiten
 make lint / format                                    # Code-Qualitaet (ruff)
 make test / test-unit / test-contract                 # Tests (pytest)
@@ -333,7 +334,7 @@ make precheck / version / tags                        # Versioning
 make tag-patch / tag-minor / tag-major                # SemVer Git-Tag setzen + pushen
 # → Manuelle curl-Tests aller Endpunkte: docs/cmdline.md
 
-# Frontend (aus frontend/ oder via make -C frontend ...)
+# Frontend (aus apps/frontend/ oder via make -C apps/frontend ...)
 make dev / install / lint / format / test             # Entwicklung
 make build / deploy                                   # Deploy
 make tag-patch / tag-minor / tag-major                # Versioning

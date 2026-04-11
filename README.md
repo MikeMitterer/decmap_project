@@ -77,6 +77,7 @@ Manuelle Endpunkt-Tests per `curl`: [`docs/cmdline.md`](docs/cmdline.md)
 - DNSBL-Check (aiodnsbl) als zweite Schicht im Spam-Filter aktivieren
 - Regionsbasierte Filterung und Ranking
 - E2E-Tests (Playwright) — aktuell nur Unit- und Contract-Tests auf Composable-Ebene
+- **AI-Service Fixtures synchronisieren:** `apps/ai-service/tests/fixtures/` ist eigenständig (5 Problems, `prob-001`-IDs) — nicht konsistent mit `data/` (SSoT, 45 Problems, echte UUIDs). Backend-SQL-Seeds sind bereits konsistent. Geplant: `scripts/gen-fixtures.py`.
 
 ---
 
@@ -120,7 +121,7 @@ Manuelle Endpunkt-Tests per `curl`: [`docs/cmdline.md`](docs/cmdline.md)
 
 ### Repository-Struktur
 
-Multi-Repo — vier separate Repositories mit eigenem Release-Zyklus:
+Multi-Repo — fuenf separate Repositories mit eigenem Release-Zyklus:
 
 ```
 DecisionMap/                     ← Workspace-Root-Repo (Issues, Haupt-Doku, CI-Koordination)
@@ -129,20 +130,23 @@ DecisionMap/                     ← Workspace-Root-Repo (Issues, Haupt-Doku, CI
 ├── Makefile                     ← Workspace-Orchestrierung
 ├── .templates/                  ← Wiederverwendbare Templates (Jenkinsfile, Makefile, docker/)
 ├── .libs/                       ← Lokale Symlinks (BashLib, BashTools, MakeLib) — per .gitignore ausgeschlossen
-├── backend/                     ← docker-compose, nginx, Seeds, Backups, Makefile (eigenes Repo)
-├── frontend/                    ← Nuxt.js App (eigenes Repo)
-└── ai-service/                  ← FastAPI + Alembic (eigenes Repo)
+├── apps/                        ← Service-Repos (gitignored)
+│   ├── backend/                 ← Directus-Konfiguration, Seeds, Makefile (eigenes Repo)
+│   ├── frontend/                ← Nuxt.js App (eigenes Repo)
+│   └── ai-service/              ← FastAPI + Alembic (eigenes Repo)
+└── infrastructure/              ← Server-Orchestrierung: docker-compose, nginx (eigenes Repo)
 ```
 
-`backend/`, `frontend/` und `ai-service/` sind im Workspace-Root per `.gitignore` ausgeschlossen —
-sie haben eigene Repos. Das Workspace-Root-Repo dient als zentraler Ort für Issues und Projektdokumentation.
+`apps/backend/`, `apps/frontend/`, `apps/ai-service/` und `infrastructure/` sind per `.gitignore` ausgeschlossen —
+sie haben eigene Repos. Das Workspace-Root-Repo dient als zentraler Ort fuer Issues und Projektdokumentation.
 
 Jedes Repo hat eine eigene Jenkins-Pipeline — ein Frontend-Deploy triggert keinen Backend-Build.
 
 ```
-frontend     → build → test → deploy frontend
-ai-service   → test → build → db-migrate → deploy ai-service
-backend      → deploy compose + config
+frontend       → build → test → deploy frontend
+ai-service     → test → build → db-migrate → deploy ai-service
+backend        → deploy Directus-Konfiguration + Seeds
+infrastructure → deploy compose + nginx + Orchestrierung
 ```
 
 ### Rendering-Strategie
@@ -518,8 +522,7 @@ Dieselben Files für Entwicklung und Tests.
 
 ### Versionierung
 
-Build-Scripts verwenden `hashVer` (BashLib) — Format: `<Jahr>.<Quartal>.0-SNAPSHOT<MMDD>.<HASH>` (z.B. `26.1.0-SNAPSHOT0327.a3f9`).
-Automatisch via Jenkins — nie manuell setzen. Vollständige Spezifikation: [`docs/backend.md`](docs/backend.md).
+Zwei Mechanismen: **Release-Tags** per `bumpVer` (SemVer + Datum) — Format: `v<MAJOR>.<MINOR>.<PATCH>+<YYMMDD>.<HHMM>`, Start bei `0.1.0`. **Docker-Snapshots** per `hashVer` — Format: `<MAJOR>.<MINOR>.<PATCH>-SNAPSHOT<MMDD>.<HASH>`, automatisch via Jenkins. Vollständige Spezifikation: [`docs/backend.md`](docs/backend.md).
 
 ### Backup
 
