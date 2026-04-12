@@ -22,6 +22,7 @@ help: ## Alle verfügbaren Befehle anzeigen
 	    /^##@/ { printf "\n  ${YELLOW}%s${RESET}\n", substr($$0, 4) }; \
 	    /^[^#]/ { printf "    ${BLUE}%-22s ${GREEN}%s${RESET}\n", $$1, $$2 }'
 	@echo
+	@$(MAKE) --no-print-directory hints
 
 # ─── Info ────────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,36 @@ info: ## Workspace-Umgebungsvariablen anzeigen
 	@echo "    ${YELLOW}DEV_LOCAL${RESET}    = ${BLUE}$${DEV_LOCAL}${RESET}"
 	@echo "    ${YELLOW}DEV_MAKE${RESET}     = ${BLUE}$${DEV_MAKE}${RESET}"
 	@echo "    ${YELLOW}BASH_LIBS${RESET}    = ${BLUE}$${BASH_LIBS}${RESET}"
+	@echo
+
+
+.PHONY: hints
+hints: ## Nützliche Links und Hinweise anzeigen
+	@echo
+	@echo "  ${YELLOW}GitHub Repositories${RESET}"
+	@echo
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Root"           "https://github.com/MikeMitterer/decmap_project"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Backend"        "https://github.com/MikeMitterer/decmap_backend"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Frontend"       "https://github.com/MikeMitterer/decmap_frontend"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "AI-Service"     "https://github.com/MikeMitterer/decmap_ai-service"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Infrastructure" "https://github.com/MikeMitterer/decmap_infrastructure"
+	@echo
+	@echo "  ${YELLOW}Docker Images (ghcr.io/mangolila)${RESET}"
+	@echo
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Directus"   "ghcr.io/mangolila/decisionmap-directus"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Frontend"   "ghcr.io/mangolila/decisionmap-frontend"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "AI-Service" "ghcr.io/mangolila/decisionmap-ai-service"
+	@echo
+	@echo "  ${YELLOW}Produktion${RESET}"
+	@echo
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "App" "https://decisionmap.ai"
+	@echo
+	@echo "  ${YELLOW}Sub-Repo Makefiles${RESET}"
+	@echo
+	@printf "    ${BLUE}%-35s${RESET} ${GREEN}%s${RESET}\n" "make -C apps/backend help"     "Directus-Image, DB-Schema, Dev-Umgebung"
+	@printf "    ${BLUE}%-35s${RESET} ${GREEN}%s${RESET}\n" "make -C apps/frontend help"    "Nuxt.js App (dev, lint, test, build)"
+	@printf "    ${BLUE}%-35s${RESET} ${GREEN}%s${RESET}\n" "make -C apps/ai-service help"  "FastAPI (dev, test, build)"
+	@printf "    ${BLUE}%-35s${RESET} ${GREEN}%s${RESET}\n" "make -C infrastructure help"   "Server-Orchestrierung, Backup"
 	@echo
 
 ##@ Setup
