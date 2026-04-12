@@ -557,6 +557,73 @@ async def on_problem_submitted(...): ...
 
 ---
 
+## Bash: Gotchas
+
+### Fehlermeldungen gehören in den Aufrufer
+
+**Lib-Funktionen geben keine Fehlermeldungen aus** — sie geben nur einen Exit-Code zurück.
+Fehlermeldungen (inkl. ANSI-Farben und Kontext) gehören in das aufrufende Script, wo `RED`, `YELLOW` usw. zur Verfügung stehen.
+
+```bash
+# falsch — Lib gibt Fehlermeldung aus (keine Farben, kein Kontext)
+my_lib_func() {
+    if [[ -z "$result" ]]; then
+        printf 'my_lib_func: Fehler — kein Ergebnis\n' >&2
+        return 1
+    fi
+}
+
+# richtig — Lib gibt nur Exit-Code, Aufrufer gibt Meldung aus
+my_lib_func() {
+    [[ -z "$result" ]] && return 1
+}
+
+# Aufrufer — hat Farben und Kontext:
+my_lib_func || {
+    echo -e "\n${RED}Fehler:${NC} Beschreibung was schiefging." >&2
+    echo -e "${YELLOW}Tipp:${NC} Was der User tun soll.\n" >&2
+    exit 1
+}
+```
+
+Wenn unterschiedliche Fehlerursachen unterschiedliche Meldungen brauchen → **differenzierte Exit-Codes** (2, 3, …) statt Ausgaben in der Lib:
+
+```bash
+# Lib — verschiedene Fehlerursachen, keine Ausgaben
+my_lib_func() {
+    [[ -z "$config" ]]   && return 2   # kein Config-File
+    [[ "$dirty" == 1 ]]  && return 3   # dirty state
+}
+
+# Aufrufer — liest Exit-Code und gibt passende Meldung aus
+my_lib_func; _rc=$?
+if   [[ $_rc -eq 2 ]]; then echo -e "${RED}Fehler:${NC} Config fehlt." >&2;     exit 1
+elif [[ $_rc -eq 3 ]]; then echo -e "${RED}Fehler:${NC} State ist dirty." >&2;  exit 1
+elif [[ $_rc -ne 0 ]]; then echo -e "${RED}Fehler:${NC} rc=${_rc}." >&2;        exit 1
+fi
+```
+
+### `readonly VAR="$(cmd)"` — Exit-Code geht verloren
+
+`readonly` ist ein Bash-Builtin und gibt **immer 0 zurück**, auch wenn der Subshell-Befehl fehlschlägt.
+`|| exit 1` hinter `readonly VAR="$(cmd)"` triggert **nie**.
+
+```bash
+# falsch — || exit 1 wird niemals ausgeführt
+readonly TAG="$(gitDockerTag)" || exit 1
+
+# falsch — set -e beendet das Script auf Zeile 1, Zeile 2 wird nie erreicht
+TAG="$(gitDockerTag)"; _rc=$?
+
+# richtig — || verhindert set -e UND sichert den Exit-Code in einem Schritt
+_rc=0
+TAG="$(gitDockerTag)" || _rc=$?
+[[ $_rc -ne 0 ]] && { echo -e "${RED}Fehler${NC}" >&2; exit 1; }
+readonly TAG
+```
+
+---
+
 ## Logging
 
 **Frontend — `consola`** — kein `console.log` im eingecheckten Code:

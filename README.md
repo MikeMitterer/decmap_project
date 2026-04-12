@@ -1,3 +1,5 @@
+<img src="assets/images/decisionmap-logo-gradient-light.svg" alt="DecisionMap" width="320" />
+
 # DecisionMap
 
 Eine kollektive Wissensplattform für KI-bezogene Probleme in Unternehmen.
@@ -263,7 +265,7 @@ users ──< problems ──< solution_approaches
 Zwei Mechanismen — Details: [`docs/backend.md`](docs/backend.md)
 
 - **Release-Tags:** SemVer + Datum via `bumpVer` → `v0.1.0+260411.1430`
-- **Docker-Snapshots:** Hash-basiert via `hashVer` → automatisch per Jenkins
+- **Docker-Snapshots:** `gitDockerTag` → `0.1.0-build-260412.0824.def34` — automatisch via Jenkins
 
 Version pro Sub-Repo ablesen:
 ```bash

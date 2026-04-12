@@ -378,23 +378,16 @@ erstellt einen Git-Commit und setzt den Tag. Reihenfolge: Version berechnen → 
 
 ### Snapshot-Tags (Docker)
 
-Build-Scripts verwenden `hashVer` (BashLib) fuer Docker-Image-Tags — automatisch via Jenkins.
+Build-Scripts verwenden `gitDockerTag` aus `version.lib.sh` (BashLib) fuer Docker-Image-Tags — automatisch via Jenkins.
 
-**Format:** `<MAJOR>.<MINOR>.<PATCH>-<PRERELEASE><MMDD><META_SEP><HASH>`
+**Format:** `<MAJOR>.<MINOR>.<PATCH>-build-<YYMMDD>.<HHMM>.<HASH>[.ahead<N>][.d]`
 
 ```
-0.1.0-SNAPSHOT0327.a3f9     # Snapshot-Build (Docker-Image-Tag)
+0.1.0-build-260412.0824.def34           # normaler Snapshot-Build
+0.1.0-build-260412.0824.def34.ahead3    # 3 unpushte Commits ueber dem Tag
+0.1.0-build-260412.0824.def34.d         # dirty Working Tree
 ```
 
-**`hashVer`-Parameter:**
-
-| Parameter | Standard | Bedeutung |
-|---|---|---|
-| `HASH_DIGITS` | — | Laenge des Hash-Anteils (0 = kein Hash) |
-| `PRERELEASE_IDENTIFIER` | `SNAPSHOT` | Praefix vor MMDD; leer = kein Praefix |
-| `META_SEPARATOR` | `+` | Trenner vor Hash; `.` fuer Docker (`+` ist in Image-Tags ungueltig) |
-
-`hashVer 4 "" .` → `0.1.0-SNAPSHOT0327.a3f9` — `META_SEPARATOR` muss `.` sein (Docker lehnt `+` ab).
 Snapshot-Tags werden automatisch vom Jenkins-Build erzeugt — nie manuell.
 
 ---
