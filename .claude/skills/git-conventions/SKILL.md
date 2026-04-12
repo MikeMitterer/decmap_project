@@ -121,7 +121,7 @@ Keine API-Änderungen.
 docs(backend): gitDockerTag-Format in backend.md dokumentiert
 
 Bisher fehlte die Erklärung des Tag-Formats
-0.1.0-build-260412.0824.def34.ahead3 — wichtig für Rollback-Entscheidungen.
+0.1.0-260412.0824.def34.ahead3 — wichtig für Rollback-Entscheidungen.
 ```
 
 ---

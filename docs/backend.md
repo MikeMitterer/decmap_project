@@ -259,7 +259,7 @@ Definiert in `infrastructure/docker-compose.yml`.
 Lokales Build-Image wird nach dem Deploy auf dem Jenkins-Agent geloescht.
 [`.templates/Jenkinsfile`](../.templates/Jenkinsfile) ist ein generisches Ausgangs-Template — muss fuer die oben beschriebene Deploy-Strategie (docker save|ssh|load) angepasst werden. Konkret: `sh './docker/app/build --build'` → `sh './docker/build.sh --build'` (Pfad auf `docker/build.sh` des Sub-Repos anpassen).
 
-**Build-Script:** [`.templates/docker/build.sh`](../.templates/docker/build.sh) ist das generische Bash-Template fuer Sub-Repo-Build-Skripte. (Das ebenfalls vorhandene `.templates/docker/Dockerfile` ist ein generisches Debian/certbot-Base-Image fuer Tooling — kein Nuxt-Template.) Enthaelt Platform-Erkennung, BashLib-Includes, `--build`/`--push`/`--images`-Flags und TAG-Erzeugung via `gitDockerTag` aus `version.lib.sh` (BashLib) — Format: `<VERSION>-build-<YYMMDD>.<HHMM>.<HASH>[.ahead<N>][.d]`, z.B. `0.1.0-build-260412.0824.def34.ahead3`; Git-Tag-Format: `v<VERSION>+<YYMMDD>.<HHMM>.<HASH>`. Benoetigt `DEV_DOCKER`-Env-Variable auf der Build-Maschine (zeigt auf Docker-Hilfsskripte). Pro Sub-Repo nach `docker/build.sh` kopieren und `NAMESPACE`/`NAME`/Deploy-Logik anpassen. **Wichtig:** Der `--push`-Zweig im Template ruft `pushImage2DockerHub` auf — dieser Block muss vollstaendig durch `docker save | ssh | docker load` ersetzt werden (Docker Hub wird nicht verwendet). Das Dockerfile liegt in `docker/`, der Build-Context ist das Parent-Verzeichnis des Sub-Repos (`docker build -f Dockerfile ..`). **Achtung:** Da der Build-Context das gesamte Sub-Repo-Verzeichnis umfasst, muss `docker/` in `.dockerignore` ausgeschlossen werden — sonst landet das Build-Verzeichnis selbst im Image.
+**Build-Script:** [`.templates/docker/build.sh`](../.templates/docker/build.sh) ist das generische Bash-Template fuer Sub-Repo-Build-Skripte. (Das ebenfalls vorhandene `.templates/docker/Dockerfile` ist ein generisches Debian/certbot-Base-Image fuer Tooling — kein Nuxt-Template.) Enthaelt Platform-Erkennung, BashLib-Includes, `--build`/`--push`/`--images`-Flags und TAG-Erzeugung via `gitDockerTag` aus `version.lib.sh` (BashLib) — Format: `<VERSION>-<YYMMDD>.<HHMM>.<HASH>[.ahead<N>][.d]`, z.B. `0.1.0-260412.0824.def34.ahead3`; Git-Tag-Format: `v<VERSION>+<YYMMDD>.<HHMM>.<HASH>`. Benoetigt `DEV_DOCKER`-Env-Variable auf der Build-Maschine (zeigt auf Docker-Hilfsskripte). Pro Sub-Repo nach `docker/build.sh` kopieren und `NAMESPACE`/`NAME`/Deploy-Logik anpassen. **Wichtig:** Der `--push`-Zweig im Template ruft `pushImage2DockerHub` auf — dieser Block muss vollstaendig durch `docker save | ssh | docker load` ersetzt werden (Docker Hub wird nicht verwendet). Das Dockerfile liegt in `docker/`, der Build-Context ist das Parent-Verzeichnis des Sub-Repos (`docker build -f Dockerfile ..`). **Achtung:** Da der Build-Context das gesamte Sub-Repo-Verzeichnis umfasst, muss `docker/` in `.dockerignore` ausgeschlossen werden — sonst landet das Build-Verzeichnis selbst im Image.
 
 **`.dockerignore` fuer Multi-Stage-Builds:** `.output/` muss in `.dockerignore` stehen — nicht weil `COPY --from=builder` den Host liest (das tut es nicht, es greift auf Stage 1 zu), sondern weil `COPY . .` in Stage 1 ein lokales `.output/` (vom Host) in den Build-Context uebertraegt. Das kann ein veraltetes lokales Artefakt in Stage 1 einschleppen, bevor `npm run build` laeuft. `node_modules/` und `.output/` gehoeren daher beide in `.dockerignore`.
 
@@ -380,12 +380,12 @@ erstellt einen Git-Commit und setzt den Tag. Reihenfolge: Version berechnen → 
 
 Build-Scripts verwenden `gitDockerTag` aus `version.lib.sh` (BashLib) fuer Docker-Image-Tags — automatisch via Jenkins.
 
-**Format:** `<MAJOR>.<MINOR>.<PATCH>-build-<YYMMDD>.<HHMM>.<HASH>[.ahead<N>][.d]`
+**Format:** `<MAJOR>.<MINOR>.<PATCH>-<YYMMDD>.<HHMM>.<HASH>[.ahead<N>][.d]`
 
 ```
-0.1.0-build-260412.0824.def34           # normaler Snapshot-Build
-0.1.0-build-260412.0824.def34.ahead3    # 3 unpushte Commits ueber dem Tag
-0.1.0-build-260412.0824.def34.d         # dirty Working Tree
+0.1.0-260412.0824.def34           # normaler Snapshot-Build
+0.1.0-260412.0824.def34.ahead3    # 3 unpushte Commits ueber dem Tag
+0.1.0-260412.0824.def34.d         # dirty Working Tree
 ```
 
 Snapshot-Tags werden automatisch vom Jenkins-Build erzeugt — nie manuell.
