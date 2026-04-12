@@ -22,7 +22,6 @@ help: ## Alle verfügbaren Befehle anzeigen
 	    /^##@/ { printf "\n  ${YELLOW}%s${RESET}\n", substr($$0, 4) }; \
 	    /^[^#]/ { printf "    ${BLUE}%-22s ${GREEN}%s${RESET}\n", $$1, $$2 }'
 	@echo
-	@$(MAKE) --no-print-directory hints
 
 # ─── Info ────────────────────────────────────────────────────────────────────
 
@@ -57,13 +56,6 @@ hints: ## Nützliche Links und Hinweise anzeigen
 	@echo "  ${YELLOW}Produktion${RESET}"
 	@echo
 	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "App" "https://decisionmap.ai"
-	@echo
-	@echo "  ${YELLOW}Sub-Repo Makefiles${RESET}"
-	@echo
-	@printf "    ${BLUE}%-35s${RESET} ${GREEN}%s${RESET}\n" "make -C apps/backend help"     "Directus-Image, DB-Schema, Dev-Umgebung"
-	@printf "    ${BLUE}%-35s${RESET} ${GREEN}%s${RESET}\n" "make -C apps/frontend help"    "Nuxt.js App (dev, lint, test, build)"
-	@printf "    ${BLUE}%-35s${RESET} ${GREEN}%s${RESET}\n" "make -C apps/ai-service help"  "FastAPI (dev, test, build)"
-	@printf "    ${BLUE}%-35s${RESET} ${GREEN}%s${RESET}\n" "make -C infrastructure help"   "Server-Orchestrierung, Backup"
 	@echo
 
 ##@ Setup
