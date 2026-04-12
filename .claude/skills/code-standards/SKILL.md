@@ -176,8 +176,8 @@ info: ## Workspace-Umgebungsvariablen anzeigen
 	@echo "    ${YELLOW}DEV_LOCAL${RESET}    = ${BLUE}$${DEV_LOCAL}${RESET}"
 	@echo
 	@echo "Test-URLs:"
-	@echo "    ${YELLOW}Frontend : ${BLUE}http://localhost:3000/${RESET}"
-	@echo "    ${YELLOW}Directus : ${BLUE}http://localhost:8055/${RESET}"
+	@echo "    ${YELLOW}Service-A : ${BLUE}http://localhost:<port-a>/${RESET}"
+	@echo "    ${YELLOW}Service-B : ${BLUE}http://localhost:<port-b>/${RESET}"
 	@echo
 ```
 
@@ -194,13 +194,12 @@ hints: ## Nützliche Hinweise und URLs anzeigen
 	@echo "    Project    - ${YELLOW}$(PROJECT_NAME)${RESET}"
 	@echo
 	@echo "    ${YELLOW}URLs (nach make dev-up):${RESET}"
-	@echo "        Frontend  - ${BLUE}http://localhost:3000/${RESET}"
-	@echo "        Directus  - ${BLUE}http://localhost:8055/${RESET}"
-	@echo "        Mailpit   - ${BLUE}http://localhost:8025/${RESET}"
+	@echo "        Service-A - ${BLUE}http://localhost:<port-a>/${RESET}"
+	@echo "        Service-B - ${BLUE}http://localhost:<port-b>/${RESET}"
 	@echo
 	@echo "    ${YELLOW}Server-Befehle:${RESET}"
-	@echo "        ${BLUE}ssh deploy@hetzner 'systemctl restart decisionmap'${RESET}"
-	@echo "        ${BLUE}ssh deploy@hetzner 'journalctl -n 100 -u decisionmap'${RESET}"
+	@echo "        ${BLUE}ssh deploy@<host> 'systemctl restart <service>'${RESET}"
+	@echo "        ${BLUE}ssh deploy@<host> 'journalctl -n 100 -u <service>'${RESET}"
 	@echo
 ```
 
@@ -644,7 +643,7 @@ logger.info("embedding_generated", problem_id=problem_id, duration_ms=duration)
 
 ---
 
-## Datenbank-Zugriff (KI-Service)
+## Datenbank-Zugriff (Python/psycopg3)
 
 `psycopg3` + Repository Pattern — kein ORM. Kein Raw-SQL außerhalb der Repository-Schicht.
 
@@ -786,7 +785,7 @@ usage() {
     echo
 
     # Optionen — usageLine() aus BashLib, Trennzeichen '|' zwischen Kurz- und Langform
-    usageLine "-g | --generate          " "Generiert Fake-Daten nach ${YELLOW}apps/frontend${NC} und ${YELLOW}apps/ai-service${NC}"
+    usageLine "-g | --generate          " "Generiert Ausgabe nach ${YELLOW}<ziel-verzeichnis>${NC}"
     usageLine "-n | --dry-run           " "Zeigt was generiert würde, ohne Dateien zu schreiben"
     usageLine "-v | --verbose           " "Verbose-Ausgabe"
     usageLine "-i | --info              " "Zeigt Script-Einstellungen"

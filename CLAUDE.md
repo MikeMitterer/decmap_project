@@ -147,15 +147,10 @@ export function useProblems() {
 ## Kern-Konventionen
 
 → Details on demand: `/conventions` | Ausfuehrliche Beispiele: [`docs/conventions.md`](docs/conventions.md)
-→ Code-Standards (Stil, Struktur, Scripts, BashLib): `/code-standards`
+→ Code-Standards (Stil, Struktur, Scripts, BashLib, Gotchas): `/code-standards`
 
 - **Architektur:** Komponenten = Darstellung, Composables = Logic (Frontend) | Router = HTTP, Services = Logic (Backend)
 - **Naming:** TS/Vue `camelCase`/`PascalCase`/`SCREAMING_SNAKE_CASE` | Python `snake_case`/`PascalCase` | DB `snake_case`
-- **TypeScript:** Strict, kein `any` (→ `unknown`), kein `!`, explizite Rueckgabetypen, Enums statt Magic Strings
-- **Vue:** Nur Composition API + `<script setup lang="ts">`, keine API-Aufrufe in Komponenten
-- **Python:** Type Hints ueberall, Pydantic Request/Response, Router pro Fachbereich
-- **Logging:** `consola` (Frontend) / `structlog` (Backend) — kein `console.log` / `logging`
-- **Testing:** Vitest (nur Composables, API mocken) / pytest (OpenAI mocken, Fixtures in `tests/fakedata/`)
 
 ---
 
@@ -186,7 +181,7 @@ export function useProblems() {
 - **Linting:** ESLint + Prettier (TS) / ruff (Python) — automatisch, nicht verhandelbar
 - **Makefile:** Jedes Sub-Repo hat ein eigenes Makefile. `make help` (Root: Workspace-Delegation), `make -C apps/backend help` (Docker, DB, Backup). Details: [`docs/backend.md`](docs/backend.md)
 - **Versionierung:** SemVer + Datum (`bumpVer`): `v<MAJOR>.<MINOR>.<PATCH>+<YYMMDD>.<HHMM>.<HASH>`, Start bei `0.1.0`. Docker-Snapshots: `gitDockerTag` → `<MAJOR>.<MINOR>.<PATCH>-build-<YYMMDD>.<HHMM>.<HASH>[.ahead<N>]` (z.B. `0.1.0-build-260412.0824.def34.ahead3`) — automatisch via Jenkins. Details: [`docs/backend.md`](docs/backend.md)
-- **Git:** Conventional Commits `<type>(<scope>): <msg>`, direkte Commits auf `master` erlaubt — Jenkins ist die einzige Schranke
+- **Git:** Conventional Commits `<type>(<scope>): <msg>`, direkte Commits auf `master` erlaubt — Jenkins ist die einzige Schranke. Details on demand: `/git-conventions`
 - **Seed-Daten (SSoT):** `data/*.json` (snake_case, UUIDs) — nie direkt in Consumer-Repos editieren. `make fakedata-sync` verteilt an `apps/frontend/.../seeds.json` (camelCase) und `apps/ai-service/tests/fakedata/` (snake_case + embedding).
 - **Seeds:** `apps/backend/database/seeds/` alphabetisch, idempotent
 - **Backup:** `make -C apps/backend backup` / `make -C apps/backend backup-remote`, nie einchecken
