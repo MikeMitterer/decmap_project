@@ -17,7 +17,7 @@ help: ## Alle verfügbaren Befehle anzeigen
 	@echo
 	@echo "Project: ${YELLOW}$(PROJECT_NAME)${RESET}  (Workspace-Root)"
 	@echo
-	@grep -hE '^(##@|[a-zA-Z_-]+:.*?## )' $(MAKEFILE_LIST) | \
+	@grep -hE '^(##@|[a-zA-Z0-9_-]+:.*?## )' $(MAKEFILE_LIST) | \
 	  awk 'BEGIN {FS = ":.*?## "}; \
 	    /^##@/ { printf "\n  ${YELLOW}%s${RESET}\n", substr($$0, 4) }; \
 	    /^[^#]/ { printf "    ${BLUE}%-22s ${GREEN}%s${RESET}\n", $$1, $$2 }'
