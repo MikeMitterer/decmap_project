@@ -266,6 +266,15 @@ Lokales Build-Image wird nach dem Deploy auf dem Jenkins-Agent geloescht.
 ### Konfiguration ausserhalb der Pipeline
 
 Das `.env` liegt auf dem Hetzner-Server — Jenkins deployt nur den Build-Artefakt.
+Vorlage: `infrastructure/.env.example` (alle Variablen mit Prod-Defaults, HTTPS-URLs, `USE_FAKE_DATA=false`).
+
+```bash
+# Erstmalig einrichten oder aktualisieren:
+cp infrastructure/.env.example infrastructure/.env
+# Werte setzen, dann hochladen:
+scp infrastructure/.env decmap:/srv/decisionmap/.env
+```
+
 Phasenumschaltung ausschliesslich durch Anpassen von `.env` auf dem Server:
 
 ```bash
@@ -274,8 +283,6 @@ USE_FAKE_DATA=true
 
 # Phase 2 — Live (Pipeline unveraendert)
 USE_FAKE_DATA=false
-DIRECTUS_URL=https://...
-NUXT_PUBLIC_API_BASE=https://...
 ```
 
 ---
@@ -454,26 +461,29 @@ Dieselben Files in `docker-compose.test.yml` — kein separater Test-Datensatz.
 
 ## Backup
 
+Einheitliches Script `scripts/db-backup.sh` — wird von Backend- und Infrastructure-Makefile genutzt.
+Immer `--format=custom` (`.dump`), wiederherstellbar mit `pg_restore`.
+
 ```bash
-make backup              # vollstandiges DB-Backup
-make backup-schema       # nur Schema
-make backup-restore FILE=database/backups/2024-03-15_120000.sql
-make backup-remote       # Backup von Hetzner holen
+# Backend (Dev)
+make -C apps/backend backup              # vollstaendiges DB-Backup
+make -C apps/backend backup-list         # vorhandene Backups auflisten
+make -C apps/backend restore FILE=database/backups/decisionmap_20260412_120000.dump
+
+# Infrastructure (Prod)
+make -C infrastructure backup            # vollstaendiges DB-Backup auf dem Server
+make -C infrastructure backup-schema     # nur Schema sichern
+make -C infrastructure backup-list       # vorhandene Backups anzeigen
+make -C infrastructure backup-restore FILE=backups/decisionmap_20260412_120000.dump
+make -C infrastructure backup-pull       # Server → lokal (rsync backups/)
+make -C infrastructure backup-push       # lokal → Server (rsync backups/)
 ```
 
-```makefile
-backup:
-	@mkdir -p database/backups
-	@TIMESTAMP=$$(date +%Y-%m-%d_%H%M%S) && \
-	  docker compose exec postgres pg_dump -U $${POSTGRES_USER} -d $${POSTGRES_DB} \
-	    --no-owner --no-acl -f /tmp/backup_$${TIMESTAMP}.sql && \
-	  docker compose cp postgres:/tmp/backup_$${TIMESTAMP}.sql \
-	    database/backups/$${TIMESTAMP}.sql
+Das Script delegiert alle Operationen via `docker compose exec` und akzeptiert
+`--compose-file`, `--service`, `--backup-dir`, `--user`, `--db` (oder Env-Variablen):
 
-backup-remote:
-	ssh hetzner "cd /app && make backup"
-	scp hetzner:/app/database/backups/$$(ssh hetzner "ls -t /app/database/backups | head -1") \
-	  database/backups/
+```bash
+scripts/db-backup.sh --help   # vollstaendige Optionsliste
 ```
 
-Backups nie einchecken — `database/backups/` in `.gitignore`.
+Backups nie einchecken — `database/backups/` bzw. `backups/` in `.gitignore`.

@@ -184,7 +184,7 @@ export function useProblems() {
 - **Git:** Conventional Commits `<type>(<scope>): <msg>`, direkte Commits auf `master` erlaubt — Jenkins ist die einzige Schranke. Details on demand: `/git-conventions`
 - **Seed-Daten (SSoT):** `data/*.json` (snake_case, UUIDs) — nie direkt in Consumer-Repos editieren. `make fakedata-sync` verteilt an `apps/frontend/.../seeds.json` (camelCase) und `apps/ai-service/tests/fakedata/` (snake_case + embedding).
 - **Seeds:** `apps/backend/database/seeds/` alphabetisch, idempotent
-- **Backup:** `make -C apps/backend backup` / `make -C apps/backend backup-remote`, nie einchecken
+- **Backup:** `scripts/db-backup.sh` (einheitliches Script, `.dump`-Format). Dev: `make -C apps/backend backup|restore|backup-list`. Prod: `make -C infrastructure backup|backup-restore|backup-list|backup-pull|backup-push`. Nie einchecken. Details: [`docs/backend.md`](docs/backend.md)
 
 ---
 

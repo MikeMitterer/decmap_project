@@ -63,6 +63,7 @@ DecisionMap/                     ← Workspace-Root (Issues, Doku, CI-Koordinati
 │   ├── features.md              ← Feature-Spezifikationen
 │   └── cmdline.md               ← curl-Beispiele für alle API-Endpunkte
 ├── scripts/                     ← Workspace-Skripte
+│   ├── db-backup.sh             ← Einheitliches DB-Backup/Restore (Backend + Infrastructure)
 │   ├── gen-fakedata.py          ← Verteilt Seed-Daten an Consumer-Repos
 │   └── repo-status.sh           ← Git-Status aller Sub-Repos
 ├── .templates/                  ← Wiederverwendbare Templates (Jenkinsfile, Makefile, Docker)
