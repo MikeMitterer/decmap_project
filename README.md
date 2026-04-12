@@ -1,4 +1,6 @@
-<img src="assets/images/decisionmap-logo-gradient-light.svg" alt="DecisionMap" width="320" />
+<p align="center">
+  <img src="assets/images/decisionmap-logo-gradient-light.svg" alt="DecisionMap" width="320" />
+</p>
 
 # DecisionMap
 
