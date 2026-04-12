@@ -22,12 +22,6 @@ help: ## Alle verfügbaren Befehle anzeigen
 	    /^##@/ { printf "\n  ${YELLOW}%s${RESET}\n", substr($$0, 4) }; \
 	    /^[^#]/ { printf "    ${BLUE}%-22s ${GREEN}%s${RESET}\n", $$1, $$2 }'
 	@echo
-	@echo "  ${YELLOW}Sub-Repo Makefiles${RESET}"
-	@echo "    ${BLUE}make -C apps/backend help${RESET}          ${GREEN}Directus-Image, DB-Schema, Dev-Umgebung${RESET}"
-	@echo "    ${BLUE}make -C apps/frontend help${RESET}         ${GREEN}Nuxt.js App (dev, lint, test, build)${RESET}"
-	@echo "    ${BLUE}make -C apps/ai-service help${RESET}       ${GREEN}FastAPI (dev, test, build)${RESET}"
-	@echo "    ${BLUE}make -C infrastructure help${RESET}        ${GREEN}Server-Orchestrierung, Backup${RESET}"
-	@echo
 
 # ─── Info ────────────────────────────────────────────────────────────────────
 
@@ -70,6 +64,19 @@ fakedata-sync: ## Fake-Daten aus data/ generieren (frontend + ai-service)
 
 ##@ Versionierung
 
+.PHONY: tags
+tags: ## Letzte 10 Git-Tags anzeigen
+	@echo
+	@echo "  ${YELLOW}Letzte Tags — $(PROJECT_NAME)${RESET}"
+	@echo
+	@git tag --sort=-creatordate | head -10 | while read tag; do \
+		printf "    ${BLUE}%-30s${RESET} ${WHITE}%s${RESET}\n" "$$tag" "$$(git log -1 --format='%ci' $$tag | cut -d' ' -f1)"; \
+	done
+	@echo
+
+
+##@ Versionierung x-Repo
+
 .PHONY: version
 version: ## Aktuelle Versionen aller Sub-Repos anzeigen
 	@echo
@@ -92,18 +99,6 @@ version: ## Aktuelle Versionen aller Sub-Repos anzeigen
 	fi
 	@echo
 
-.PHONY: tags
-tags: ## Letzte 10 Git-Tags anzeigen
-	@echo
-	@echo "  ${YELLOW}Letzte Tags — $(PROJECT_NAME)${RESET}"
-	@echo
-	@git tag --sort=-creatordate | head -10 | while read tag; do \
-		printf "    ${BLUE}%-30s${RESET} ${WHITE}%s${RESET}\n" "$$tag" "$$(git log -1 --format='%ci' $$tag | cut -d' ' -f1)"; \
-	done
-	@echo
-
-##@ Cross-Repo
-
 .PHONY: git-push-all
 git-push-all: ## Git-Push in allen Sub-Repos (backend + frontend + ai-service + infrastructure)
 	@echo
@@ -123,6 +118,8 @@ git-push-all: ## Git-Push in allen Sub-Repos (backend + frontend + ai-service + 
 		fi; \
 	done
 	@echo
+
+##@ Docker x-Repo
 
 .PHONY: build-all
 build-all: ## Alle Docker-Images bauen (backend + frontend + ai-service)
