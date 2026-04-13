@@ -202,6 +202,7 @@ export function useProblems() {
 - **Docker Compose V2 auf Ubuntu:** `docker.io` (Ubuntu-Paket) liefert kein `docker compose` (V2). Offizielles Docker-Repository erforderlich — `docker-compose-plugin` installieren.
 - **Directus unter nginx `/cms`-Pfad:** Directus sendet `Location: /admin` — nginx muss mit `proxy_redirect` auf `/cms/admin` umschreiben. `PUBLIC_URL=https://decisionmap.ai/cms` in `.env` Pflicht.
 - **Directus SMTP-Healthcheck blockiert Start:** `EMAIL_SMTP_HOST` gesetzt aber nicht erreichbar → 60s Timeout → Container `unhealthy`. `EMAIL_SMTP_HOST=` (leer) setzen bis SMTP konfiguriert ist.
+- **nginx `proxy_pass` mit Variable + `rewrite` — drei Gotchas:** (1) `proxy_pass http://$var/` macht keine Prefix-Substitution — `/api/health` landet als `/api/health` beim Backend. (2) `rewrite ... break` stoppt auch `set` — `set $var` immer **vor** `rewrite` stellen, sonst bleibt Variable leer → "no host in upstream". (3) `proxy_pass http://$var` ohne URI nach `rewrite` nimmt die Original-URI — `$uri` explizit übergeben: `proxy_pass http://$upstream$uri$is_args$args`.
 
 ---
 
