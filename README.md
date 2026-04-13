@@ -123,7 +123,7 @@ make -C infrastructure help    # Server-Orchestrierung
 
 ### Voraussetzungen
 
-- Docker + Docker Compose
+- Docker + Docker Compose V2 (`docker compose`, kein `docker-compose`)
 - Node.js 20+
 - Python 3.11+
 - `DEV_LOCAL` Umgebungsvariable (zeigt auf lokales Dev-Verzeichnis mit BashLib)

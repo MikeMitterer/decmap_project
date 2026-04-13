@@ -237,6 +237,31 @@ Jedes Sub-Repo hat eine eigene Pipeline. Ein Frontend-Deploy triggert keinen Bac
 6. docker save | ssh → docker load → docker compose up
 ```
 
+### Server-Voraussetzungen (Hetzner)
+
+`docker compose` (V2) erfordert das offizielle Docker-Repository — **nicht** `docker.io` (Ubuntu-Paket):
+
+```bash
+# Altes Paket entfernen
+sudo apt-get remove docker.io docker-compose
+
+# Offizielles Docker-Repo einrichten
+sudo apt-get install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+  https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io \
+  docker-buildx-plugin docker-compose-plugin
+```
+
+`docker.io` liefert keinen `docker compose`-Subcommand (V2) — nur das veraltete standalone `docker-compose` (V1). Das Makefile und alle Pipeline-Schritte verwenden V2-Syntax (`docker compose up`).
+
 ### Deploy-Strategie
 
 `nuxt build` erzeugt einen Node.js-Server (nicht statische Dateien). Das Docker-Image
@@ -284,6 +309,37 @@ USE_FAKE_DATA=true
 # Phase 2 — Live (Pipeline unveraendert)
 USE_FAKE_DATA=false
 ```
+
+### nginx — TLS-Terminierung
+
+nginx laeuft als Docker-Container (`nginx:bookworm`, Debian 12). TLS wird im Container terminiert, nicht auf dem Host.
+
+**Image:** `nginx:bookworm` statt Alpine — Debian-Basis, User `nginx` (Alpine verwendet `www-data`).
+
+**Let's Encrypt Volumes:** Beide Pfade muessen gemountet werden, weil `live/fullchain.pem` ein Symlink auf `archive/` ist:
+
+```yaml
+volumes:
+  - /etc/letsencrypt/live/decisionmap.ai:/etc/letsencrypt/live/decisionmap.ai:ro
+  - /etc/letsencrypt/archive/decisionmap.ai:/etc/letsencrypt/archive/decisionmap.ai:ro
+```
+
+**nginx.conf:**
+- Port 80: reiner `301`-Redirect zu HTTPS
+- Port 443: TLS (`TLSv1.2/1.3`), alle Location-Bloecke (Frontend, CMS, AI-Service, WebSocket)
+
+**`host-install`:** Installiert nur noch systemd-Service und cert-watcher — kein nginx auf dem Host, keine `nginx -t`/`systemctl reload nginx` Schritte.
+
+**Cert-Rotation:** `unpackCert.sh` (`host/usr/local/bin/`) entpackt neue Zertifikate und startet den nginx-Container neu — aufgerufen durch den systemd cert-watcher (`cert.decisionmap.ai.path`).
+
+**Server-Voraussetzung — Docker Compose V2:** Alle Makefiles verwenden `docker compose` (V2, kein Bindestrich). Auf Ubuntu 24.04 mit offiziellem Docker-Repository ist das Compose-Plugin ein separates Paket:
+
+```bash
+sudo apt-get install docker-compose-plugin
+docker compose version   # → Docker Compose version v2.x.x
+```
+
+Bei `docker.io`-Installation (Ubuntu-Paket statt Docker-Repo) muss zuerst das offizielle Docker-Repository eingerichtet werden.
 
 ---
 
