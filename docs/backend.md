@@ -426,6 +426,21 @@ location /cms/ {
 
 `PUBLIC_URL` in `.env` muss auf `https://decisionmap.ai/cms` gesetzt sein, damit Directus auch interne API-URLs (fuer das Admin-SPA) korrekt generiert. Ohne `proxy_redirect` landet der Browser nach dem Login auf `/admin` (404).
 
+**nginx — `proxy_pass` mit Variable + `rewrite` — drei Gotchas:**
+
+1. **`proxy_pass http://$var/` macht keine Prefix-Substitution.** Ohne Variable würde `location /api/` + `proxy_pass http://upstream/` das `/api/`-Prefix automatisch ersetzen. Mit Variable passiert das nicht — `/api/health` landet als `/api/health` beim Backend. Fix: `rewrite` + `$uri` explizit übergeben.
+
+2. **`rewrite ... break` stoppt auch `set`.** `break` unterbricht alle Direktiven des nginx Rewrite-Moduls — dazu gehört auch `set`. Eine `set`-Direktive nach `rewrite ... break` wird nie ausgeführt → Variable bleibt leer → nginx-Error "no host in upstream". **`set` immer vor `rewrite` stellen.**
+
+3. **`proxy_pass http://$var` (ohne URI) nach `rewrite` nimmt die Original-URI.** `$uri` enthält nach einem `rewrite` die neue URI — explizit übergeben:
+```nginx
+location /api/ {
+    set $upstream_ai ai-service:8000;          # set VOR rewrite
+    rewrite ^/api/(.*)$ /$1 break;
+    proxy_pass http://$upstream_ai$uri$is_args$args;
+}
+```
+
 **`host-install`:** Installiert nur noch systemd-Service und cert-watcher — kein nginx auf dem Host, keine `nginx -t`/`systemctl reload nginx` Schritte.
 
 **Cert-Rotation:** `unpackCert.sh` (`host/usr/local/bin/`) entpackt neue Zertifikate und startet den nginx-Container neu — aufgerufen durch den systemd cert-watcher (`cert.decisionmap.ai.path`).
