@@ -28,11 +28,12 @@ weggelassen werden. Mit Secret muss jeder Hook-Aufruf den Header mitschicken:
 ### Health
 
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:8000/health          # direkt (Dev)
+curl https://decisionmap.ai/api/health    # via nginx (Prod)
 ```
 
 ```json
-{"status": "ok", "embedding_provider": "openai", "llm_provider": "openai"}
+{"status": "ok", "version": "0.1.0", "embedding_provider": "openai", "llm_provider": "openai"}
 ```
 
 ---

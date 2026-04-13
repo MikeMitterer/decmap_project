@@ -292,7 +292,7 @@ Aktive Ubersetzung beim Einreichen — nicht passiv via DeepL-Link:
 7. Submit erst moeglich wenn `_en`-Felder befuellt und valide sind
 
 Im Fake-Modus: 700ms simulierter Delay.
-Im Real-Modus: KI-Service (TranslationService via OpenAI).
+Im Real-Modus: KI-Service (TranslationService via konfiguriertem LLM-Provider — OpenAI `gpt-4o-mini` oder Anthropic `claude-haiku-4-5`, je nach `llm_provider` in `.env`).
 
 `_en`-Felder sind nur sichtbar wenn Nicht-Englisch erkannt wird — kein visueller Overhead fuer englischsprachige User.
 
@@ -449,6 +449,7 @@ Details zur Directus-Konfiguration (`USERS_REGISTER_ALLOW_PUBLIC`, `USER_REGISTE
 - **Suche:** Filtert live nach Titel, Titel (EN), Beschreibung und Beschreibung (EN)
 - **Sortierung:** Toggle "Newest first" / "Oldest first" (`createdAt`)
 - Status-Workflow: `pending → needs_review → approved / rejected`
+- **`AUTO_APPROVE=true`:** Neue Problems überspringen die Moderations-Queue und wechseln direkt auf `approved`. Feature-Flag wird zur Build-Zeit ins Nuxt-Bundle eingebettet — Änderung erfordert Rebuild + Redeploy.
 
 Filter- und Sortierlogik ist in `useModerationFilter.ts` gekapselt (nicht inline in der Komponente) — 13 Unit-Tests in `useModerationFilter.spec.ts`.
 

@@ -294,10 +294,12 @@ make version
 
 Beide Data-Layer (Fake + Real) sind vollständig implementiert.
 
-- **Frontend:** 172 Tests in 14 Dateien grün — Composables, Contract-Tests (Fake & Real)
+- **Frontend:** 172 Tests in 15 Dateien grün — Composables, Contract-Tests (Fake & Real)
 - **AI-Service:** 31 Unit-Tests grün
 
-Einmaliger Setup-Schritt noch ausstehend: Directus-Schema-Import + API-Token + Flows konfigurieren
+**Hetzner-Infrastruktur (in Betrieb):** nginx + TLS + Docker Compose laufen. Directus unter `/cms`-Pfad (`proxy_redirect` + `PUBLIC_URL`). SMTP via Mailjet auf Port 465 (Port 587 auf Hetzner blockiert) — Sender-Domain-Verifikation in Mailjet noch ausstehend. AI-Service-Image (`decisionmap-ai-service`) auf ghcr.io, deploy via `make -C infrastructure deploy-service SVC=ai-service`.
+
+Noch ausstehend: Directus-Schema-Import + API-Token + Flows konfigurieren
 (HTTP-Webhooks auf `http://ai-service:8000/hooks/*` für `problem-submitted`, `problem-approved` etc.)
 → Details: [`docs/backend.md`](docs/backend.md)
 

@@ -49,7 +49,7 @@ hints: ## Nützliche Links und Hinweise anzeigen
 	@echo
 	@echo "  ${YELLOW}Docker Images (ghcr.io/mangolila)${RESET}"
 	@echo
-	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Directus"   "https://github.com/users/mangolila/packages/container/package/decisionmap-directus"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Directus"   "https://github.com/users/mangolila/packages/container/package/decisionmap-backend"
 	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Frontend"   "https://github.com/users/mangolila/packages/container/package/decisionmap-frontend"
 	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "AI-Service" "https://github.com/users/mangolila/packages/container/package/decisionmap-ai-service"
 	@echo

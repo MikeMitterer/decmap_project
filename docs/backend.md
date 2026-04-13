@@ -24,6 +24,7 @@ USE_FAKE_DATA=true             # true = in-memory Fake-Daten, false = echter Ser
 WS_URL=ws://localhost:8000     # WebSocket-URL des FastAPI-Service
 SHOW_VOTING=false              # Feature Flag: Voting-Visualisierung aktivieren
 REQUIRE_AUTH=false             # Feature Flag: Login fuer Einreichungen erzwingen
+AUTO_APPROVE=false             # Feature Flag: Neue Problems automatisch freischalten (ohne Moderations-Review)
 
 # Directus
 DIRECTUS_URL=                  # Directus-Instanz URL
@@ -58,7 +59,16 @@ CORS_ORIGINS=["http://localhost:3000"]  # JSON-Array erlaubter Browser-Origins
 | Flag | Standard | Beschreibung |
 |---|---|---|
 | `SHOW_VOTING` | `false` | Vote-Scores in der Graph-Visualisierung anzeigen |
-| `REQUIRE_AUTH` | `false` | Login fur Einreichungen erzwingen |
+| `REQUIRE_AUTH` | `false` | Login fuer Einreichungen erzwingen |
+| `AUTO_APPROVE` | `false` | Neue Problems automatisch freischalten (ohne Moderations-Review) |
+
+**Hinweis:** Frontend-Feature-Flags (`SHOW_VOTING`, `REQUIRE_AUTH`, `AUTO_APPROVE`) werden zur Build-Zeit in das Nuxt-Bundle eingebettet (`runtimeConfig.public.*`). Eine Änderung in `.env` auf dem Server greift erst nach einem Rebuild + Redeploy des Frontend-Images:
+```bash
+# apps/frontend
+make build
+# infrastructure
+make deploy-service SVC=frontend
+```
 
 ---
 
@@ -111,6 +121,55 @@ Frontend-seitig: `/verify-email.vue` ruft `GET /users/register/verify-email?toke
 Directus antwortet auf den Verify-Endpunkt mit **302** (nicht 200) — fetch muss daher mit `redirect: 'manual'` aufgerufen werden, sonst folgt es dem Redirect, bekommt HTML statt JSON und die Fehlerbehandlung schlaegt fehl. Status-Check: `response.ok || response.type === 'opaqueredirect'` (2xx + Redirect = Erfolg).
 
 **Security:** `USER_REGISTER_URL_ALLOW_LIST` im Directus-Container setzen (kommagetrennte erlaubte URL-Prefixes, z.B. `http://localhost:3000,https://decisionmap.example.com`). Ohne diesen Guard akzeptiert Directus jede beliebige `verification_url` im Register-Request — Phishing-Vektor. Directus prueft nur, ob die URL mit einem der erlaubten Prefixes beginnt.
+
+**SMTP-Konfiguration testen (Directus 11):** Directus 11 hat keinen Mail-Test-Button mehr im UI — Konfiguration nur per Env-Variablen, Testen per API:
+```bash
+curl -X POST https://cms.decisionmap.ai/utils/mail/test \
+  -H "Authorization: Bearer <DIRECTUS_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"to": "test@example.com"}'
+```
+Antwort: `{}` bei Erfolg, Fehlerobjekt mit SMTP-Details bei Fehler.
+
+Alternativ als E2E-Test (kein Token nötig) — triggert die echte Reset-Mail-Pipeline:
+```bash
+curl -X POST https://cms.decisionmap.ai/auth/password/request \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@example.com"}'
+```
+Antwort ist immer leer (`204`) — Mail kommt an wenn SMTP korrekt konfiguriert ist.
+
+**Gotcha — Hetzner blockiert SMTP-Port 587:**
+Hetzner VPS blockiert ausgehende SMTP-Verbindungen auf Port 587 (STARTTLS) standardmäßig. Test: `nc -zv in-v3.mailjet.com 587` — Timeout bedeutet blockiert. Lösung: Port 465 (TLS) verwenden:
+```
+EMAIL_SMTP_PORT=465
+EMAIL_SMTP_SECURE=true
+```
+Port 465 ist auf Hetzner in der Regel offen. Falls nicht: Hetzner Cloud Firewall im Panel prüfen (Firewalls → Outbound Rules, Port 465/587 freischalten) — die externe Cloud Firewall überschreibt `ufw`. Alternativ: Hetzner-Support (Port-Freischaltung beantragen) oder Mailjet HTTP-API statt SMTP verwenden.
+
+**Gotcha — Mailjet "Relay access denied":**
+SMTP-Verbindung klappt (Port 465 offen), aber Mailjet lehnt den Versand ab: `535 Relay access denied`. Ursachen:
+1. **Falsche Credentials:** `EMAIL_SMTP_USER` = Mailjet API Key, `EMAIL_SMTP_PASSWORD` = Mailjet Secret Key (nicht Passwort des Mailjet-Accounts).
+2. **Unbekannte Sender-Domain:** `EMAIL_FROM=noreply@decisionmap.ai` — die Domain muss in Mailjet als verifizierte Sender-Domain eingetragen sein (Mailjet Dashboard → Sender domains & addresses).
+3. **Fehlender SPF-Record:** Mailjet prüft ob der sendende Server in der SPF-Policy der Domain autorisiert ist. DNS TXT-Record für `decisionmap.ai` muss `include:spf.mailjet.com` enthalten. Es darf nur **einen** SPF-Record pro Domain geben — bestehende Einträge ergänzen, nicht ersetzen. Beispiel (inkl. typischer `+a +mx` Einträge): `v=spf1 +a +mx include:spf.mailjet.com ~all`. Vorhandenes `?all` (neutral) durch `~all` (SoftFail) ersetzen — bessere Zustellbarkeit. Änderungen im DNS können bis zu 30 Minuten propagieren.
+```
+EMAIL_SMTP_USER=<Mailjet API Key>
+EMAIL_SMTP_PASSWORD=<Mailjet Secret Key>
+EMAIL_FROM=noreply@decisionmap.ai
+```
+4. **Mailjet Trial-Account:** Im Trial-Modus kann Mailjet nur an verifizierte Test-Empfänger senden. Mailjet Dashboard → **Account → My Plan** prüfen. Falls "Trial" steht: Account aktivieren/upgraden oder Test-Empfänger in Mailjet whitelisten (Senders & Domains → Test Recipients).
+
+**Gotcha — Directus SMTP-Healthcheck blockiert Container-Start:**
+Directus prüft im `/server/health`-Endpunkt die SMTP-Verbindung. Ist `EMAIL_SMTP_HOST` gesetzt aber nicht erreichbar, wartet Directus bis zu 60 Sekunden auf Timeout — Docker markiert den Container inzwischen als `unhealthy`. Lösung: `EMAIL_SMTP_HOST=` (leer) setzen, solange SMTP nicht benötigt wird, dann Container neu starten:
+```bash
+# In /srv/decisionmap/.env
+EMAIL_SMTP_HOST=
+```
+```bash
+docker compose up -d --no-deps --force-recreate backend
+```
+
+Tipp: `GET /server/ping` antwortet sofort mit `{"data":"pong"}` — unabhängig von SMTP. Eignet sich für einfache Verfügbarkeitsprüfungen ohne den SMTP-Timeout-Pfad.
 
 **Gotcha — Directus Permissions nie per direktem SQL setzen:**
 `INSERT INTO directus_permissions ...` umgeht den Directus-In-Memory-Cache. Permissions greifen dann erst nach einem Neustart — ohne sichtbare Fehlermeldung erscheint trotzdem 403. Permissions immer ueber die Directus REST API setzen (`PATCH /policies/{id}` oder `POST /permissions`). `make db-permissions` und `make seed-users` verwenden ausschliesslich REST-Aufrufe.
@@ -233,9 +292,22 @@ Jedes Sub-Repo hat eine eigene Pipeline. Ein Frontend-Deploy triggert keinen Bac
 2. npm ci
 3. lint (ESLint + Prettier)
 4. test (Vitest)
-5. docker build (Multi-Stage: build → runner)
-6. docker save | ssh → docker load → docker compose up
+5. docker build-amd64 (Multi-Stage: build → runner) + push nach ghcr.io
+6. make -C infrastructure deploy-service SVC=frontend
 ```
+
+### AI-Service-Pipeline
+
+```
+1. checkout
+2. pip install (inkl. hdbscan, scikit-learn, numpy)
+3. lint (ruff)
+4. test (pytest)
+5. docker build-amd64 (Multi-Stage: build → runner) + push nach ghcr.io
+6. make -C infrastructure deploy-service SVC=ai-service
+```
+
+**Gotcha — Lange Build-Zeit durch native Kompilierung:** `hdbscan` hängt von `scikit-learn` und `numpy` ab — beide kompilieren C/Fortran-Extensions beim `pip install`. Der erste Build in CI ohne Layer-Cache dauert deutlich länger als reine Python-Pakete. Ist einmalig solange der Docker Layer-Cache warm bleibt; bei Cache-Miss (z.B. nach `requirements.txt`-Änderung) wiederholt sich die Kompilierung. Base-Image mit vorinstallierten Binär-Wheels (`python:3.11-slim` + `--only-binary=:all:`) kann die Zeit reduzieren.
 
 ### Server-Voraussetzungen (Hetzner)
 
@@ -265,8 +337,9 @@ sudo apt-get install -y docker-ce docker-ce-cli containerd.io \
 ### Deploy-Strategie
 
 `nuxt build` erzeugt einen Node.js-Server (nicht statische Dateien). Das Docker-Image
-wird lokal auf dem Jenkins-Agent gebaut und per `docker save | ssh | docker load`
-auf den Hetzner-Server uebertragen. Restart via `docker compose up --no-deps --force-recreate frontend`.
+wird lokal auf dem Jenkins-Agent gebaut, nach ghcr.io gepusht und via
+`make -C infrastructure deploy-service SVC=frontend` deployed
+(SSH + `docker compose pull frontend` + `docker compose up --no-deps --force-recreate frontend`).
 
 **Warum nicht `nuxt generate`?** Die SPA-Routes (`ssr: false`) und dynamische Daten
 funktionieren nicht sauber mit statischer Generierung.
@@ -277,14 +350,27 @@ funktionieren nicht sauber mit statischer Generierung.
 - Stage `runner`: nur Node.js + `.output/` — kein `node_modules`, kein Source-Code im Image
 
 **Naming-Konvention:** Image- und Container-Namen folgen dem Schema `decisionmap-<service>`
-(z.B. `decisionmap-frontend`, `decisionmap-ai-service`, `decisionmap-postgres`).
+(z.B. `decisionmap-backend`, `decisionmap-frontend`, `decisionmap-ai-service`, `decisionmap-postgres`).
 Definiert in `infrastructure/docker-compose.yml`.
 
 **Jenkinsfile:** Lint + Test laufen auf allen Branches. Build + Deploy nur auf `main`.
 Lokales Build-Image wird nach dem Deploy auf dem Jenkins-Agent geloescht.
-[`.templates/Jenkinsfile`](../.templates/Jenkinsfile) ist ein generisches Ausgangs-Template — muss fuer die oben beschriebene Deploy-Strategie (docker save|ssh|load) angepasst werden. Konkret: `sh './docker/app/build --build'` → `sh './docker/build.sh --build'` (Pfad auf `docker/build.sh` des Sub-Repos anpassen).
+[`.templates/Jenkinsfile`](../.templates/Jenkinsfile) ist ein generisches Ausgangs-Template — muss fuer die oben beschriebene Deploy-Strategie (ghcr.io Push + `make -C infrastructure deploy-service`) angepasst werden. Konkret: `sh './docker/app/build --build'` → `sh './docker/build.sh --build'` (Pfad auf `docker/build.sh` des Sub-Repos anpassen).
 
-**Build-Script:** [`.templates/docker/build.sh`](../.templates/docker/build.sh) ist das generische Bash-Template fuer Sub-Repo-Build-Skripte. (Das ebenfalls vorhandene `.templates/docker/Dockerfile` ist ein generisches Debian/certbot-Base-Image fuer Tooling — kein Nuxt-Template.) Enthaelt Platform-Erkennung, BashLib-Includes, `--build`/`--push`/`--images`-Flags und TAG-Erzeugung via `gitDockerTag` aus `version.lib.sh` (BashLib) — Format: `<VERSION>-<YYMMDD>.<HHMM>.<HASH>[.ahead<N>][.d]`, z.B. `0.1.0-260412.0824.def34.ahead3`; Git-Tag-Format: `v<VERSION>+<YYMMDD>.<HHMM>.<HASH>`. Benoetigt `DEV_DOCKER`-Env-Variable auf der Build-Maschine (zeigt auf Docker-Hilfsskripte). Pro Sub-Repo nach `docker/build.sh` kopieren und `NAMESPACE`/`NAME`/Deploy-Logik anpassen. **Wichtig:** Der `--push`-Zweig im Template ruft `pushImage2DockerHub` auf — dieser Block muss vollstaendig durch `docker save | ssh | docker load` ersetzt werden (Docker Hub wird nicht verwendet). Das Dockerfile liegt in `docker/`, der Build-Context ist das Parent-Verzeichnis des Sub-Repos (`docker build -f Dockerfile ..`). **Achtung:** Da der Build-Context das gesamte Sub-Repo-Verzeichnis umfasst, muss `docker/` in `.dockerignore` ausgeschlossen werden — sonst landet das Build-Verzeichnis selbst im Image.
+**Build-Script:** [`.templates/docker/build.sh`](../.templates/docker/build.sh) ist das generische Bash-Template fuer Sub-Repo-Build-Skripte. (Das ebenfalls vorhandene `.templates/docker/Dockerfile` ist ein generisches Debian/certbot-Base-Image fuer Tooling — kein Nuxt-Template.) Enthaelt Platform-Erkennung, BashLib-Includes, `--build`/`--push`/`--images`-Flags und TAG-Erzeugung via `gitDockerTag` aus `version.lib.sh` (BashLib) — Format: `<VERSION>-<YYMMDD>.<HHMM>.<HASH>[.ahead<N>][.d]`, z.B. `0.1.0-260412.0824.def34.ahead3`; Git-Tag-Format: `v<VERSION>+<YYMMDD>.<HHMM>.<HASH>`. Benoetigt `DEV_DOCKER`-Env-Variable auf der Build-Maschine (zeigt auf Docker-Hilfsskripte). Pro Sub-Repo nach `docker/build.sh` kopieren und `NAMESPACE`/`NAME`/Deploy-Logik anpassen. **Wichtig:** Der `--push`-Zweig im Template ruft `pushImage2DockerHub` auf — dieser Block muss vollstaendig durch `docker push ghcr.io/...` ersetzt werden (Docker Hub wird nicht verwendet; Images gehen nach ghcr.io). Das Dockerfile liegt in `docker/`, der Build-Context ist das Parent-Verzeichnis des Sub-Repos (`docker build -f Dockerfile ..`). **Achtung:** Da der Build-Context das gesamte Sub-Repo-Verzeichnis umfasst, muss `docker/` in `.dockerignore` ausgeschlossen werden — sonst landet das Build-Verzeichnis selbst im Image.
+
+**Gotcha — `--builder default` und fehlendes `--load` in `docker build`:**
+`docker buildx build --builder default` schlägt fehl wenn auf Mac mit Docker Desktop der aktive Context `desktop-linux` ist — `default` ist dann kein gültiger Builder-Name (Fehlermeldung: `use docker --context=default buildx ...`). `--builder default` weglassen — buildx verwendet automatisch den aktiven Context:
+- **Mac / Docker Desktop:** aktiver Context = `desktop-linux` (docker driver, direkt am lokalen Daemon)
+- **Linux / CI / Jenkins:** aktiver Context = `default` (docker driver, existiert dort immer)
+
+Der `multiarch`-Builder (docker-container driver) wird für single-arch Builds nicht benötigt. Ausserdem: ohne `--load` landet das gebaute Image nicht im lokalen Docker-Daemon (buildx cached es nur intern). `--load` ist Pflicht, wenn das Image lokal weiterverwendet oder gepusht werden soll.
+```bash
+# Falsch:
+docker buildx build --builder default --platform linux/amd64 -t myimage .
+# Richtig:
+docker buildx build --platform linux/amd64 --load -t myimage .
+```
 
 **`.dockerignore` fuer Multi-Stage-Builds:** `.output/` muss in `.dockerignore` stehen — nicht weil `COPY --from=builder` den Host liest (das tut es nicht, es greift auf Stage 1 zu), sondern weil `COPY . .` in Stage 1 ein lokales `.output/` (vom Host) in den Build-Context uebertraegt. Das kann ein veraltetes lokales Artefakt in Stage 1 einschleppen, bevor `npm run build` laeuft. `node_modules/` und `.output/` gehoeren daher beide in `.dockerignore`.
 
@@ -327,6 +413,18 @@ volumes:
 **nginx.conf:**
 - Port 80: reiner `301`-Redirect zu HTTPS
 - Port 443: TLS (`TLSv1.2/1.3`), alle Location-Bloecke (Frontend, CMS, AI-Service, WebSocket)
+
+**Directus unter `/cms`-Pfad — `proxy_redirect`-Gotcha:**
+Directus sendet nach dem Login einen `Location: /admin`-Header (absoluter Pfad ohne Prefix). nginx muss diesen vor dem Weiterleiten umschreiben:
+
+```nginx
+location /cms/ {
+    proxy_pass http://directus:8055/;
+    proxy_redirect http://directus:8055/admin/ /cms/admin/;
+}
+```
+
+`PUBLIC_URL` in `.env` muss auf `https://decisionmap.ai/cms` gesetzt sein, damit Directus auch interne API-URLs (fuer das Admin-SPA) korrekt generiert. Ohne `proxy_redirect` landet der Browser nach dem Login auf `/admin` (404).
 
 **`host-install`:** Installiert nur noch systemd-Service und cert-watcher — kein nginx auf dem Host, keine `nginx -t`/`systemctl reload nginx` Schritte.
 
@@ -543,3 +641,5 @@ scripts/db-backup.sh --help   # vollstaendige Optionsliste
 ```
 
 Backups nie einchecken — `database/backups/` bzw. `backups/` in `.gitignore`.
+
+**Restore mit aktiven Services:** Directus und AI-Service halten offene DB-Connections. `pg_restore` kann dann keine DROP/CREATE-Operationen auf verwendeten Tabellen ausführen → partieller Restore möglich. Vor einem Restore die betroffenen Services stoppen (`docker compose stop directus ai-service`), danach neu starten.

@@ -163,12 +163,12 @@ export function useProblems() {
 - **Echtzeit-Updates:** WebSocket Broadcast (problem/cluster/solution/vote Events)
 - **i18n:** Nuxt i18n, alle Texte ueber `t()`, MVP nur Englisch
 - **Markdown:** markdown-it + DOMPurify (nur Links + Fettschrift)
-- **Uebersetzung:** Passiv via DeepL-Link
+- **Uebersetzung:** Aktiv beim Einreichen — `looksLikeEnglish`-Heuristik → bei Nicht-Englisch „Translate to English"-Button → KI-Service `TranslationService` via konfiguriertem LLM-Provider (`openai_llm_model`/`anthropic_model` in `.env`). Kein DeepL, kein lokales Modell.
 - **Tagging:** Tags (inhaltlich) + Regionen (geografisch) — getrennte Konzepte
 - **Editieren:** Nur eigene Eintraege, setzt Status zurueck, Edit-History fuer Moderatoren
 - **KI-Loesungen:** Automatisch bei Approval, visuell getrennt, separates Ranking
 - **Auth:** E-Mail-Verifizierung nach Registrierung (`registrationSent`-Flag, kein Auto-Login). Passwort-Staerke-Checklist live im Register-Tab (✓/○ pro Regel, Submit gesperrt bis alle gruen). `/verify-email.vue` → Redirect auf `/login?verified=true`. Dev: Mailpit als SMTP-Sink.
-- **Status-Page:** `/status` zeigt Live-Status von Backend (Directus) und AI-Service (FastAPI). Browser-seitige Health-Checks via `fetch` direkt gegen die Services (kein Server-Route-Proxy — Browser laeuft auf dem Host wo Docker-Port-Mappings greifen). Polling alle 30s, `useServiceStatus` Composable mit Shared State (Modul-Level Refs). StatusBar zeigt Farbindikator: gruen (alle ok), orange (nur Backend), rot (Backend down). Directus `/server/health` liefert ohne Auth keine Version.
+- **Status-Page:** `/status` zeigt Live-Status von Backend (Directus) und AI-Service (FastAPI). Browser-seitige Health-Checks via `fetch` direkt gegen die Services (kein Server-Route-Proxy — Browser laeuft auf dem Host wo Docker-Port-Mappings greifen). Polling alle 30s, `useServiceStatus` Composable mit Shared State (Modul-Level Refs). StatusBar zeigt Farbindikator: gruen (alle ok), orange (nur Backend), rot (Backend down). Directus `/server/health` liefert ohne Auth keine Version. AI-Service: Direkt `GET /health`, via nginx `GET /api/health` (wsUrl → aiUrl Konvertierung in `useServiceStatus`).
 
 ---
 
@@ -177,7 +177,7 @@ export function useProblems() {
 → **Ausfuehrliche Spezifikation:** [`docs/backend.md`](docs/backend.md)
 
 - **Env-Variablen:** Nie hardcoden, alle in `.env.example`
-- **Feature Flags:** `SHOW_VOTING`, `REQUIRE_AUTH`
+- **Feature Flags:** `SHOW_VOTING`, `REQUIRE_AUTH`, `AUTO_APPROVE`
 - **Linting:** ESLint + Prettier (TS) / ruff (Python) — automatisch, nicht verhandelbar
 - **Makefile:** Jedes Sub-Repo hat ein eigenes Makefile. `make help` (Root: Workspace-Delegation), `make -C apps/backend help` (Docker, DB, Backup). Details: [`docs/backend.md`](docs/backend.md)
 - **Versionierung:** SemVer + Datum (`bumpVer`): `v<MAJOR>.<MINOR>.<PATCH>+<YYMMDD>.<HHMM>.<HASH>`, Start bei `0.1.0`. Docker-Snapshots: `gitDockerTag` → `<MAJOR>.<MINOR>.<PATCH>-<YYMMDD>.<HHMM>.<HASH>[.ahead<N>]` (z.B. `0.1.0-260412.0824.def34.ahead3`) — automatisch via Jenkins. Details: [`docs/backend.md`](docs/backend.md)
@@ -200,6 +200,8 @@ export function useProblems() {
 - **Health-Checks nur Browser-seitig:** Nitro Server-Routes erreichen Docker-Ports nicht. `fetch()` direkt im Browser, `AbortSignal.timeout(10_000)`.
 - **Let's Encrypt Symlinks (nginx-Container):** `live/fullchain.pem` ist ein Symlink auf `archive/` — beide Verzeichnisse in `docker-compose.yml` mounten, sonst schlägt TLS fehl.
 - **Docker Compose V2 auf Ubuntu:** `docker.io` (Ubuntu-Paket) liefert kein `docker compose` (V2). Offizielles Docker-Repository erforderlich — `docker-compose-plugin` installieren.
+- **Directus unter nginx `/cms`-Pfad:** Directus sendet `Location: /admin` — nginx muss mit `proxy_redirect` auf `/cms/admin` umschreiben. `PUBLIC_URL=https://decisionmap.ai/cms` in `.env` Pflicht.
+- **Directus SMTP-Healthcheck blockiert Start:** `EMAIL_SMTP_HOST` gesetzt aber nicht erreichbar → 60s Timeout → Container `unhealthy`. `EMAIL_SMTP_HOST=` (leer) setzen bis SMTP konfiguriert ist.
 
 ---
 
