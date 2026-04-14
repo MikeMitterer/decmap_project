@@ -163,6 +163,48 @@ print_repos_table() {
     echo ""
 }
 
+# Gibt offene GitHub Issues mit Label 'blocker' oder 'high-priority' aus.
+#
+# Benötigt: gh CLI, authentifiziert
+print_issues() {
+    if ! command -v gh &>/dev/null; then
+        return
+    fi
+
+    local issues
+    issues=$(gh issue list \
+        --repo MikeMitterer/decmap_project \
+        --state open --limit 50 \
+        --json number,title,labels \
+        --jq '[.[] | select(.labels | map(.name) | any(. == "blocker" or . == "high-priority"))] | .[]' \
+        2>/dev/null) || return
+
+    if [[ -z "${issues}" ]]; then
+        return
+    fi
+
+    echo -e "  ${YELLOW}Offene Issues (blocker / high-priority)${NC}"
+    echo ""
+
+    while IFS= read -r issue; do
+        local number title labels_str label_color
+        number=$(echo "${issue}" | jq -r '.number')
+        title=$(echo "${issue}"  | jq -r '.title')
+        labels_str=$(echo "${issue}" | jq -r '[.labels[].name] | join(", ")')
+
+        if echo "${labels_str}" | grep -q "blocker"; then
+            label_color="${RED}"
+        else
+            label_color="${YELLOW}"
+        fi
+
+        printf "    ${BLUE}#%-4s${NC}  %b%-12s${NC}  %s\n" \
+            "${number}" "${label_color}" "[${labels_str}]" "${title}"
+    done < <(echo "${issues}" | jq -c '.')
+
+    echo ""
+}
+
 # ─── Entry Point ──────────────────────────────────────────────────────────────
 
 # Kein Argument → Help anzeigen
@@ -172,7 +214,7 @@ if [[ $# -eq 0 ]]; then
 fi
 
 case "$1" in
-    -s|--show) print_repos_table ;;
+    -s|--show) print_repos_table; print_issues ;;
     -h|--help) usage; exit 0 ;;
     *)
         echo -e "${RED}Unbekannte Option: $1${NC}" >&2
