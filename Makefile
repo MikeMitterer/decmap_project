@@ -134,24 +134,8 @@ version: ## Aktuelle Versionen aller Sub-Repos anzeigen
 	@echo
 
 .PHONY: git-push-all
-git-push-all: ## Git-Push in allen Sub-Repos (backend + frontend + ai-service + infrastructure)
-	@echo
-	@echo "  ${YELLOW}Git Push — alle Sub-Repos${RESET}"
-	@echo
-	@for repo in apps/backend apps/frontend apps/ai-service infrastructure; do \
-		if [ -d "$$repo/.git" ]; then \
-			printf "    ${BLUE}%-22s${RESET} " "$$repo"; \
-			if output=$$(git -C "$$repo" push 2>&1); then \
-				echo "${GREEN}✓ ok${RESET}"; \
-			else \
-				echo "${RED}✗ Fehler${RESET}"; \
-				echo "$$output" | sed 's/^/        /'; \
-			fi; \
-		else \
-			printf "    ${BLUE}%-22s${RESET} ${WHITE}(nicht ausgecheckt)${RESET}\n" "$$repo"; \
-		fi; \
-	done
-	@echo
+git-push-all: ## Git-Push in allen Repos (Root + Sub-Repos)
+	@bash scripts/git-push-all.sh
 
 ##@ Docker x-Repo
 
