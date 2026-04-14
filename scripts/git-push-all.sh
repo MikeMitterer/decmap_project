@@ -1,5 +1,18 @@
 #!/usr/bin/env bash
+#------------------------------------------------------------------------------
 # git-push-all.sh — Git-Push in allen Workspace-Repos
+#
+# Pusht Root-Repo (DecisionMap) und alle Sub-Repos in definierter Reihenfolge.
+# Gibt pro Repo einen farbigen Status aus (✓ ok / ✗ Fehler).
+# Nicht ausgecheckte Repos werden übersprungen.
+#
+# Verwendung:
+#   ./scripts/git-push-all.sh [--push] [--help]
+#   make git-push-all
+#
+# Optionen:
+#   --push   Push in allen Repos ausführen
+#------------------------------------------------------------------------------
 
 set -euo pipefail
 
@@ -24,11 +37,11 @@ usage() {
     echo
     echo "Usage: ${APPNAME} [ options ]"
     echo
-    usageLine "-s | --show" "Git-Push in allen Workspace-Repos ausführen"
+    usageLine "-p | --push" "Git-Push in allen Workspace-Repos ausführen"
     usageLine "-h | --help" "Diese Hilfe anzeigen"
     echo
     echo -e "${LIGHT_BLUE}Hints:${NC}"
-    echo -e "    Push ausführen:  ${GREEN}${APPNAME} --show${NC}"
+    echo -e "    Push ausführen:  ${GREEN}${APPNAME} --push${NC}"
     echo
 }
 
@@ -67,7 +80,7 @@ if [[ $# -eq 0 ]]; then
 fi
 
 case "$1" in
-    -s|--show) push_all ;;
+    -p|--push) push_all ;;
     -h|--help) usage; exit 0 ;;
     *) echo -e "${RED}Unbekannte Option: $1${NC}" >&2; usage; exit 1 ;;
 esac

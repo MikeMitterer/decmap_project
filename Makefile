@@ -135,7 +135,7 @@ version: ## Aktuelle Versionen aller Sub-Repos anzeigen
 
 .PHONY: git-push-all
 git-push-all: ## Git-Push in allen Repos (Root + Sub-Repos)
-	@bash scripts/git-push-all.sh --show
+	@bash scripts/git-push-all.sh --push
 
 ##@ Docker x-Repo
 
