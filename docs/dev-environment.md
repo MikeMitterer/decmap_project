@@ -179,13 +179,16 @@ auf — zeigt den echten DB-Wert ohne auf den WS-Event zu warten.
 
 ### nginx (Produktion)
 
-Für Directus WebSocket hinter nginx muss der `/cms/`-Block Upgrade-Headers weiterleiten:
+Für Directus WebSocket hinter nginx muss der `cms.decisionmap.ai`-Serverblock Upgrade-Headers weiterleiten:
 
 ```nginx
-location /cms/ {
-    proxy_pass http://directus:8055/;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
+server {
+    server_name cms.decisionmap.ai;
+    location / {
+        proxy_pass http://directus:8055;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
 }
 ```
 

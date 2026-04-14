@@ -173,18 +173,32 @@ docker compose up -d --no-deps --force-recreate backend
 
 Tipp: `GET /server/ping` antwortet sofort mit `{"data":"pong"}` — unabhängig von SMTP. Eignet sich für einfache Verfügbarkeitsprüfungen ohne den SMTP-Timeout-Pfad.
 
-**SMTP-Provider-Wechsel — Mailjet → smtp2go:**
-Mailjet zeigte Probleme (unzuverlässiger Versand, schlechter Support). Empfehlung: smtp2go (Free Tier: 1.000 Mails/Monat). Port 2525 bevorzugen — Hetzner blockiert 587, 465 hatte Probleme mit Mailjet. Sender-Domain `decisionmap.ai` in smtp2go verifizieren (SPF + DKIM). Konfiguration:
+**SMTP-Provider — Wechsel:** Mailjet (unzuverlässig) → smtp2go evaluiert → **AWS SES** gewählt (siehe Abschnitt unten).
+Bis zur Konfiguration: `EMAIL_SMTP_HOST=` (leer) — sonst 60s-Timeout bei Container-Start.
+Tracking: MikeMitterer/decmap_project#1.
+
+**SMTP-Provider — AWS SES (Produktion):**
+AWS SES skaliert besser als smtp2go für Produktion. Konfiguration:
 ```
-EMAIL_SMTP_HOST=mail.smtp2go.com
-EMAIL_SMTP_PORT=2525
-EMAIL_SMTP_USER=<smtp2go-username>
-EMAIL_SMTP_PASSWORD=<api-key>
+EMAIL_SMTP_HOST=email-smtp.<region>.amazonaws.com
+EMAIL_SMTP_PORT=587
+EMAIL_SMTP_USER=<IAM-SMTP-Credentials-User>
+EMAIL_SMTP_PASSWORD=<IAM-SMTP-Credentials-Secret>
 EMAIL_SMTP_SECURE=false
 EMAIL_FROM=noreply@decisionmap.ai
 ```
-Bis zur Konfiguration: `EMAIL_SMTP_HOST=` (leer) — sonst 60s-Timeout bei Container-Start.
-Tracking: MikeMitterer/decmap_project#1.
+SMTP-Credentials in der AWS Console erstellen: SES → "Create SMTP credentials" → IAM-User mit `ses:SendRawEmail`. Sandbox-Modus initial aktiv — nur verifizierte Empfänger erreichbar bis Production-Access beantragt.
+
+SMTP-Verbindung testen: `./scripts/smtp-test.py --send --to dein@email.com` (liest `apps/backend/.env` automatisch).
+
+**Gotcha — Hetzner blockiert ggf. Port 587:** Mit Mailjet wurde beobachtet, dass Hetzner VPS ausgehende Verbindungen auf Port 587 blockiert. AWS SES unterstützt auch Port 465 (TLS) als Fallback: `EMAIL_SMTP_PORT=465`, `EMAIL_SMTP_SECURE=true`. Vor Go-Live testen: `./scripts/smtp-test.py` oder `nc -zv email-smtp.<region>.amazonaws.com 587`.
+
+**Gotcha — Hetzner DNS + SES DKIM CNAME:**
+SES DKIM-Einrichtung erzeugt CNAME-Records die auf externe Hostnamen zeigen (`xxxxx.dkim.amazonses.com`). Hetzner Robot (alte Oberfläche) lehnt externe CNAME-Ziele mit Validierungsfehler ab. Lösung: DNS-Einträge in `dns.hetzner.com` (neues Interface) anlegen — dort funktionieren externe CNAME-Ziele problemlos. Hetzners Validierungswarnung ist übereifrig — die Records werden trotzdem korrekt an AWS übermittelt.
+
+Wenn `dns.hetzner.com` ebenfalls blockiert: DNS auf Route 53 oder Cloudflare delegieren — beide Anbieter akzeptieren externe CNAME-Ziele ohne Einschränkungen. AWS Route 53 bietet zudem "Easy DKIM" mit automatischem Record-Setup direkt aus der SES-Console.
+
+**Hinweis:** AWS hat TXT-basierte Domain-Verifizierung 2024 abgeschafft — nur noch DKIM-CNAMEs werden unterstützt.
 
 **Gotcha — Directus Permissions nie per direktem SQL setzen:**
 `INSERT INTO directus_permissions ...` umgeht den Directus-In-Memory-Cache. Permissions greifen dann erst nach einem Neustart — ohne sichtbare Fehlermeldung erscheint trotzdem 403. Permissions immer ueber die Directus REST API setzen (`PATCH /policies/{id}` oder `POST /permissions`). `make db-permissions` und `make seed-users` verwenden ausschliesslich REST-Aufrufe.
@@ -445,30 +459,21 @@ volumes:
 - Port 80: reiner `301`-Redirect zu HTTPS
 - Port 443: TLS (`TLSv1.2/1.3`), alle Location-Bloecke (Frontend, CMS, AI-Service, WebSocket)
 
-**Directus unter `/cms`-Pfad — `proxy_redirect`-Gotcha:**
-Directus sendet nach dem Login einen `Location: /admin`-Header (absoluter Pfad ohne Prefix). nginx muss diesen vor dem Weiterleiten umschreiben:
+**Directus auf Subdomain `cms.decisionmap.ai`:**
+Directus läuft auf einer eigenen Subdomain — kein `/cms`-Pfad-Prefix, kein `proxy_redirect`. `PUBLIC_URL=https://cms.decisionmap.ai` in `.env` Pflicht.
 
 ```nginx
-location /cms/ {
-    proxy_pass http://directus:8055/;
-    proxy_redirect http://directus:8055/admin/ /cms/admin/;
+server {
+    server_name cms.decisionmap.ai;
+    location / {
+        proxy_pass http://directus:8055;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
 }
 ```
 
-`PUBLIC_URL` in `.env` muss auf `https://decisionmap.ai/cms` gesetzt sein, damit Directus auch interne API-URLs (fuer das Admin-SPA) korrekt generiert. Ohne `proxy_redirect` landet der Browser nach dem Login auf `/admin` (404).
-
-**Directus WebSocket-Subscriptions hinter nginx:** Für `useDirectusRealtime.ts` (Vote-Score-Updates) muss der `/cms/`-Block WebSocket-Upgrade-Headers weiterleiten:
-
-```nginx
-location /cms/ {
-    proxy_pass http://directus:8055/;
-    proxy_redirect http://directus:8055/admin/ /cms/admin/;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-}
-```
-
-Ohne diese Header schlägt der WebSocket-Handshake lautlos fehl — `useDirectusRealtime.ts` verbindet sich nie.
+**Directus WebSocket-Subscriptions hinter nginx:** Der Subdomain-Block muss WebSocket-Upgrade-Headers weiterleiten — sonst schlägt `useDirectusRealtime.ts` lautlos fehl.
 
 **nginx — `proxy_pass` mit Variable + `rewrite` — drei Gotchas:**
 

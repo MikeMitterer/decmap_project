@@ -233,7 +233,7 @@ onUnmounted(() => { disconnectDirectus(); disconnectAiWs() })
 
 - `WEBSOCKETS_ENABLED=true` und `WEBSOCKETS_REST_AUTH=public` in `apps/backend/.env`
 - Directus Flow "Vote Score Broadcast" angelegt (`make -C infrastructure setup-vote-flow`)
-- nginx `/cms/`-Location: `proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";`
+- nginx `cms.decisionmap.ai`-Serverblock: `proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";`
 
 → Vollständige Dokumentation: [`docs/dev-environment.md`](dev-environment.md)
 

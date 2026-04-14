@@ -200,12 +200,12 @@ export function useProblems() {
 - **Health-Checks nur Browser-seitig:** Nitro Server-Routes erreichen Docker-Ports nicht. `fetch()` direkt im Browser, `AbortSignal.timeout(10_000)`.
 - **Let's Encrypt Symlinks (nginx-Container):** `live/fullchain.pem` ist ein Symlink auf `archive/` — beide Verzeichnisse in `docker-compose.yml` mounten, sonst schlägt TLS fehl.
 - **Docker Compose V2 auf Ubuntu:** `docker.io` (Ubuntu-Paket) liefert kein `docker compose` (V2). Offizielles Docker-Repository erforderlich — `docker-compose-plugin` installieren.
-- **Directus unter nginx `/cms`-Pfad:** Directus sendet `Location: /admin` — nginx muss mit `proxy_redirect` auf `/cms/admin` umschreiben. `PUBLIC_URL=https://decisionmap.ai/cms` in `.env` Pflicht.
+- **Directus Live-URL:** `https://cms.decisionmap.ai/` — Subdomain, kein Pfad-Prefix. `PUBLIC_URL=https://cms.decisionmap.ai` in `.env` Pflicht. nginx leitet `/cms`-Pfade nicht um.
 - **Directus SMTP-Healthcheck blockiert Start:** `EMAIL_SMTP_HOST` gesetzt aber nicht erreichbar → 60s Timeout → Container `unhealthy`. `EMAIL_SMTP_HOST=` (leer) setzen bis SMTP konfiguriert ist.
 - **nginx `proxy_pass` mit Variable + `rewrite` — drei Gotchas:** (1) `proxy_pass http://$var/` macht keine Prefix-Substitution — `/api/health` landet als `/api/health` beim Backend. (2) `rewrite ... break` stoppt auch `set` — `set $var` immer **vor** `rewrite` stellen, sonst bleibt Variable leer → "no host in upstream". (3) `proxy_pass http://$var` ohne URI nach `rewrite` nimmt die Original-URI — `$uri` explizit übergeben: `proxy_pass http://$upstream$uri$is_args$args`.
 - **Directus Flow HTTP-Request-Body:** Trigger-Payload wird nicht automatisch weitergeleitet — im HTTP-Request-Operation explizit mappen: `{"entity_id": "{{$trigger.payload.entity_id}}"}`. Fehlendes Mapping → leerer Body beim Webhook-Empfänger.
 - **WebSocket Composables brauchen explizites `connect()` in `onMounted`:** `useRealtimeUpdates` (AI-Service WS) und `useDirectusRealtime` verbinden sich nicht automatisch. Fehlt der `connect()`-Call in `onMounted`, bleibt der Socket stumm — kein Fehler, kein Event. Beide Composables in `index.vue` explizit starten.
-- **nginx WebSocket-Upgrade fuer Directus:** `/cms/`-Location braucht `proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";` — sonst schlaegt der Directus-WS-Handshake lautlos fehl.
+- **nginx WebSocket-Upgrade fuer Directus:** Der `cms.decisionmap.ai`-Serverblock braucht `proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";` — sonst schlaegt der Directus-WS-Handshake lautlos fehl.
 
 ---
 

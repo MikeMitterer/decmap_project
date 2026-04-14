@@ -263,7 +263,7 @@ Beide Data-Layer (Fake + Real) sind vollständig implementiert.
 - **Frontend:** 172 Tests in 15 Dateien grün — Composables, Contract-Tests (Fake & Real)
 - **AI-Service:** 31 Unit-Tests grün
 
-**Hetzner-Infrastruktur (in Betrieb):** nginx + TLS + Docker Compose laufen. Directus unter `/cms`-Pfad (`proxy_redirect` + `PUBLIC_URL`). SMTP noch offen (Blocker — User-Registrierung): Mailjet unzuverlässig (Support schlecht) — smtp2go als Ersatz evaluiert (Port 2525, Hetzner-tauglich). Tracking: MikeMitterer/decmap_project#1. AI-Service-Image (`decisionmap-ai-service`) auf ghcr.io, deploy via `make -C infrastructure deploy-service SVC=ai-service`.
+**Hetzner-Infrastruktur (in Betrieb):** nginx + TLS + Docker Compose laufen. Directus auf Subdomain `cms.decisionmap.ai` (kein `/cms`-Pfad-Prefix, `PUBLIC_URL=https://cms.decisionmap.ai`). SMTP noch offen (Blocker — User-Registrierung): AWS SES in Einrichtung (Domain-Verifizierung läuft, Sandbox-Modus). Tracking: MikeMitterer/decmap_project#1. AI-Service-Image (`decisionmap-ai-service`) auf ghcr.io, deploy via `make -C infrastructure deploy-service SVC=ai-service`.
 
 **Echtzeit-Vote-Updates implementiert:** `useDirectusRealtime.ts` subscribed auf `problems.update` via Directus WebSocket — `trg_vote_score` hält `vote_score` synchron, kein AI-Service-Umweg. Erfordert `WEBSOCKETS_ENABLED=true` + `WEBSOCKETS_REST_AUTH=public` in `backend/.env`.
 
