@@ -173,6 +173,19 @@ docker compose up -d --no-deps --force-recreate backend
 
 Tipp: `GET /server/ping` antwortet sofort mit `{"data":"pong"}` — unabhängig von SMTP. Eignet sich für einfache Verfügbarkeitsprüfungen ohne den SMTP-Timeout-Pfad.
 
+**SMTP-Provider-Wechsel — Mailjet → smtp2go:**
+Mailjet zeigte Probleme (unzuverlässiger Versand, schlechter Support). Empfehlung: smtp2go (Free Tier: 1.000 Mails/Monat). Port 2525 bevorzugen — Hetzner blockiert 587, 465 hatte Probleme mit Mailjet. Sender-Domain `decisionmap.ai` in smtp2go verifizieren (SPF + DKIM). Konfiguration:
+```
+EMAIL_SMTP_HOST=mail.smtp2go.com
+EMAIL_SMTP_PORT=2525
+EMAIL_SMTP_USER=<smtp2go-username>
+EMAIL_SMTP_PASSWORD=<api-key>
+EMAIL_SMTP_SECURE=false
+EMAIL_FROM=noreply@decisionmap.ai
+```
+Bis zur Konfiguration: `EMAIL_SMTP_HOST=` (leer) — sonst 60s-Timeout bei Container-Start.
+Tracking: MikeMitterer/decmap_project#1.
+
 **Gotcha — Directus Permissions nie per direktem SQL setzen:**
 `INSERT INTO directus_permissions ...` umgeht den Directus-In-Memory-Cache. Permissions greifen dann erst nach einem Neustart — ohne sichtbare Fehlermeldung erscheint trotzdem 403. Permissions immer ueber die Directus REST API setzen (`PATCH /policies/{id}` oder `POST /permissions`). `make db-permissions` und `make seed-users` verwenden ausschliesslich REST-Aufrufe.
 
