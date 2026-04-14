@@ -6,6 +6,10 @@ set -euo pipefail
 BASH_LIBS="${BASH_LIBS:-$(cd "$(dirname "$0")/../.libs/BashLib/src" && pwd)}"
 
 if [[ "${__COLORS_LIB__:=""}" == "" ]]; then . "${BASH_LIBS}/colors.lib.sh"; fi
+if [[ "${__TOOLS_LIB__:=""}"  == "" ]]; then . "${BASH_LIBS}/tools.lib.sh";  fi
+
+APPNAME="$(basename "$0")"
+readonly APPNAME
 
 readonly REPOS=(
     ".:DecisionMap (Root)"
@@ -15,26 +19,55 @@ readonly REPOS=(
     "infrastructure:infrastructure"
 )
 
-echo
-echo -e "  ${YELLOW}Git Push — alle Repos${NC}"
-echo
+# Zeigt die Verwendungshinweise an.
+usage() {
+    echo
+    echo "Usage: ${APPNAME} [ options ]"
+    echo
+    usageLine "-s | --show" "Git-Push in allen Workspace-Repos ausführen"
+    usageLine "-h | --help" "Diese Hilfe anzeigen"
+    echo
+    echo -e "${LIGHT_BLUE}Hints:${NC}"
+    echo -e "    Push ausführen:  ${GREEN}${APPNAME} --show${NC}"
+    echo
+}
 
-for entry in "${REPOS[@]}"; do
-    repo_path="${entry%%:*}"
-    repo_name="${entry##*:}"
+# Pusht alle konfigurierten Repos und gibt Status pro Repo aus.
+push_all() {
+    echo
+    echo -e "  ${YELLOW}Git Push — alle Repos${NC}"
+    echo
 
-    if [[ ! -d "${repo_path}/.git" ]]; then
-        printf "    ${BLUE}%-22s${NC}  ${WHITE}(nicht ausgecheckt)${NC}\n" "${repo_name}"
-        continue
-    fi
+    for entry in "${REPOS[@]}"; do
+        local repo_path="${entry%%:*}"
+        local repo_name="${entry##*:}"
 
-    printf "    ${BLUE}%-22s${NC}  " "${repo_name}"
-    if output=$(git -C "${repo_path}" push 2>&1); then
-        echo -e "${GREEN}✓ ok${NC}"
-    else
-        echo -e "${RED}✗ Fehler${NC}"
-        echo "${output}" | sed 's/^/        /'
-    fi
-done
+        if [[ ! -d "${repo_path}/.git" ]]; then
+            printf "    ${BLUE}%-22s${NC}  ${YELLOW}(nicht ausgecheckt)${NC}\n" "${repo_name}"
+            continue
+        fi
 
-echo
+        printf "    ${BLUE}%-22s${NC}  " "${repo_name}"
+        if output=$(git -C "${repo_path}" push 2>&1); then
+            echo -e "${GREEN}✓ ok${NC}"
+        else
+            echo -e "${RED}✗ Fehler${NC}"
+            while IFS= read -r line; do echo "        ${line}"; done <<< "${output}"
+        fi
+    done
+
+    echo
+}
+
+# ─── Entry Point ──────────────────────────────────────────────────────────────
+
+if [[ $# -eq 0 ]]; then
+    usage
+    exit 0
+fi
+
+case "$1" in
+    -s|--show) push_all ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo -e "${RED}Unbekannte Option: $1${NC}" >&2; usage; exit 1 ;;
+esac
