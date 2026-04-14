@@ -141,10 +141,11 @@ curl -s http://localhost:8000/hooks/vote-changed \
   -H "X-Webhook-Secret: <dein-secret>" \
   -d '{
     "entity_id": "test-001",
-    "entity_type": "problem",
-    "new_score": 5
+    "entity_type": "problem"
   }' | jq
 ```
+
+`new_score` ist optional — der AI-Service berechnet ihn aus `problems.vote_score`. Kann zum Testen mitgeschickt werden um den DB-Lookup zu überspringen.
 
 ---
 

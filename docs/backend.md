@@ -30,6 +30,8 @@ AUTO_APPROVE=false             # Feature Flag: Neue Problems automatisch freisch
 DIRECTUS_URL=                  # Directus-Instanz URL
 DIRECTUS_TOKEN=                # Directus Admin-Token
 CORS_ORIGIN=http://localhost:3000  # Erlaubter Browser-Origin fuer Directus (nicht Wildcard — browser-invalid mit credentials)
+WEBSOCKETS_ENABLED=true        # Pflicht fuer useDirectusRealtime.ts (Vote-Score-Updates via WS Subscription)
+WEBSOCKETS_REST_AUTH=public    # Anonyme WS-Subscriptions erlauben (vote_score ist oeffentlich lesbar)
 
 # Datenbank
 POSTGRES_URL=                  # PostgreSQL Connection String (ai-service)
@@ -227,9 +229,25 @@ Directus Flows verbinden Datenereignisse mit dem AI-Service.
 | `problem-submitted` | Action: `problems.items.create` | `POST http://ai-service:8000/hooks/problem-submitted` |
 | `problem-approved` | Action: `problems.items.update` (filter: `status=approved`) | `POST http://ai-service:8000/hooks/problem-approved` |
 | `solution-approved` | Action: `solution_approaches.items.update` (filter: `status=approved`) | `POST http://ai-service:8000/hooks/solution-approved` |
-| `vote-changed` | Action: `votes.items.create/update/delete` | `POST http://ai-service:8000/hooks/vote-changed` |
+| `vote-changed` | Action: `votes.items.create` (kein update/delete — `trg_vote_score` hält `problems.vote_score` synchron) | `POST http://ai-service:8000/hooks/vote-changed` |
 
 Jeder Flow: Trigger → HTTP-Request-Action → Ziel-URL, Methode POST, Header `X-Webhook-Secret: <WEBHOOK_SECRET>`.
+
+Der `vote-changed`-Flow kann per Script angelegt werden (benötigt laufendes Directus):
+```bash
+make -C infrastructure setup-vote-flow
+# Neu anlegen falls bereits vorhanden:
+make -C infrastructure setup-vote-flow -- --force
+```
+
+**Gotcha — `vote-changed` Flow Body:** Directus-Flow-Trigger-Payload muss explizit auf den HTTP-Request-Body gemappt werden. Body im HTTP-Request-Operation:
+```json
+{
+  "entity_id": "{{$trigger.payload.entity_id}}",
+  "entity_type": "{{$trigger.payload.entity_type}}"
+}
+```
+`new_score` muss **nicht** mitgeschickt werden — der AI-Service berechnet ihn selbst aus `problems.vote_score` (das der PostgreSQL-Trigger `trg_vote_score` synchron updated).
 
 ---
 
@@ -426,6 +444,19 @@ location /cms/ {
 
 `PUBLIC_URL` in `.env` muss auf `https://decisionmap.ai/cms` gesetzt sein, damit Directus auch interne API-URLs (fuer das Admin-SPA) korrekt generiert. Ohne `proxy_redirect` landet der Browser nach dem Login auf `/admin` (404).
 
+**Directus WebSocket-Subscriptions hinter nginx:** Für `useDirectusRealtime.ts` (Vote-Score-Updates) muss der `/cms/`-Block WebSocket-Upgrade-Headers weiterleiten:
+
+```nginx
+location /cms/ {
+    proxy_pass http://directus:8055/;
+    proxy_redirect http://directus:8055/admin/ /cms/admin/;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}
+```
+
+Ohne diese Header schlägt der WebSocket-Handshake lautlos fehl — `useDirectusRealtime.ts` verbindet sich nie.
+
 **nginx — `proxy_pass` mit Variable + `rewrite` — drei Gotchas:**
 
 1. **`proxy_pass http://$var/` macht keine Prefix-Substitution.** Ohne Variable würde `location /api/` + `proxy_pass http://upstream/` das `/api/`-Prefix automatisch ersetzen. Mit Variable passiert das nicht — `/api/health` landet als `/api/health` beim Backend. Fix: `rewrite` + `$uri` explizit übergeben.
@@ -485,7 +516,8 @@ Konventionen (Struktur, `##@`-Gruppen, `.PHONY`, `info`/`hints`-Targets, Farben)
 make setup             # .libs/-Symlinks erstellen (einmalig, benoetigt DEV_LOCAL)
 make status            # Git-Status aller Workspace-Repos (dirty + ahead/behind Remote)
 make fakedata-sync     # Fake-Daten aus data/ generieren und an Consumer-Repos verteilen
-make dev-up            # → delegiert an apps/backend/Makefile
+make dev-up            # Docker-Services + overmind (Frontend + AI-Service via Procfile.dev)
+make dev-down          # Docker-Services stoppen
 make lint              # → delegiert an apps/frontend/ und apps/ai-service/
 make test              # → delegiert an apps/frontend/ und apps/ai-service/
 

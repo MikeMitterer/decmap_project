@@ -121,48 +121,14 @@ make -C infrastructure help    # Server-Orchestrierung
 
 ## Lokale Entwicklung
 
-### Voraussetzungen
-
-- Docker + Docker Compose V2 (`docker compose`, kein `docker-compose`)
-- Node.js 20+
-- Python 3.11+
-- `DEV_LOCAL` Umgebungsvariable (zeigt auf lokales Dev-Verzeichnis mit BashLib)
-
-### Setup
-
 ```bash
-# 1. Alle Sub-Repos in apps/ auschecken
-# 2. Symlinks erstellen
-make setup
-
-# 3. Dev-Umgebung starten (Postgres + Directus + Mailpit)
-make -C apps/backend dev-up
-
-# 4. Frontend starten
-make -C apps/frontend dev
-
-# 5. AI-Service starten
-make -C apps/ai-service dev
+make dev-up    # Docker (Postgres + Directus) + overmind (Frontend :5000 + AI-Service :8000)
+make dev-down  # Docker-Services stoppen
 ```
 
-### Fake-Daten vs. echte Daten
+Voraussetzung: `overmind` installiert (`brew install overmind`).
 
-Eine Umgebungsvariable schaltet zwischen In-Memory-Daten und echtem Server:
-
-```bash
-USE_FAKE_DATA=true   # Keine Backend-Verbindung nötig — ideal für UI-Entwicklung
-USE_FAKE_DATA=false  # Echter Directus + AI-Service
-```
-
-Beide Layer implementieren dasselbe Interface — kein Unterschied für Komponenten.
-
-### Seed-Daten synchron halten
-
-```bash
-make fakedata-sync   # data/*.json → apps/frontend (camelCase) + apps/ai-service/tests/fakedata/
-```
-
-Die JSON-Dateien in `data/` sind die einzige Quelle der Wahrheit — nie direkt in Consumer-Repos editieren.
+→ **Vollständige Anleitung (Ersteinrichtung, Ports, Fake-Daten, venv-Gotchas):** [`docs/dev-environment.md`](docs/dev-environment.md)
 
 ---
 
@@ -299,8 +265,11 @@ Beide Data-Layer (Fake + Real) sind vollständig implementiert.
 
 **Hetzner-Infrastruktur (in Betrieb):** nginx + TLS + Docker Compose laufen. Directus unter `/cms`-Pfad (`proxy_redirect` + `PUBLIC_URL`). SMTP via Mailjet auf Port 465 (Port 587 auf Hetzner blockiert) — Sender-Domain-Verifikation in Mailjet noch ausstehend. AI-Service-Image (`decisionmap-ai-service`) auf ghcr.io, deploy via `make -C infrastructure deploy-service SVC=ai-service`.
 
+**Echtzeit-Vote-Updates implementiert:** `useDirectusRealtime.ts` subscribed auf `problems.update` via Directus WebSocket — `trg_vote_score` hält `vote_score` synchron, kein AI-Service-Umweg. Erfordert `WEBSOCKETS_ENABLED=true` + `WEBSOCKETS_REST_AUTH=public` in `backend/.env`.
+
 Noch ausstehend: Directus-Schema-Import + API-Token + Flows konfigurieren
 (HTTP-Webhooks auf `http://ai-service:8000/hooks/*` für `problem-submitted`, `problem-approved` etc.)
+`vote-changed`-Flow per Script anlegbar: `make -C infrastructure setup-vote-flow`
 → Details: [`docs/backend.md`](docs/backend.md)
 
 **Offene Punkte:**

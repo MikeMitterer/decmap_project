@@ -69,6 +69,17 @@ setup: ## Lokale .libs/-Symlinks erstellen (DEV_LOCAL muss gesetzt sein)
 	@echo "${GREEN}Setup abgeschlossen.${RESET}"
 
 
+##@ Lokale Entwicklung
+
+.PHONY: dev-up
+dev-up: ## Alle Services starten (Docker im Hintergrund + overmind fuer Frontend + AI-Service)
+	$(MAKE) -C apps/backend dev-up
+	overmind start -f Procfile.dev
+
+.PHONY: dev-down
+dev-down: ## Docker-Services stoppen
+	$(MAKE) -C apps/backend dev-down
+
 ##@ Workspace
 
 .PHONY: status

@@ -162,23 +162,44 @@ Honeypot-Feld wird nie in der DB gespeichert — nur gepruft.
 
 ## Echtzeit-Updates (WebSocket)
 
-CRUD uber REST. Ruckmeldungen an das UI uber WebSocket — Multi-User-Betrieb bleibt aktuell.
+> **Grundanforderung:** Live-Updates im UI sind keine optionale Funktion.
+> Wenn User A votet, sieht User B den aktualisierten Score sofort — ohne Page-Reload.
+> Diese Funktionalität muss auch ohne AI-Service funktionieren.
 
-### Ablauf
+CRUD uber REST. Ruckmeldungen an das UI uber zwei WebSocket-Quellen.
+
+### Zwei WebSocket-Quellen
+
+| Composable | WebSocket | Verantwortlich für |
+|---|---|---|
+| `useDirectusRealtime.ts` | Directus `/websocket` | Vote-Score-Updates (`problems.vote_score`) |
+| `useRealtimeUpdates.ts` | AI-Service `/ws` | AI-Events: `problem.approved`, `cluster.updated`, `solution.generated` |
+
+Vote-Score-Updates laufen **nicht** über den AI-Service — Basis-Funktionalität darf
+nicht vom AI-Service abhängen.
+
+### Vote-Score — Ablauf
 
 ```
-User A submitted Problem
-      ↓ REST POST /problems
-Directus speichert
-      ↓ Webhook
-FastAPI verarbeitet (Filter, Embedding, Clustering)
-      ↓ WebSocket broadcast
-Alle verbundenen Clients erhalten Event
+User klickt Vote
       ↓
-UI aktualisiert sich gezielt
+POST /items/votes  (Directus REST)
+      ↓
+PostgreSQL Trigger trg_vote_score  (synchron)
+      ↓
+problems.vote_score inkrementiert
+      ↓
+Directus Flow "Vote Score Broadcast"
+      ↓  (ItemsService.updateOne — löst WS-Subscription-Event aus)
+Directus WebSocket → alle verbundenen Clients
+      ↓
+useDirectusRealtime.ts → applyVoteScore(id, voteScore) → UI aktualisiert
 ```
 
-### Event-Typen
+Sofort-Feedback für den votenden User: `ProblemPanel.vue` ruft nach `submitVote()`
+sofort `fetchProblemById()` auf — zeigt echten DB-Wert ohne auf WS-Event zu warten.
+
+### AI-Service — Event-Typen
 
 ```typescript
 type WebSocketEvent =
@@ -188,56 +209,33 @@ type WebSocketEvent =
   | { type: 'cluster.updated';   payload: { id: string; label: string; problemCount: number } }
   | { type: 'solution.approved'; payload: { id: string; problemId: string } }
   | { type: 'solution.deleted';  payload: { id: string; problemId: string } }
-  | { type: 'vote.changed';      payload: { entityId: string; entityType: 'problem' | 'solution'; newScore: number } }
 ```
 
 Events auf Entity-Ebene — Frontend entscheidet ob Re-fetch oder direktes State-Update.
 
-### Backend — FastAPI
+### Frontend — Composables
 
-```python
-connected_clients: set[WebSocket] = set()
-
-@router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket) -> None:
-    await websocket.accept()
-    connected_clients.add(websocket)
-    try:
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        connected_clients.discard(websocket)
-
-async def broadcast(event: WebSocketEvent) -> None:
-    message = event.model_dump_json()
-    disconnected = set()
-    for client in connected_clients:
-        try:
-            await client.send_text(message)
-        except WebSocketDisconnect:
-            disconnected.add(client)
-    connected_clients.difference_update(disconnected)
-```
-
-### Frontend — Composable
+Beide Composables müssen **explizit** in `onMounted` verbunden werden — sie verbinden
+sich nicht automatisch. Fehlt der `connect()`-Call, bleibt der Socket stumm (kein Fehler).
 
 ```typescript
-export function useRealtimeUpdates() {
-  const socket = ref<WebSocket | null>(null)
+// pages/index.vue
+const { connect: connectDirectus, disconnect: disconnectDirectus } = useDirectusRealtime({
+  onProblemVoteChanged: applyVoteScore,
+})
+const { connect: connectAiWs, disconnect: disconnectAiWs } = useRealtimeUpdates({ ... })
 
-  function connect(): void {
-    socket.value = new WebSocket(`${WS_URL}/ws`)
-    socket.value.onmessage = (event: MessageEvent) => {
-      const wsEvent = JSON.parse(event.data) as WebSocketEvent
-      handleEvent(wsEvent)
-    }
-    socket.value.onclose = () => setTimeout(connect, 3000)  // Reconnect
-  }
-
-  onMounted(connect)
-  onUnmounted(() => socket.value?.close())
-}
+onMounted(() => { connectDirectus(); connectAiWs() })
+onUnmounted(() => { disconnectDirectus(); disconnectAiWs() })
 ```
+
+### Voraussetzungen
+
+- `WEBSOCKETS_ENABLED=true` und `WEBSOCKETS_REST_AUTH=public` in `apps/backend/.env`
+- Directus Flow "Vote Score Broadcast" angelegt (`make -C infrastructure setup-vote-flow`)
+- nginx `/cms/`-Location: `proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";`
+
+→ Vollständige Dokumentation: [`docs/dev-environment.md`](dev-environment.md)
 
 ---
 
