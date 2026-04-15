@@ -511,6 +511,8 @@ Jedes Sub-Repo hat ein eigenes Makefile fuer seinen Kontext. `make help` zeigt d
 
 Konventionen (Struktur, `##@`-Gruppen, `.PHONY`, `info`/`hints`-Targets, Farben): `/code-standards`
 
+`make help` unterstützt Farbthemen via `MAKE_THEME` (Env-Variable oder `.env`): `classic` (Standard), `ocean`, `earth`, `night`, `mono`, `sunset`, `forest`, `neon`.
+
 | Makefile | Zustandig fuer |
 |---|---|
 | `Makefile` (Root) | Workspace-Setup, Delegation an Sub-Repos, Cross-Repo lint/test |

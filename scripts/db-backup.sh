@@ -66,7 +66,7 @@ usage() {
 
 # ─── Docker-Compose-Wrapper ─────────────────────────────────────────────────
 
-dc_exec() {
+dcExec() {
     if [[ -n "${COMPOSE_FILE}" ]]; then
         docker compose -f "${COMPOSE_FILE}" exec "$@"
     else
@@ -74,8 +74,8 @@ dc_exec() {
     fi
 }
 
-check_service() {
-    if ! dc_exec -T "${POSTGRES_SERVICE}" true 2>/dev/null; then
+checkService() {
+    if ! dcExec -T "${POSTGRES_SERVICE}" true 2>/dev/null; then
         local hint=""
         [[ -n "${COMPOSE_FILE}" ]] && hint=" (${COMPOSE_FILE})"
         die "Service '${POSTGRES_SERVICE}'${hint} nicht erreichbar. Compose läuft?"
@@ -84,9 +84,9 @@ check_service() {
 
 # ─── Backup ─────────────────────────────────────────────────────────────────
 
-do_backup() {
+doBackup() {
     local schema_only="${1:-false}"
-    check_service
+    checkService
     mkdir -p "${BACKUP_DIR}"
 
     local timestamp filename filepath label extra_flags=""
@@ -105,7 +105,7 @@ do_backup() {
     info "${label}: ${POSTGRES_DB} → ${filename}"
 
     # shellcheck disable=SC2086
-    dc_exec -T "${POSTGRES_SERVICE}" \
+    dcExec -T "${POSTGRES_SERVICE}" \
         pg_dump -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
         --format=custom --compress=6 --no-owner --no-acl \
         ${extra_flags} \
@@ -118,7 +118,7 @@ do_backup() {
 
 # ─── Restore ────────────────────────────────────────────────────────────────
 
-do_restore() {
+doRestore() {
     local dump_file="$1"
 
     # Kein Verzeichnis-Anteil → Default-Backup-Dir voranstellen
@@ -134,7 +134,7 @@ do_restore() {
 
     [[ -f "${dump_file}" ]] || die "Datei nicht gefunden: ${dump_file}"
 
-    check_service
+    checkService
 
     local filename
     filename="$(basename "${dump_file}")"
@@ -150,17 +150,17 @@ do_restore() {
     fi
 
     info "Bestehende Verbindungen trennen ..."
-    dc_exec -T "${POSTGRES_SERVICE}" \
+    dcExec -T "${POSTGRES_SERVICE}" \
         psql -U "${POSTGRES_USER}" -d postgres -c \
         "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${POSTGRES_DB}' AND pid <> pg_backend_pid();" \
         > /dev/null 2>&1 || true
 
     info "Datenbank droppen + neu anlegen ..."
-    dc_exec -T "${POSTGRES_SERVICE}" dropdb  -U "${POSTGRES_USER}" --if-exists "${POSTGRES_DB}"
-    dc_exec -T "${POSTGRES_SERVICE}" createdb -U "${POSTGRES_USER}" "${POSTGRES_DB}"
+    dcExec -T "${POSTGRES_SERVICE}" dropdb  -U "${POSTGRES_USER}" --if-exists "${POSTGRES_DB}"
+    dcExec -T "${POSTGRES_SERVICE}" createdb -U "${POSTGRES_USER}" "${POSTGRES_DB}"
 
     info "Restore: ${filename} → ${POSTGRES_DB}"
-    dc_exec -T "${POSTGRES_SERVICE}" \
+    dcExec -T "${POSTGRES_SERVICE}" \
         pg_restore -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" \
         --no-owner --no-acl --single-transaction \
         < "${dump_file}"
@@ -170,7 +170,7 @@ do_restore() {
 
 # ─── List ───────────────────────────────────────────────────────────────────
 
-do_list() {
+doList() {
     local dumps
     dumps="$(ls -1 "${BACKUP_DIR}"/*.dump 2>/dev/null || true)"
 
@@ -220,12 +220,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 case "${CMD}" in
-    backup)        do_backup false ;;
-    backup-schema) do_backup true ;;
+    backup)        doBackup false ;;
+    backup-schema) doBackup true ;;
     restore)
         [[ ${#REST_ARGS[@]} -gt 0 ]] || die "Verwendung: restore <dump-file>"
-        do_restore "${REST_ARGS[0]}"
+        doRestore "${REST_ARGS[0]}"
         ;;
-    list)          do_list ;;
+    list)          doList ;;
     *)             usage; exit 1 ;;
 esac

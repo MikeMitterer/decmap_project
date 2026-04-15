@@ -54,6 +54,15 @@ for p in problems: ...
 result = [x for x in problems if x.status == "approved"]
 ```
 
+### Bash / Shell-Scripts
+
+| Element | Stil | Beispiel |
+|---|---|---|
+| Funktionen | `camelCase` | `doBackup()`, `printRepoRow()`, `checkService()` |
+| Lokale Variablen | `snake_case` | `local dump_file`, `local repo_path` |
+| Globale Konstanten | `SCREAMING_SNAKE_CASE` | `BACKUP_DIR`, `POSTGRES_SERVICE` |
+| Skript-Dateien | `kebab-case` | `db-backup.sh`, `repo-status.sh` |
+
 ### Datenbank
 
 - Tabellen: `snake_case`, Plural fur Lookup — `problems`, `tags`, `regions`

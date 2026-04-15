@@ -65,7 +65,9 @@ DecisionMap/                     ← Workspace-Root (Issues, Doku, CI-Koordinati
 ├── scripts/                     ← Workspace-Skripte
 │   ├── db-backup.sh             ← Einheitliches DB-Backup/Restore (Backend + Infrastructure)
 │   ├── gen-fakedata.py          ← Verteilt Seed-Daten an Consumer-Repos
-│   └── repo-status.sh           ← Git-Status aller Sub-Repos
+│   ├── git-push-all.sh          ← Git-Push in allen ausgecheckten Sub-Repos
+│   ├── repo-status.sh           ← Git-Status aller Sub-Repos
+│   └── smtp-test.py             ← SMTP-Relay-Verifikation (AWS SES)
 ├── .templates/                  ← Wiederverwendbare Templates (Jenkinsfile, Makefile, Docker)
 ├── .libs/                       ← Lokale Symlinks (BashLib, MakeLib) — gitignored
 ├── apps/                        ← Service-Repos (gitignored, eigene Repos)
@@ -87,6 +89,18 @@ make help          # Alle verfügbaren Befehle anzeigen
 make info          # Workspace-Umgebungsvariablen
 make setup         # .libs/-Symlinks erstellen (einmalig nach dem Klonen)
 make status        # Git-Status aller Sub-Repos (dirty + ahead/behind Remote)
+```
+
+`make help` unterstützt Farbthemen via `MAKE_THEME` (in `.env` oder als Umgebungsvariable):
+```bash
+make help                      # classic (Standard, Gelb/Blau/Grün)
+make help MAKE_THEME=ocean     # Cyan/Türkis
+make help MAKE_THEME=earth     # Warme Brauntöne
+make help MAKE_THEME=night     # Violett/Lavendel
+make help MAKE_THEME=mono      # Schwarz/Weiß
+make help MAKE_THEME=sunset    # Rosa/Lachs
+make help MAKE_THEME=forest    # Dunkelgrün/Limette
+make help MAKE_THEME=neon      # Magenta/Neongrün
 ```
 
 **Daten:**

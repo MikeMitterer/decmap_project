@@ -46,7 +46,7 @@ usage() {
 }
 
 # Pusht alle konfigurierten Repos und gibt Status pro Repo aus.
-push_all() {
+pushAll() {
     echo
     echo -e "  ${YELLOW}Git Push — alle Repos${NC}"
     echo
@@ -80,7 +80,7 @@ if [[ $# -eq 0 ]]; then
 fi
 
 case "$1" in
-    -p|--push) push_all ;;
+    -p|--push) pushAll ;;
     -h|--help) usage; exit 0 ;;
     *) echo -e "${RED}Unbekannte Option: $1${NC}" >&2; usage; exit 1 ;;
 esac

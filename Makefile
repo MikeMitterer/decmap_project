@@ -13,14 +13,14 @@ include ${DEV_MAKE}/tools.mk
 .PHONY: help
 help: ## Alle verfügbaren Befehle anzeigen
 	@echo
-	@echo "Please use \`make <${YELLOW}target${RESET}>' where <target> is one of"
+	@echo "Please use \`make <$(THEME_COLOR_GROUP)target$(RESET)>' where <target> is one of"
 	@echo
-	@echo "Project: ${YELLOW}$(PROJECT_NAME)${RESET}  (Workspace-Root)"
+	@echo "Project: $(THEME_COLOR_GROUP)$(PROJECT_NAME)$(RESET)  (Workspace-Root)"
 	@echo
 	@grep -hE '^(##@|[a-zA-Z0-9_-]+:.*?## )' $(MAKEFILE_LIST) | \
 	  awk 'BEGIN {FS = ":.*?## "}; \
-	    /^##@/ { printf "\n  ${YELLOW}%s${RESET}\n", substr($$0, 4) }; \
-	    /^[^#]/ { printf "    ${BLUE}%-22s ${GREEN}%s${RESET}\n", $$1, $$2 }'
+	    /^##@/ { printf "\n$(THEME_INDENT_GROUP)$(THEME_COLOR_GROUP)%s$(RESET)\n", substr($$0, 4) }; \
+	    /^[^#]/ { printf "$(THEME_INDENT_TARGET)$(THEME_COLOR_TARGET)%-22s $(THEME_COLOR_DESC)%s$(RESET)\n", $$1, $$2 }'
 	@echo
 
 # ─── Info ────────────────────────────────────────────────────────────────────

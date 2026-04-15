@@ -150,7 +150,7 @@ export function useProblems() {
 → Code-Standards (Stil, Struktur, Scripts, BashLib, Gotchas): `/code-standards`
 
 - **Architektur:** Komponenten = Darstellung, Composables = Logic (Frontend) | Router = HTTP, Services = Logic (Backend)
-- **Naming:** TS/Vue `camelCase`/`PascalCase`/`SCREAMING_SNAKE_CASE` | Python `snake_case`/`PascalCase` | DB `snake_case`
+- **Naming:** TS/Vue `camelCase`/`PascalCase`/`SCREAMING_SNAKE_CASE` | Python `snake_case`/`PascalCase` | DB `snake_case` | Bash Funktionen `camelCase`, Variablen `snake_case`, Konstanten `SCREAMING_SNAKE_CASE`
 
 ---
 

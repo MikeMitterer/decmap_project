@@ -43,7 +43,7 @@ usage() {
 #
 # Returns:
 #   Formatierter Status-String (coloriert)
-get_local_status() {
+getLocalStatus() {
     local repo_path="$1"
 
     local dirty_files
@@ -65,7 +65,7 @@ get_local_status() {
 #
 # Returns:
 #   Formatierter Status-String (coloriert), leer wenn kein Remote
-get_remote_status() {
+getRemoteStatus() {
     local repo_path="$1"
 
     local ahead behind
@@ -89,7 +89,7 @@ get_remote_status() {
 }
 
 # Gibt die Tabellen-Kopfzeile aus.
-print_header() {
+printHeader() {
     local separator_name separator_local
     separator_name="$(repeat '-' "${COL_WIDTH_NAME}")"
     separator_local="$(repeat '-' "${COL_WIDTH_LOCAL}")"
@@ -116,7 +116,7 @@ print_header() {
 #
 # Returns:
 #   Reiner Text ohne Escape-Sequenzen
-strip_ansi() {
+stripAnsi() {
     echo -e "$1" | sed 's/\x1b\[[0-9;]*m//g'
 }
 
@@ -125,7 +125,7 @@ strip_ansi() {
 # Params:
 #   $1 - Anzeigename des Repos
 #   $2 - Pfad zum Repo (relativ zum Workspace-Root)
-print_repo_row() {
+printRepoRow() {
     local repo_name="$1"
     local repo_path="$2"
 
@@ -136,13 +136,13 @@ print_repo_row() {
     fi
 
     local local_status remote_status
-    local_status=$(get_local_status "${repo_path}")
-    remote_status=$(get_remote_status "${repo_path}")
+    local_status=$(getLocalStatus "${repo_path}")
+    remote_status=$(getRemoteStatus "${repo_path}")
 
     # Sichtbare Länge ohne ANSI berechnen, Lücke manuell auffüllen
     # ${#var} zählt Zeichen (nicht Bytes) — korrekt für UTF-8 Symbole wie ✓/✗
     local visible_text pad_len padding
-    visible_text=$(strip_ansi "${local_status}" | tr -d '\n')
+    visible_text=$(stripAnsi "${local_status}" | tr -d '\n')
     pad_len=$(( COL_WIDTH_LOCAL - ${#visible_text} ))
     padding="$(repeat ' ' "${pad_len}")"
 
@@ -151,13 +151,13 @@ print_repo_row() {
 }
 
 # Gibt die Status-Tabelle aller konfigurierten Repos aus.
-print_repos_table() {
-    print_header
+printReposTable() {
+    printHeader
 
     for entry in "${REPOS[@]}"; do
         local repo_path="${entry%%:*}"
         local repo_name="${entry##*:}"
-        print_repo_row "${repo_name}" "${repo_path}"
+        printRepoRow "${repo_name}" "${repo_path}"
     done
 
     echo ""
@@ -166,7 +166,7 @@ print_repos_table() {
 # Gibt offene GitHub Issues mit Label 'blocker' oder 'high-priority' aus.
 #
 # Benötigt: gh CLI, authentifiziert
-print_issues() {
+printIssues() {
     if ! command -v gh &>/dev/null; then
         return
     fi
@@ -214,7 +214,7 @@ if [[ $# -eq 0 ]]; then
 fi
 
 case "$1" in
-    -s|--show) print_repos_table; print_issues ;;
+    -s|--show) printReposTable; printIssues ;;
     -h|--help) usage; exit 0 ;;
     *)
         echo -e "${RED}Unbekannte Option: $1${NC}" >&2
