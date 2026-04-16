@@ -106,6 +106,10 @@ dev-nginx-logs: ## nginx Dev-Proxy Logs verfolgen
 status: ## Git-Status aller Repos (dirty + ahead/behind Remote)
 	@bash scripts/repo-status.sh --show
 
+.PHONY: env-audit
+env-audit: ## .env gegen .env.example prüfen — Drift in allen Repos anzeigen
+	@python3 scripts/env-audit.py --audit
+
 .PHONY: loc
 loc: ## Lines of Code zählen (tokei, alle Sub-Repos + Root)
 	@tokei --hidden . apps/backend apps/frontend apps/ai-service infrastructure
