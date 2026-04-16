@@ -20,7 +20,6 @@ APPNAME = Path(__file__).name
 ROOT    = Path(__file__).parent.parent
 
 REPOS = [
-    ROOT,
     ROOT / "apps" / "backend",
     ROOT / "apps" / "frontend",
     ROOT / "apps" / "ai-service",
