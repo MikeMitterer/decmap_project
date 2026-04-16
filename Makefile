@@ -53,9 +53,18 @@ hints: ## Nützliche Links und Hinweise anzeigen
 	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Frontend"   "https://github.com/users/mangolila/packages/container/package/decisionmap-frontend"
 	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "AI-Service" "https://github.com/users/mangolila/packages/container/package/decisionmap-ai-service"
 	@echo
+	@echo "  ${YELLOW}Lokale Entwicklung${RESET}"
+	@echo
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "App"        "http://int.decisionmap.ai"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "CMS"        "http://cms.int.decisionmap.ai/admin"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "AI-Docs"    "http://int.decisionmap.ai/api/docs"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Mailpit"    "http://192.168.0.25:8025"
+	@echo
 	@echo "  ${YELLOW}Produktion${RESET}"
 	@echo
-	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "App" "https://decisionmap.ai"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "App"        "https://decisionmap.ai"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "CMS"        "https://cms.decisionmap.ai/admin"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "AI-Docs"    "https://decisionmap.ai/api/docs"
 	@echo
 
 ##@ Setup
@@ -72,13 +81,24 @@ setup: ## Lokale .libs/-Symlinks erstellen (DEV_LOCAL muss gesetzt sein)
 ##@ Lokale Entwicklung
 
 .PHONY: dev-up
-dev-up: ## Alle Services starten (Docker im Hintergrund + overmind fuer Frontend + AI-Service)
+dev-up: ## Alle Services starten — nginx-Proxy + Backend (Docker) + overmind (Frontend, AI-Service)
+	docker compose -f infrastructure/docker-compose.dev.yml up -d
 	$(MAKE) -C apps/backend dev-up
 	overmind start -f Procfile.dev
 
 .PHONY: dev-down
-dev-down: ## Docker-Services stoppen
+dev-down: ## Alle Services stoppen — overmind beenden + Docker runterfahren
+	-overmind quit 2>/dev/null || true
 	$(MAKE) -C apps/backend dev-down
+	docker compose -f infrastructure/docker-compose.dev.yml down
+
+.PHONY: dev-nginx-reload
+dev-nginx-reload: ## nginx Dev-Config neu laden (ohne Restart)
+	docker exec decisionmap-nginx-dev nginx -s reload
+
+.PHONY: dev-nginx-logs
+dev-nginx-logs: ## nginx Dev-Proxy Logs verfolgen
+	docker compose -f infrastructure/docker-compose.dev.yml logs -f nginx
 
 ##@ Workspace
 

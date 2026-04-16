@@ -212,6 +212,24 @@ Directus benennt M2M-Aliasfelder auf der "One"-Seite nach dem `one_field`-Wert i
 **Gotcha — Directus 11 Nullable-FK-Validierungsbug:**
 Directus 11 validiert nullable Foreign-Key-Felder (z.B. `tags.parent_id`, `problems.deleted_by`, `solution_approaches.deleted_by`) zur Laufzeit gegen seine eigene Relation-Metadata — auch wenn PostgreSQL `NULL` erlaubt. Ein `PATCH`-Request mit `null` auf einem solchen Feld schlaegt mit einem Validierungsfehler fehl, obwohl die DB die `NULL`-Schreibung akzeptieren wuerde. Fix: die Directus-Relation-Metadata fuer diese Felder ueber die REST API entfernen (`DELETE /relations/{collection}/{field}`). Die PostgreSQL-FK-Constraint bleibt erhalten — nur Directus prueft nicht mehr. `make db-permissions` / `make seed-users` enthalten diesen Fix idempotent. Symptom: `PATCH` auf Item mit Soft-Delete oder selbst-referenzierendem Parent schlaegt mit 400 fehl.
 
+**Gotcha — Directus M2M PATCH — Junction-Record-`id` Pflicht:**
+Beim PATCH einer M2M-Relation (z.B. `problem_tags`, `problem_regions`) unterscheidet Directus anhand der `id` im Junction-Objekt:
+- Junction-Record **mit** `id` → UPDATE (existierender Eintrag bleibt erhalten)
+- Junction-Record **ohne** `id` → INSERT (neuer Eintrag wird angelegt)
+
+Werden alle Tags ohne `id` geschickt (z.B. `[{tag_id: "uuid1"}, ...]`), versucht Directus fuer jeden Tag einen neuen Junction-Row einzufuegen → Unique-Constraint `(problem_id, tag_id)` schlaegt fehl.
+
+**Fix A (include `id`):** Vor dem PATCH existierende Junction-Records laden (`GET /items/problem_tag?filter[problem_id][_eq]=<id>&fields=id,tag_id`), per `tag_id` mappen und die Junction-`id` fuer bereits vorhandene Eintraege mitschicken. Neue Tags bekommen keine `id` → Directus legt sie an. Fehlende Tags → Directus loescht sie.
+
+**Fix B (explicit DELETE + POST) — bevorzugt in `realProblems.ts`:** Scalar-Felder und M2M-Relationen trennen.
+1. `PATCH /items/problems/{id}` — nur Scalar-Felder (kein `tags`/`regions` im Body)
+2. `DELETE /items/problem_tag?filter[problem_id][_eq]=<id>` — alle bestehenden Junction-Records loeschen
+3. `POST /items/problem_tag` — neue Records mit explizitem `problem_id` anlegen
+4. Dasselbe fuer `problem_region`
+5. Re-fetch via `fetchProblemById()` — damit `tagIds` im Rueckgabewert die frisch angelegten Records widerspiegelt
+
+Fix B ist expliziter und funktioniert unabhaengig davon wie Directus M2M intern verarbeitet.
+
 **Gotcha — Directus Filter-Queries in curl / Shell-Scripts:**
 Directus-Filterpfade enthalten eckige Klammern (`filter[field][_eq]=value`). curl interpretiert diese als URL-Bereich und schlaegt mit "URL rejected" fehl. Loesung: `--get --data-urlencode` verwenden oder die gesamte URL in Anfuehrungszeichen setzen und die Klammern mit `%5B`/`%5D` encoden. Beides gilt auch fuer `filter[_and][]`-Arrays.
 
@@ -256,7 +274,7 @@ Directus Flows verbinden Datenereignisse mit dem AI-Service.
 | `problem-submitted` | Action: `problems.items.create` | `POST http://ai-service:8000/hooks/problem-submitted` |
 | `problem-approved` | Action: `problems.items.update` (filter: `status=approved`) | `POST http://ai-service:8000/hooks/problem-approved` |
 | `solution-approved` | Action: `solution_approaches.items.update` (filter: `status=approved`) | `POST http://ai-service:8000/hooks/solution-approved` |
-| `vote-changed` | Action: `votes.items.create` (kein update/delete — `trg_vote_score` hält `problems.vote_score` synchron) | `POST http://ai-service:8000/hooks/vote-changed` |
+| `vote-changed` | Action: `votes.items.create` | `POST http://ai-service:8000/hooks/vote-changed` |
 
 Jeder Flow: Trigger → HTTP-Request-Action → Ziel-URL, Methode POST, Header `X-Webhook-Secret: <WEBHOOK_SECRET>`.
 
@@ -274,7 +292,7 @@ make -C infrastructure setup-vote-flow -- --force
   "entity_type": "{{$trigger.payload.entity_type}}"
 }
 ```
-`new_score` muss **nicht** mitgeschickt werden — der AI-Service berechnet ihn selbst aus `problems.vote_score` (das der PostgreSQL-Trigger `trg_vote_score` synchron updated).
+`new_score` muss **nicht** mitgeschickt werden — der AI-Service liest `problems.vote_score` direkt aus der DB.
 
 ---
 

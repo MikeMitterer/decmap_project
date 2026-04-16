@@ -136,9 +136,16 @@ make -C infrastructure help    # Server-Orchestrierung
 ## Lokale Entwicklung
 
 ```bash
-make dev-up    # Docker (Postgres + Directus) + overmind (Frontend :5000 + AI-Service :8000)
-make dev-down  # Docker-Services stoppen
+make dev-up    # nginx-Proxy + Docker (Postgres + Directus) + overmind (Frontend :3000 + AI-Service :8000)
+make dev-down  # overmind beenden + alle Docker-Services stoppen
 ```
+
+| URL | Dienst |
+|---|---|
+| http://int.decisionmap.ai | App (Frontend) |
+| http://cms.int.decisionmap.ai/admin | CMS (Directus) |
+| http://int.decisionmap.ai/api/docs | AI-Service (Swagger) |
+| http://localhost:8025 | Mailpit (SMTP-Sink) |
 
 Voraussetzung: `overmind` installiert (`brew install overmind`).
 
@@ -279,7 +286,7 @@ Beide Data-Layer (Fake + Real) sind vollständig implementiert.
 
 **Hetzner-Infrastruktur (in Betrieb):** nginx + TLS + Docker Compose laufen. Directus auf Subdomain `cms.decisionmap.ai` (kein `/cms`-Pfad-Prefix, `PUBLIC_URL=https://cms.decisionmap.ai`). SMTP noch offen (Blocker — User-Registrierung): AWS SES in Einrichtung (Domain-Verifizierung läuft, Sandbox-Modus). Tracking: MikeMitterer/decmap_project#1. AI-Service-Image (`decisionmap-ai-service`) auf ghcr.io, deploy via `make -C infrastructure deploy-service SVC=ai-service`.
 
-**Echtzeit-Vote-Updates implementiert:** `useDirectusRealtime.ts` subscribed auf `problems.update` via Directus WebSocket — `trg_vote_score` hält `vote_score` synchron, kein AI-Service-Umweg. Erfordert `WEBSOCKETS_ENABLED=true` + `WEBSOCKETS_REST_AUTH=public` in `backend/.env`.
+**Echtzeit-Vote-Updates implementiert:** `useDirectusRealtime.ts` subscribed auf `problems.update` via Directus WebSocket. Vote-Score wird per REST API berechnet (`POST /items/votes` → `GET` → `PATCH`) — kein PostgreSQL-Trigger, kein AI-Service-Umweg. Directus löst beim `PATCH` automatisch WS-Events aus. Erfordert `WEBSOCKETS_ENABLED=true` + `WEBSOCKETS_REST_AUTH=public` + `PUBLIC_URL` + `CORS_ORIGIN` in `backend/.env`.
 
 Noch ausstehend: Directus-Schema-Import + API-Token + Flows konfigurieren
 (HTTP-Webhooks auf `http://ai-service:8000/hooks/*` für `problem-submitted`, `problem-approved` etc.)

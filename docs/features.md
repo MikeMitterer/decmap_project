@@ -185,16 +185,18 @@ User klickt Vote
       ↓
 POST /items/votes  (Directus REST)
       ↓
-PostgreSQL Trigger trg_vote_score  (synchron)
+GET /items/{collection}/{id}?fields=vote_score  (aktuellen Score laden)
       ↓
-problems.vote_score inkrementiert
-      ↓
-Directus Flow "Vote Score Broadcast"
-      ↓  (ItemsService.updateOne — löst WS-Subscription-Event aus)
+PATCH /items/{collection}/{id}  { vote_score: n+1 }  (via Directus REST)
+      ↓  (löst Directus WS-Event aus)
 Directus WebSocket → alle verbundenen Clients
       ↓
-useDirectusRealtime.ts → applyVoteScore(id, voteScore) → UI aktualisiert
+useDirectusRealtime.ts → applyProblemUpdate(update) → UI aktualisiert
 ```
+
+> **Kein PostgreSQL-Trigger:** `trg_vote_score` / `fn_update_vote_score()` wurden entfernt.
+> Score-Berechnung erfolgt in `realVoting.ts` via REST API. Voraussetzung: `update`-Permission
+> auf `vote_score` für Public-Policy (`make -C apps/backend db-permissions`).
 
 Sofort-Feedback für den votenden User: `ProblemPanel.vue` ruft nach `submitVote()`
 sofort `fetchProblemById()` auf — zeigt echten DB-Wert ohne auf WS-Event zu warten.
@@ -213,6 +215,39 @@ type WebSocketEvent =
 
 Events auf Entity-Ebene — Frontend entscheidet ob Re-fetch oder direktes State-Update.
 
+### Directus WS — nur Scalar-Felder
+
+Directus WS-Subscriptions liefern **ausschließlich Scalar-Felder** — M2M-Relationen
+(`tags`, `regions`) kommen nie im Event-Payload. `applyProblemUpdate` unterscheidet
+daher zwei Fälle:
+
+| Update-Typ | `edited_at` im WS-Event? | Strategie |
+|---|---|---|
+| Vote (`vote_score`) | nein | Scalar-Merge reicht (Score direkt übernehmen) |
+| Edit (Titel, Tags, …) | **ja** | Scalar-Merge sofort + `fetchProblemById()` asynchron für aktuelle `tagIds`/`regionIds` |
+
+Der Scalar-Merge verhindert Flackern; der REST-Nachlade bringt die vollständigen Relationen.
+`ProblemGraph.vue` watcht `props.problems` deep — Graph rendert automatisch neu sobald
+der State updated wird.
+
+### Echtzeit-Edit-Konflikt-Erkennung
+
+Kommt ein WS-Update rein während der User selbst editiert (`canEdit=true` + `isDirty=true`),
+zeigt `ProblemPanel.vue` ein Konflikt-Banner statt die Eingaben still zu überschreiben:
+
+| Zustand | WS-Update kommt rein | Ergebnis |
+|---|---|---|
+| `canEdit=false` (View-Only) | `props.problem` wird durch Parent still aktualisiert | Kein Banner |
+| `canEdit=true`, `isDirty=false` | Edit-Felder + interner Snapshot still aktualisiert | Kein Banner |
+| `canEdit=true`, `isDirty=true` | **Konflikt-Banner** erscheint | User entscheidet |
+
+**Banner-Aktionen:**
+- **Neu laden** → `fetchProblemById()` → Edit-Felder + Snapshot aktualisieren (eigene Eingaben gehen verloren)
+- **×** → Banner schließen, eigene Eingaben bleiben, Konflikt wird ignoriert
+
+**Eigenes Speichern triggert kein Banner:** Nach `handleSave()` wird der Snapshot auf die
+gerade gespeicherten Werte gesetzt — der WS-Echo des eigenen Saves ergibt `isDirty=false`.
+
 ### Frontend — Composables
 
 Beide Composables müssen **explizit** in `onMounted` verbunden werden — sie verbinden
@@ -221,7 +256,7 @@ sich nicht automatisch. Fehlt der `connect()`-Call, bleibt der Socket stumm (kei
 ```typescript
 // pages/index.vue
 const { connect: connectDirectus, disconnect: disconnectDirectus } = useDirectusRealtime({
-  onProblemVoteChanged: applyVoteScore,
+  onProblemUpdated: applyProblemUpdate,
 })
 const { connect: connectAiWs, disconnect: disconnectAiWs } = useRealtimeUpdates({ ... })
 
@@ -232,8 +267,9 @@ onUnmounted(() => { disconnectDirectus(); disconnectAiWs() })
 ### Voraussetzungen
 
 - `WEBSOCKETS_ENABLED=true` und `WEBSOCKETS_REST_AUTH=public` in `apps/backend/.env`
+- `PUBLIC_URL` + `CORS_ORIGIN` korrekt gesetzt — sonst Reconnect-Loop (~3 s) ohne Fehlermeldung
 - Directus Flow "Vote Score Broadcast" angelegt (`make -C infrastructure setup-vote-flow`)
-- nginx `cms.decisionmap.ai`-Serverblock: `proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";`
+- nginx `cms.decisionmap.ai`-Serverblock: Upgrade-Header + `proxy_read_timeout 3600s`
 
 → Vollständige Dokumentation: [`docs/dev-environment.md`](dev-environment.md)
 
