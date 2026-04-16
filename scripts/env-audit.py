@@ -3,6 +3,7 @@
 
 Prüft für jedes Repo ob alle Keys dokumentiert (.env.example) und
 konfiguriert (.env) sind. Meldet Drift ohne Values offenzulegen.
+Zeigt Inline-Kommentare aus .env.example als Kontext an.
 
 Exit-Codes:
     0  — alles in Sync
@@ -35,6 +36,7 @@ class C:
     RED        = "\033[38;5;196m"
     BLUE       = "\033[38;5;33m"
     CYAN       = "\033[38;5;51m"
+    GREY       = "\033[38;5;245m"
     BOLD       = "\033[1m"
     RESET      = "\033[0m"
 
@@ -46,10 +48,10 @@ def usage_line(option: str, description: str, col_width: int = 32) -> None:
 
 def usage() -> None:
     print(f"\nUsage: {APPNAME} [ options ]\n")
-    usage_line("-a | --audit",   "Alle Repos prüfen (Standard)")
+    usage_line("-a | --audit",     "Alle Repos prüfen (Standard)")
     usage_line("-r | --repo PATH", "Nur ein einzelnes Repo prüfen")
-    usage_line("-q | --quiet",   "Nur Fehler ausgeben (kein OK-Status)")
-    usage_line("-h | --help",    "Diese Hilfe anzeigen")
+    usage_line("-q | --quiet",     "Nur Fehler ausgeben (kein OK-Status)")
+    usage_line("-h | --help",      "Diese Hilfe anzeigen")
     print(f"\n{C.BLUE}Beispiele:{C.RESET}")
     print(f"    {C.GREEN}{APPNAME} --audit{C.RESET}")
     print(f"    {C.GREEN}{APPNAME} --repo apps/backend{C.RESET}")
@@ -59,12 +61,13 @@ def usage() -> None:
 # ─── Parsing ──────────────────────────────────────────────────────────────────
 
 class AuditResult(NamedTuple):
-    repo:          Path
-    env_exists:    bool
+    repo:           Path
+    env_exists:     bool
     example_exists: bool
-    undocumented:  list[str]   # in .env, fehlt in .env.example
-    unconfigured:  list[str]   # in .env.example, fehlt in .env
-    synced:        int          # Anzahl Keys in Sync
+    undocumented:   list[str]        # in .env, fehlt in .env.example
+    unconfigured:   list[str]        # in .env.example, fehlt in .env
+    synced:         int              # Anzahl Keys in Sync
+    comments:       dict[str, str]   # Key → Inline-Kommentar aus .env.example
 
 
 def parse_keys(path: Path) -> set[str]:
@@ -74,11 +77,29 @@ def parse_keys(path: Path) -> set[str]:
         line = line.strip()
         if not line or line.startswith("#"):
             continue
-        # KEY=value oder KEY= oder KEY  (ohne =)
         key = line.split("=", 1)[0].strip()
         if key:
             keys.add(key)
     return keys
+
+
+def parse_comments(path: Path) -> dict[str, str]:
+    """Liest Inline-Kommentare aus .env.example — KEY → Kommentar-Text."""
+    comments: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, rest = line.split("=", 1)
+        key = key.strip()
+        # Inline-Kommentar nach dem Wert: KEY=value  # Kommentar
+        if "#" in rest:
+            comment = rest.split("#", 1)[1].strip()
+            if comment:
+                comments[key] = comment
+    return comments
 
 
 def audit_repo(repo: Path) -> AuditResult:
@@ -90,17 +111,18 @@ def audit_repo(repo: Path) -> AuditResult:
     example_exists = example_path.exists()
 
     if not env_exists or not example_exists:
-        return AuditResult(repo, env_exists, example_exists, [], [], 0)
+        return AuditResult(repo, env_exists, example_exists, [], [], 0, {})
 
     env_keys     = parse_keys(env_path)
     example_keys = parse_keys(example_path)
+    comments     = parse_comments(example_path)
 
     undocumented = sorted(env_keys - example_keys)
     unconfigured = sorted(example_keys - env_keys)
     synced       = len(env_keys & example_keys)
 
     return AuditResult(repo, env_exists, example_exists,
-                       undocumented, unconfigured, synced)
+                       undocumented, unconfigured, synced, comments)
 
 
 # ─── Output ───────────────────────────────────────────────────────────────────
@@ -118,9 +140,9 @@ def print_result(result: AuditResult, quiet: bool) -> bool:
     """Gibt den Audit-Befund eines Repos aus. Gibt True zurück wenn Drift."""
     label  = repo_label(result.repo)
     indent = "    "
+    hint   = "      "
 
     has_drift = bool(result.undocumented or result.unconfigured)
-    missing   = not result.env_exists or not result.example_exists
 
     print(f"\n  {C.BLUE}{label}{C.RESET}")
 
@@ -142,9 +164,12 @@ def print_result(result: AuditResult, quiet: bool) -> bool:
 
     for key in result.undocumented:
         print(f"{indent}{C.RED}✗ {key:<35}{C.RESET}  in .env, fehlt in .env.example  {C.YELLOW}(undokumentiert){C.RESET}")
+        print(f"{hint}{C.GREY}→ Bitte in .env.example ergänzen: {key}=  # Beschreibung{C.RESET}")
 
     for key in result.unconfigured:
         print(f"{indent}{C.YELLOW}○ {key:<35}{C.RESET}  in .env.example, fehlt in .env  {C.CYAN}(nicht konfiguriert){C.RESET}")
+        if comment := result.comments.get(key):
+            print(f"{hint}{C.GREY}→ {comment}{C.RESET}")
 
     return True
 
