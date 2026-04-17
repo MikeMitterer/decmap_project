@@ -102,7 +102,7 @@ SES zeigt jetzt zwei DNS-Records die eingetragen werden müssen.
 
 **MX Record:**
 ```
-Name:     mail.decisionmap.ai
+Name:     mail
 Priority: 10
 Value:    feedback-smtp.eu-west-1.amazonses.com.
 ```
@@ -111,20 +111,27 @@ Value:    feedback-smtp.eu-west-1.amazonses.com.
 
 **SPF Record (TXT):**
 ```
-Name:  mail.decisionmap.ai
+Name:  mail
 Value: "v=spf1 include:amazonses.com ~all"
 ```
 
+> ⚠️ **Hetzner Name-Feld — nur Subdomain, nie FQDN:**
+> Im Feld **Name/Host** nur `mail` eingeben — **nicht** `mail.decisionmap.ai`.
+> Hetzner hängt die Zone (`.decisionmap.ai`) automatisch an. Wird `mail.decisionmap.ai`
+> eingetragen, entsteht `mail.decisionmap.ai.decisionmap.ai` → Record ungültig, SES-Verifizierung schlägt fehl.
+>
 > ⚠️ **Trailing Dot — nur beim Value/Ziel-Wert:**
 > Das Ziel des MX-Records muss mit Punkt enden (`amazonses.com.` — nicht `amazonses.com`).
-> Der **Name/Host-Eintrag** (`mail.decisionmap.ai`) wird **ohne** abschließenden Punkt eingegeben.
-> Fehlt der Punkt beim Value, hängt Hetzner die eigene Domain an → MX-Record ungültig.
+> Fehlt der Punkt beim Value, hängt Hetzner die eigene Domain an → MX-Record ebenfalls ungültig.
 
 ### 2b.3 Verifizierung abwarten
 
 - SES prüft die Records automatisch (alle paar Minuten)
 - Status in [SES → Verified Identities → decisionmap.ai → Authentication](https://eu-west-1.console.aws.amazon.com/ses/home?region=eu-west-1#/verified-identities) beobachten
 - `Custom MAIL FROM domain` wechselt von `Pending` → `Verified`
+
+DNS-Propagation parallel prüfen — **nicht** `decisionmap.ai`, sondern die Subdomain:
+[dnschecker.org — mail.decisionmap.ai ALL Records](https://dnschecker.org/all-dns-records-of-domain.php?query=mail.decisionmap.ai&rtype=ALL&dns=google)
 
 [↑ Übersicht](#übersicht)
 
