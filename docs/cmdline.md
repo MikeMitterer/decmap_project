@@ -5,6 +5,14 @@ Der Service muss laufen: `make dev` (lokal) oder `make docker-up` (Container).
 
 ---
 
+## Inhalt
+
+- [Voraussetzungen](#voraussetzungen)
+- [Endpunkte](#endpunkte)
+- [API-Dokumentation (Browser)](#api-dokumentation-browser)
+
+---
+
 ## Voraussetzungen
 
 ```bash
@@ -20,6 +28,8 @@ weggelassen werden. Mit Secret muss jeder Hook-Aufruf den Header mitschicken:
 ```
 -H "X-Webhook-Secret: <dein-secret>"
 ```
+
+[↑ Inhalt](#inhalt)
 
 ---
 
@@ -185,6 +195,8 @@ Eingehende Events:
 {"type": "cluster.updated", "payload": {"id": "uuid-...", "label": "AI Governance", "problem_count": 4}}
 {"type": "vote.changed", "payload": {"entity_id": "test-001", "entity_type": "problem", "new_score": 5}}
 ```
+
+[↑ Inhalt](#inhalt)
 
 ---
 

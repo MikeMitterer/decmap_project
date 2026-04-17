@@ -1,5 +1,24 @@
 # Feature-Spezifikationen
 
+## Inhalt
+
+- [Ahnlichkeitserkennung](#ahnlichkeitserkennung)
+- [Bot-Erkennung](#bot-erkennung)
+- [Echtzeit-Updates (WebSocket)](#echtzeit-updates-websocket)
+- [Internationalisierung (i18n)](#internationalisierung-i18n)
+- [Markdown in Losungen](#markdown-in-losungen)
+- [Ubersetzung](#ubersetzung)
+- [Tagging und Regionen](#tagging-und-regionen)
+- [Editieren von Eintragen](#editieren-von-eintragen)
+- [KI-generierte Losungsansatze](#ki-generierte-losungsansatze)
+- [Theme-System](#theme-system)
+- [Permalink-System](#permalink-system)
+- [Authentifizierung](#authentifizierung)
+- [Admin-Moderations-Queue](#admin-moderations-queue)
+- [Virtuelles Scrollen (Table-View)](#virtuelles-scrollen-table-view)
+
+---
+
 ## Ahnlichkeitserkennung
 
 Verhindert Duplikate bevor sie in die Moderations-Queue gelangen.
@@ -93,6 +112,8 @@ export function useSimilarity() {
 }
 ```
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## Bot-Erkennung
@@ -157,6 +178,8 @@ Honeypot-Feld wird nie in der DB gespeichert — nur gepruft.
 ### Bewusst weggelassen
 
 - CAPTCHA, Browser-Fingerprinting, ML-basierte Bot-Detection
+
+[↑ Inhalt](#inhalt)
 
 ---
 
@@ -273,6 +296,8 @@ onUnmounted(() => { disconnectDirectus(); disconnectAiWs() })
 
 → Vollständige Dokumentation: [`docs/dev-environment.md`](dev-environment.md)
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## Internationalisierung (i18n)
@@ -288,6 +313,8 @@ Nuxt i18n von Anfang an eingebunden. Alle UI-Texte uber `t()`, keine hardcodiert
 ```
 
 Sprachdateien: `frontend/i18n/locales/en.json` — MVP nur Englisch, Struktur vollstandig.
+
+[↑ Inhalt](#inhalt)
 
 ---
 
@@ -311,6 +338,8 @@ function renderComment(content: string): string {
 
 Links offnen immer in `target="_blank"` mit `rel="noopener noreferrer"`.
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## Ubersetzung
@@ -330,6 +359,8 @@ Im Real-Modus: KI-Service (TranslationService via konfiguriertem LLM-Provider �
 
 `_en`-Felder sind nur sichtbar wenn Nicht-Englisch erkannt wird — kein visueller Overhead fuer englischsprachige User.
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## Tagging und Regionen
@@ -345,6 +376,8 @@ Probleme ohne Region gelten als global relevant.
 Regionen beeinflussen das Ranking (EU-Probleme hoher fur EU-User).
 Filterung moglich aber nicht erzwungen.
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## Editieren von Eintragen
@@ -354,6 +387,8 @@ Filterung moglich aber nicht erzwungen.
 - Edit-History nur fur Moderatoren sichtbar
 - `edited_at` wird im UI angezeigt
 - KI-generierte Eintrage (`is_ai_generated: true`) nur vom Admin editierbar
+
+[↑ Inhalt](#inhalt)
 
 ---
 
@@ -365,6 +400,8 @@ Filterung moglich aber nicht erzwungen.
 - Ranking separat von menschlichen Beitragen
 - Automatisch generiert bei `approved`-Status
 - Keine menschliche Moderation, aber als KI-Inhalt gekennzeichnet
+
+[↑ Inhalt](#inhalt)
 
 ---
 
@@ -403,6 +440,8 @@ Blockierendes Inline-Script im `<head>` (via `nuxt.config.ts`):
 Ohne explizite Theme-Wahl wird `prefers-color-scheme` ausgewertet und das
 entsprechende Default-Theme geladen (default-light oder midnight-dark).
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## Permalink-System
@@ -423,6 +462,8 @@ Teilbare Links zu einzelnen Problemen: `/?problem=<id>`
 
 Im Detail-Panel kopiert „Share link" den Permalink (`origin + /?problem=<id>`) in die Zwischenablage.
 Feedback: „Link copied!" fuer 2 Sekunden.
+
+[↑ Inhalt](#inhalt)
 
 ---
 
@@ -473,6 +514,8 @@ Mailpit als SMTP-Sink — alle Mails landen auf `http://localhost:8025`, kein ec
 
 Details zur Directus-Konfiguration (`USERS_REGISTER_ALLOW_PUBLIC`, `USER_REGISTER_URL_ALLOW_LIST`, Permissions): [`backend.md`](backend.md)
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## Admin-Moderations-Queue
@@ -488,6 +531,8 @@ Details zur Directus-Konfiguration (`USERS_REGISTER_ALLOW_PUBLIC`, `USER_REGISTE
 Filter- und Sortierlogik ist in `useModerationFilter.ts` gekapselt (nicht inline in der Komponente) — 13 Unit-Tests in `useModerationFilter.spec.ts`.
 
 i18n-Keys: `admin.searchPlaceholder`, `admin.sortNewest`, `admin.sortOldest`
+
+[↑ Inhalt](#inhalt)
 
 ---
 

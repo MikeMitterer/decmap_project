@@ -1,9 +1,30 @@
 # Code-Konventionen und Beispiele
 
+## Inhalt
+
+- [Architekturprinzip: Trennung UI und Business Logic](#architekturprinzip-trennung-ui-und-business-logic)
+- [Namenskonventionen](#namenskonventionen)
+- [TypeScript — Typisierung](#typescript-typisierung)
+- [Vue / Nuxt](#vue--nuxt)
+- [Composables](#composables)
+- [Python / FastAPI](#python-fastapi)
+- [Workspace Scripts (scripts/)](#workspace-scripts-scripts)
+- [Klassenstruktur](#klassenstruktur)
+- [Testbarkeit](#testbarkeit)
+- [Dokumentation](#dokumentation)
+- [Fehlerbehandlung](#fehlerbehandlung)
+- [Logging](#logging)
+- [Datenbank-Zugriff (KI-Service)](#datenbank-zugriff-ki-service)
+- [Testing](#testing)
+
+---
+
 ## Architekturprinzip: Trennung UI und Business Logic
 
 **Frontend:** Komponenten = nur Darstellung. Business Logic, Datentransformation, API-Kommunikation → Composables.
 **Backend:** Router = nur HTTP-Belange. Business Logic → Services. Services haben keine Kenntnis von HTTP.
+
+[↑ Inhalt](#inhalt)
 
 ---
 
@@ -70,6 +91,8 @@ result = [x for x in problems if x.status == "approved"]
 - Spalten: `snake_case` — `cluster_id`, `vote_score`, `created_at`
 - Fremdschlussel: `{tabelle_singular}_id` — `problem_id`, `user_id`
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## TypeScript — Typisierung
@@ -102,6 +125,8 @@ async function fetchApprovedProblems(): Promise<Problem[]> {
   return problems ?? []
 }
 ```
+
+[↑ Inhalt](#inhalt)
 
 ---
 
@@ -147,6 +172,8 @@ const emit = defineEmits<{
 </script>
 ```
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## Composables
@@ -174,6 +201,8 @@ export function useProblems() {
   return { problems, loading, error, fetchApprovedProblems }
 }
 ```
+
+[↑ Inhalt](#inhalt)
 
 ---
 
@@ -250,6 +279,8 @@ def cluster(...):
     import hdbscan  # lokaler Import — patch() greift nicht
 ```
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## Workspace Scripts (scripts/)
@@ -302,6 +333,8 @@ Kritische Gotchas (Details: `/code-standards`):
 - **Lib-Funktionen geben keine Ausgaben** — nur differenzierte Exit-Codes (2, 3, …); Fehlermeldungen gehören in den Aufrufer.
 - **`readonly VAR="$(cmd)"`** gibt immer Exit-Code 0 — `|| exit 1` dahinter triggert nie. Stattdessen: `VAR="$(cmd)" || _rc=$?` dann `readonly VAR`.
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## Klassenstruktur
@@ -325,6 +358,8 @@ class SpamFilter:
     def evaluate(self, text: str) -> FilterResult: ...      # public
     def _build_prompt(self, text: str) -> str: ...           # private
 ```
+
+[↑ Inhalt](#inhalt)
 
 ---
 
@@ -351,6 +386,8 @@ export function useVoting(apiClient: DirectusClient = defaultClient) { ... }
 
 - Funktionen klein und fokussiert — eine Sache pro Funktion
 - Seiteneffekte isolieren — reine Transformationslogik von I/O trennen
+
+[↑ Inhalt](#inhalt)
 
 ---
 
@@ -380,6 +417,8 @@ def generate_embedding(text: str) -> list[float]:
 async function fetchApprovedProblems(): Promise<Problem[]>
 ```
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## Fehlerbehandlung
@@ -388,6 +427,8 @@ async function fetchApprovedProblems(): Promise<Problem[]>
 - Mit Kontext loggen — `consola` (Frontend) / `structlog` (Backend)
 - Benutzer-Fehlermeldungen: generisch, keine internen Details
 - Alle async-Operationen in try/catch
+
+[↑ Inhalt](#inhalt)
 
 ---
 
@@ -413,6 +454,8 @@ logger = structlog.get_logger()
 logger.info("embedding_generated", problem_id=problem_id, duration_ms=duration)
 ```
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## Datenbank-Zugriff (KI-Service)
@@ -429,6 +472,8 @@ class ProblemRepository:
             await cursor.execute("SELECT * FROM problems WHERE status = %s", (ProblemStatus.APPROVED,))
             return await cursor.fetchall()
 ```
+
+[↑ Inhalt](#inhalt)
 
 ---
 

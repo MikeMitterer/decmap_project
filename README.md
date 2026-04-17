@@ -61,7 +61,9 @@ DecisionMap/                     ← Workspace-Root (Issues, Doku, CI-Koordinati
 │   ├── conventions.md           ← Code-Konventionen mit Beispielen
 │   ├── data-model.md            ← Vollständiges Datenbankschema
 │   ├── features.md              ← Feature-Spezifikationen
-│   └── cmdline.md               ← curl-Beispiele für alle API-Endpunkte
+│   ├── dev-environment.md       ← Lokale Entwicklungsumgebung (Ports, Fake-Daten, venv)
+│   ├── cmdline.md               ← curl-Beispiele für alle API-Endpunkte
+│   └── ses-setup.md             ← AWS SES: Domain-Verifizierung → SMTP → Production Access
 ├── scripts/                     ← Workspace-Skripte
 │   ├── db-backup.sh             ← Einheitliches DB-Backup/Restore (Backend + Infrastructure)
 │   ├── gen-fakedata.py          ← Verteilt Seed-Daten an Consumer-Repos

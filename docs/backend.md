@@ -1,5 +1,21 @@
 # Infrastructure und Operations
 
+## Inhalt
+
+- [Umgebungsvariablen](#umgebungsvariablen)
+- [Feature Flags](#feature-flags)
+- [Directus-Einrichtung](#directus-einrichtung)
+- [Datenfluss](#datenfluss)
+- [Code-Formatierung und Linting](#code-formatierung-und-linting)
+- [CI/CD — Jenkins Pipeline](#cicd--jenkins-pipeline)
+- [Makefile-Struktur](#makefile-struktur)
+- [Versionierung](#versionierung)
+- [Git-Konventionen](#git-konventionen)
+- [Seed-Daten](#seed-daten)
+- [Backup](#backup)
+
+---
+
 ## Umgebungsvariablen
 
 Nie hardcoden. Immer aus der Umgebung lesen. Alle in `.env.example` dokumentiert.
@@ -71,6 +87,8 @@ make build
 # infrastructure
 make deploy-service SVC=frontend
 ```
+
+[↑ Inhalt](#inhalt)
 
 ---
 
@@ -173,7 +191,7 @@ docker compose up -d --no-deps --force-recreate backend
 
 Tipp: `GET /server/ping` antwortet sofort mit `{"data":"pong"}` — unabhängig von SMTP. Eignet sich für einfache Verfügbarkeitsprüfungen ohne den SMTP-Timeout-Pfad.
 
-**SMTP-Provider — Wechsel:** Mailjet (unzuverlässig) → smtp2go evaluiert → **AWS SES** gewählt (siehe Abschnitt unten).
+**SMTP-Provider — Wechsel:** Mailjet (unzuverlässig) → smtp2go evaluiert → **AWS SES** gewählt (vollständige Einrichtungsanleitung: [`docs/ses-setup.md`](ses-setup.md)).
 Bis zur Konfiguration: `EMAIL_SMTP_HOST=` (leer) — sonst 60s-Timeout bei Container-Start.
 Tracking: MikeMitterer/decmap_project#1.
 
@@ -294,6 +312,8 @@ make -C infrastructure setup-vote-flow -- --force
 ```
 `new_score` muss **nicht** mitgeschickt werden — der AI-Service liest `problems.vote_score` direkt aus der DB.
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## Datenfluss
@@ -316,6 +336,8 @@ User reicht Problem ein
     → Frontend liest freigegebene Probleme + Cluster aus Directus
     → Cytoscape.js rendert Graph
 ```
+
+[↑ Inhalt](#inhalt)
 
 ---
 
@@ -341,6 +363,8 @@ make format-frontend  # Prettier anwenden
 make lint-backend     # ruff check
 make format-backend   # ruff format
 ```
+
+[↑ Inhalt](#inhalt)
 
 ---
 
@@ -521,6 +545,8 @@ docker compose version   # → Docker Compose version v2.x.x
 
 Bei `docker.io`-Installation (Ubuntu-Paket statt Docker-Repo) muss zuerst das offizielle Docker-Repository eingerichtet werden.
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## Makefile-Struktur
@@ -590,6 +616,8 @@ make build / deploy                                   # Deploy
 make tag-patch / tag-minor / tag-major                # Versioning
 ```
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## Versionierung
@@ -636,6 +664,8 @@ Build-Scripts verwenden `gitDockerTag` aus `version.lib.sh` (BashLib) fuer Docke
 
 Snapshot-Tags werden automatisch vom Jenkins-Build erzeugt — nie manuell.
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## Git-Konventionen
@@ -664,6 +694,8 @@ chore/<kurze-beschreibung>
 - `main` ist immer deploybar — Jenkins ist die einzige Schranke
 - Direkte Commits auf `main` sind erlaubt (kleines Team)
 - Feature-Branches optional, aber empfohlen fuer groessere Aenderungen
+
+[↑ Inhalt](#inhalt)
 
 ---
 
@@ -695,6 +727,8 @@ make db-reset            # DB zurucksetzen + Migrationen + Seed (nur lokal!)
 ```
 
 Dieselben Files in `docker-compose.test.yml` — kein separater Test-Datensatz.
+
+[↑ Inhalt](#inhalt)
 
 ---
 

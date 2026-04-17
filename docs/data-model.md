@@ -1,5 +1,14 @@
 # Datenmodell
 
+## Inhalt
+
+- [Tabellen](#tabellen)
+- [Beziehungen](#beziehungen)
+- [Datenbank-Versionierung (Alembic)](#datenbank-versionierung-alembic)
+- [Validierung (3 Schichten)](#validierung-3-schichten)
+
+---
+
 ## Tabellen
 
 **`problems`** — Kernentitat. Erfasst ein KI-Problem aus dem Unternehmensalltag. Durchlauft einen Moderations-Workflow vor der Veroffentlichung. Anonyme Submissions erlaubt. Titel und Beschreibung werden automatisch ins Englische ubersetzt — Embeddings und Clustering laufen ausschliesslich auf den englischen Feldern.
@@ -137,6 +146,10 @@ moderator_id        FK → directus_users
 created_at          timestamp
 ```
 
+[↑ Inhalt](#inhalt)
+
+---
+
 ## Beziehungen
 
 ```
@@ -148,6 +161,10 @@ users ──< problems ──< solution_approaches
               │
               └──>< problem_region >──< regions
 ```
+
+[↑ Inhalt](#inhalt)
+
+---
 
 ## Datenbank-Versionierung (Alembic)
 
@@ -209,6 +226,10 @@ Stufe 1 (Deploy A): Spalte als deprecated markieren, Code nutzt sie nicht mehr
 Stufe 2 (Deploy B): Spalte in separater Migration loschen
 ```
 
+[↑ Inhalt](#inhalt)
+
+---
+
 ## Validierung (3 Schichten)
 
 Validierung lauft auf drei Schichten — keine Schicht vertraut der vorherigen blind.
@@ -267,3 +288,5 @@ ALTER TABLE votes
 
 Validierungsregeln die sich andern mussen auf allen drei Schichten gleichzeitig angepasst werden.
 Zod-Schema und Pydantic-Modell mussen dieselben Regeln widerspiegeln.
+
+[↑ Inhalt](#inhalt)

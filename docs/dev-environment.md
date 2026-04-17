@@ -1,5 +1,18 @@
 # Lokale Entwicklungsumgebung
 
+## Inhalt
+
+- [Voraussetzungen](#voraussetzungen)
+- [Architektur der lokalen Umgebung](#architektur-der-lokalen-umgebung)
+- [Starten und Stoppen](#starten-und-stoppen)
+- [Ersteinrichtung (neues Dev-Gerät)](#ersteinrichtung-neues-dev-gerät)
+- [Fake-Daten vs. echte Daten](#fake-daten-vs-echte-daten)
+- [Echtzeit-Updates — Grundanforderung](#echtzeit-updates-grundanforderung)
+- [AI-Service venv-Gotcha](#ai-service-venv-gotcha)
+- [Procfile.dev](#procfiledev)
+
+---
+
 ## Voraussetzungen
 
 | Tool | Zweck | Version |
@@ -12,6 +25,8 @@
 
 **Docker Compose V2 auf Ubuntu:** Das Ubuntu-Paket `docker.io` liefert kein `docker compose` (V2).
 Offizielles Docker-Repository + `docker-compose-plugin` installieren.
+
+[↑ Inhalt](#inhalt)
 
 ---
 
@@ -53,6 +68,8 @@ Mailpit läuft separat (z.B. auf Unraid oder lokal) — nicht Teil von `make dev
 | http://cms.int.decisionmap.ai/admin | Directus Admin |
 | http://int.decisionmap.ai/api/docs | AI-Service (FastAPI Swagger) |
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## Starten und Stoppen
@@ -77,6 +94,8 @@ make -C apps/ai-service dev    # nur AI-Service
 `make dev-up` blockiert im Terminal (overmind läuft im Vordergrund). `make dev-down` aus
 einem zweiten Terminal-Tab aufrufen — oder Ctrl+C in overmind und danach
 `make -C apps/backend dev-down && docker compose -f infrastructure/docker-compose.dev.yml down`.
+
+[↑ Inhalt](#inhalt)
 
 ---
 
@@ -152,6 +171,8 @@ DEV_TOOLS=true                 # Dev-Tools-Seite (/dev-tools) aktivieren — in 
                                # Erfordert Admin-Login — ohne Login werden Tools ausgeblendet
 ```
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## Fake-Daten vs. echte Daten
@@ -170,6 +191,8 @@ make fakedata-sync   # data/*.json → apps/frontend (camelCase) + apps/ai-servi
 
 `data/*.json` (snake_case, UUIDs) sind die einzige Quelle der Wahrheit — nie direkt in
 Consumer-Repos editieren.
+
+[↑ Inhalt](#inhalt)
 
 ---
 
@@ -265,6 +288,8 @@ Ohne Upgrade-Header schlägt der WS-Handshake lautlos fehl.
 Ohne `proxy_read_timeout 3600s` wird die Verbindung nach 60 s Inaktivität getrennt —
 auch wenn Directus Pings schickt (Ping-Intervall kann > 60 s sein).
 
+[↑ Inhalt](#inhalt)
+
 ---
 
 ## AI-Service venv-Gotcha
@@ -283,6 +308,8 @@ rm -rf .venv
 python3.11 -m venv .venv
 .venv/bin/pip install -r requirements.txt -r requirements-dev.txt
 ```
+
+[↑ Inhalt](#inhalt)
 
 ---
 
