@@ -218,6 +218,9 @@ Wenn `dns.hetzner.com` ebenfalls blockiert: DNS auf Route 53 oder Cloudflare del
 
 **Hinweis:** AWS hat TXT-basierte Domain-Verifizierung 2024 abgeschafft — nur noch DKIM-CNAMEs werden unterstützt.
 
+**Gotcha — Custom MAIL FROM Domain — AWS-Standard nicht übernehmen:**
+SES schlägt `no-reply.decisionmap.ai` als Standard-Subdomain vor. Bessere Wahl: `mail.decisionmap.ai` (kürzer, klarer, zukunftssicher). Im Bearbeiten-Dialog im Abschnitt *Benutzerdefinierte MAIL-From-Domain* vor dem Speichern anpassen. Für Custom MAIL FROM sind zwei DNS-Records nötig: MX (`feedback-smtp.eu-west-1.amazonses.com.`, Priority 10) und SPF-TXT (`v=spf1 include:amazonses.com ~all`) — beide auf `mail.decisionmap.ai`. Trailing Dot gilt auch hier: nur beim MX-Ziel-Wert, **nicht** beim Name/Host-Eintrag. Details: [`docs/ses-setup.md#phase-2b`](ses-setup.md).
+
 **Gotcha — Directus Permissions nie per direktem SQL setzen:**
 `INSERT INTO directus_permissions ...` umgeht den Directus-In-Memory-Cache. Permissions greifen dann erst nach einem Neustart — ohne sichtbare Fehlermeldung erscheint trotzdem 403. Permissions immer ueber die Directus REST API setzen (`PATCH /policies/{id}` oder `POST /permissions`). `make db-permissions` und `make seed-users` verwenden ausschliesslich REST-Aufrufe.
 
