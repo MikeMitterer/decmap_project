@@ -66,6 +66,7 @@ DecisionMap/                     ← Workspace-Root (Issues, Doku, CI-Koordinati
 │   └── ses-setup.md             ← AWS SES: Domain-Verifizierung → SMTP → Production Access
 ├── scripts/                     ← Workspace-Skripte
 │   ├── db-backup.sh             ← Einheitliches DB-Backup/Restore (Backend + Infrastructure)
+│   ├── env-audit.py             ← .env vs .env.example Drift-Erkennung (alle Repos, CI-fähig)
 │   ├── gen-fakedata.py          ← Verteilt Seed-Daten an Consumer-Repos
 │   ├── git-push-all.sh          ← Git-Push in allen ausgecheckten Sub-Repos
 │   ├── repo-status.sh           ← Git-Status aller Sub-Repos

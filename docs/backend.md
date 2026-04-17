@@ -585,6 +585,7 @@ make status            # Git-Status aller Workspace-Repos (dirty + ahead/behind 
 make fakedata-sync     # Fake-Daten aus data/ generieren und an Consumer-Repos verteilen
 make dev-up            # Docker-Services + overmind (Frontend + AI-Service via Procfile.dev)
 make dev-down          # Docker-Services stoppen
+make env-audit         # .env vs .env.example Drift-Erkennung (alle Repos; Exit-Code 1 bei Drift)
 make lint              # → delegiert an apps/frontend/ und apps/ai-service/
 make test              # → delegiert an apps/frontend/ und apps/ai-service/
 
