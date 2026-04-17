@@ -9,6 +9,7 @@ Production Access → Directus-Konfiguration → Systemtest.
 
 - [Phase 1 — AWS SES Grundsetup](#phase-1--aws-ses-grundsetup)
 - [Phase 2 — Domain verifizieren](#phase-2--domain-verifizieren-decisionmapai)
+- [Phase 2b — Custom MAIL FROM Domain](#phase-2b--custom-mail-from-domain)
 - [Phase 3 — SPF + DMARC](#phase-3--spf--dmarc-dns-absicherung)
 - [Phase 4 — Absender-Adresse verifizieren](#phase-4--absender-adresse-verifizieren)
 - [Phase 5 — Sandbox: Zieladresse verifizieren + Tests](#phase-5--sandbox-zieladresse-verifizieren--tests)
@@ -68,6 +69,62 @@ SES zeigt jetzt drei CNAME-Records für DKIM.
 - Status wechselt von `Pending` → `Verified`
 - Kann bis zu **48 Stunden** dauern (meist < 30 Minuten)
 - [SES Verified Identities](https://eu-west-1.console.aws.amazon.com/ses/home?region=eu-west-1#/verified-identities) → Status beobachten
+
+[↑ Übersicht](#übersicht)
+
+---
+
+## Phase 2b — Custom MAIL FROM Domain
+
+Standardmäßig verwendet SES `amazonses.com` im unsichtbaren `Return-Path`-Header (Bounce-Adresse).
+Mit einer **Custom MAIL FROM Domain** kommt dieser Header von deiner eigenen Domain →
+bessere DMARC-Konformität + Bounce-Handling direkt über AWS.
+
+> AWS SES zeigt in der Console einen Hinweis auf fehlende DNS-Records — das ist dieser Schritt.
+
+### 2b.1 Custom MAIL FROM in SES aktivieren
+
+1. [SES → Verified Identities](https://eu-west-1.console.aws.amazon.com/ses/home?region=eu-west-1#/verified-identities) → `decisionmap.ai` auswählen
+2. Reiter **Authentication** → Abschnitt **Benutzerdefinierte MAIL-From-Domain** → **Bearbeiten** (oben rechts im Abschnitt)
+3. MAIL FROM domain anpassen: `mail.decisionmap.ai`
+
+   > ⚠️ **AWS schlägt `no-reply.decisionmap.ai` als Standard vor — diesen Wert nicht einfach übernehmen.**
+   > Besser eine sprechende Subdomain wie `mail.decisionmap.ai` wählen: klarer, kürzer, zukunftssicher.
+   > Den Wert im Bearbeiten-Dialog vor dem Speichern anpassen.
+
+4. **Save changes**
+
+SES zeigt jetzt zwei DNS-Records die eingetragen werden müssen.
+
+### 2b.2 DNS-Records bei Hetzner eintragen
+
+[dns.hetzner.com](https://dns.hetzner.com) → Zone `decisionmap.ai` → **Add record**
+
+**MX Record:**
+```
+Name:     mail.decisionmap.ai
+Priority: 10
+Value:    feedback-smtp.eu-west-1.amazonses.com.
+```
+
+> Hetzner DNS hat für MX zwei separate Felder — **Priority:** `10`, **Mail server (Value):** `feedback-smtp.eu-west-1.amazonses.com.`
+
+**SPF Record (TXT):**
+```
+Name:  mail.decisionmap.ai
+Value: "v=spf1 include:amazonses.com ~all"
+```
+
+> ⚠️ **Trailing Dot — nur beim Value/Ziel-Wert:**
+> Das Ziel des MX-Records muss mit Punkt enden (`amazonses.com.` — nicht `amazonses.com`).
+> Der **Name/Host-Eintrag** (`mail.decisionmap.ai`) wird **ohne** abschließenden Punkt eingegeben.
+> Fehlt der Punkt beim Value, hängt Hetzner die eigene Domain an → MX-Record ungültig.
+
+### 2b.3 Verifizierung abwarten
+
+- SES prüft die Records automatisch (alle paar Minuten)
+- Status in [SES → Verified Identities → decisionmap.ai → Authentication](https://eu-west-1.console.aws.amazon.com/ses/home?region=eu-west-1#/verified-identities) beobachten
+- `Custom MAIL FROM domain` wechselt von `Pending` → `Verified`
 
 [↑ Übersicht](#übersicht)
 
@@ -302,6 +359,7 @@ Nach Produktionsfreigabe den kompletten Registrierungs-Flow testen:
 | SES Production Access | [→ Get Set Up](https://eu-west-1.console.aws.amazon.com/ses/home?region=eu-west-1#/get-set-up) |
 | IAM Users | [console.aws.amazon.com/iam](https://console.aws.amazon.com/iam/home#/users) |
 | Hetzner DNS | [dns.hetzner.com](https://dns.hetzner.com) |
+| DNS-Propagation prüfen | [dnschecker.org — decisionmap.ai ALL Records](https://dnschecker.org/all-dns-records-of-domain.php?query=decisionmap.ai&rtype=ALL&dns=google) |
 | Directus Admin Email | [cms.decisionmap.ai/admin/settings/email](https://cms.decisionmap.ai/admin/settings/email) |
 | SMTP Endpoint | `email-smtp.eu-west-1.amazonaws.com:587` |
 | Tracking Issue | MikeMitterer/decmap_project#1 |
