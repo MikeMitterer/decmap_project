@@ -30,7 +30,7 @@ Diese Variablen gehoeren nicht in `.env.example` — sie werden einmalig in der 
 | `DEV_MAKE` | `MakeLib`-Verzeichnis | Root-`Makefile` + `.templates/Makefile` — `include ${DEV_MAKE}/colours.mk`, `tools.mk` |
 | `DEV_DOCKER` | Docker-Hilfsskripte | `.templates/docker/build.sh` — Build + Push |
 | `BASH_LIBS` | Bash-Bibliotheken (`*.lib.sh`) | `.templates/docker/build.sh` — sourced via `. ${BASH_LIBS}/build.lib.sh` usw. |
-| `BASH_TOOLS` | Bash-Tools (`local2Server.sh` usw.) | `.templates/Makefile` — `lh2server`/`update`-Targets |
+| `BASH_TOOLS` | Bash-Tools (`genCerts.sh` usw.) | `.templates/docker/build.sh` — Zertifikate in Docker-Image kopieren |
 
 ### Applikation (`.env` / Runtime)
 
@@ -558,6 +558,17 @@ Jedes Sub-Repo hat ein eigenes Makefile fuer seinen Kontext. `make help` zeigt d
 
 Konventionen (Struktur, `##@`-Gruppen, `.PHONY`, `info`/`hints`-Targets, Farben): `/code-standards`
 
+**Comment-Syntax (awk-basiertes `make help`):**
+
+```makefile
+##@ Setup                    # Gruppen-Header (gelb eingerückt)
+
+.PHONY: setup
+setup: ## Symlinks erstellen  # Target + Beschreibung (awk parst ":.*## ")
+```
+
+`help`-Regel greift alle Zeilen mit `##@` (Gruppen) und alle Targets mit `## desc` — kein Boilerplate pro Target nötig. Die `THEME_*`-Variablen (`THEME_COLOR_GROUP`, `THEME_COLOR_TARGET`, `THEME_COLOR_DESC`) kommen aus MakeLib (`include ${DEV_MAKE}/colours.mk` + `include ${DEV_MAKE}/tools.mk`). `.templates/Makefile` verwendet den älteren `usageLine2`/`infoLine2`-Stil — bei neuen Repos das Root-Makefile als Vorlage nehmen.
+
 `make help` unterstützt Farbthemen via `MAKE_THEME` (Env-Variable oder `.env`): `classic` (Standard), `ocean`, `earth`, `night`, `mono`, `sunset`, `forest`, `neon`.
 
 | Makefile | Zustandig fuer |
@@ -568,7 +579,7 @@ Konventionen (Struktur, `##@`-Gruppen, `.PHONY`, `info`/`hints`-Targets, Farben)
 | `apps/frontend/Makefile` | Dev-Server, Lint, Test, Build, Versioning |
 | `apps/ai-service/Makefile` | Dev-Server, Lint, Test, Build, DB-Migrationen, Versioning |
 
-[`.templates/Makefile`](../.templates/Makefile) ist ein generisches Ausgangs-Template. Benoetigt `DEV_MAKE`-Env-Variable (zeigt auf `MakeLib`).
+[`.templates/Makefile`](../.templates/Makefile) ist ein generisches Ausgangs-Template. Benoetigt nur `DEV_MAKE` — kein `setup`-Target, kein `DEV_LOCAL`. Root-Makefile als Vorlage bevorzugen (nutzt aktuellen `##@`/`## desc`-Stil statt dem aelteren `usageLine2`/`infoLine2`).
 
 **Versioning-Voraussetzung:** `bumpVer` benoetigt `BASH_LIBS` und eine Versionsdatei (`package.json`, `pyproject.toml` oder `VERSION`). Jedes Sub-Repo muss genau eine davon enthalten:
 
