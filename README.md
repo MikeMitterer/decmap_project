@@ -89,6 +89,7 @@ und sind per `.gitignore` aus dem Root ausgeschlossen.
 
 ```bash
 make help          # Alle verfügbaren Befehle anzeigen
+make hints         # Lokale URLs (via Dev-Proxy + direkt) und nützliche Links
 make info          # Workspace-Umgebungsvariablen
 make setup         # .libs/-Symlinks erstellen (einmalig nach dem Klonen)
 make status        # Git-Status aller Sub-Repos (dirty + ahead/behind Remote)
@@ -143,12 +144,23 @@ make dev-up    # nginx-Proxy + Docker (Postgres + Backend-API :8001) + overmind 
 make dev-down  # overmind beenden + alle Docker-Services stoppen
 ```
 
+**Via Dev-Proxy** (`make dev-nginx-up`):
+
 | URL | Dienst |
 |---|---|
 | http://int.decisionmap.ai | App (Frontend) |
 | http://backend.int.decisionmap.ai | Backend API (FastAPI) |
 | http://int.decisionmap.ai/api/docs | AI-Service (Swagger) |
-| http://localhost:8001/docs | FastAPI Backend (Swagger, Port 8001) |
+
+**Direkt** (ohne Proxy):
+
+| URL | Dienst |
+|---|---|
+| http://localhost:3000 | Frontend |
+| http://localhost:8001 | Backend API (FastAPI) |
+| http://localhost:8001/docs | Backend Swagger |
+| http://localhost:8000 | AI-Service |
+| http://localhost:8000/docs | AI-Service Swagger |
 | http://localhost:8025 | Mailpit (SMTP-Sink) |
 | http://localhost:8080 | Adminer (DB-UI, Server: `postgres`) |
 

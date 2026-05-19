@@ -53,12 +53,21 @@ hints: ## Nützliche Links und Hinweise anzeigen
 	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Frontend"   "https://github.com/users/mangolila/packages/container/package/decisionmap-frontend"
 	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "AI-Service" "https://github.com/users/mangolila/packages/container/package/decisionmap-ai-service"
 	@echo
-	@echo "  ${YELLOW}Lokale Entwicklung${RESET}"
+	@echo "  ${YELLOW}Lokale Entwicklung — via Dev-Proxy (make dev-nginx-up)${RESET}"
 	@echo
-	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "App"         "http://int.decisionmap.ai"
-	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Backend API" "http://backend.int.decisionmap.ai"
-	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "AI-Docs"     "http://int.decisionmap.ai/api/docs"
-	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Mailpit"     "http://192.168.0.25:8025"
+	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "App"              "http://int.decisionmap.ai"
+	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "Backend API"      "http://backend.int.decisionmap.ai"
+	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "AI-Docs"          "http://int.decisionmap.ai/api/docs"
+	@echo
+	@echo "  ${YELLOW}Lokale Entwicklung — Direkt (ohne Proxy)${RESET}"
+	@echo
+	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "Frontend"         "http://localhost:3000"
+	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "Backend API"      "http://localhost:8001"
+	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "Backend Docs"     "http://localhost:8001/docs"
+	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "AI-Service"       "http://localhost:8000"
+	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "AI-Service Docs"  "http://localhost:8000/docs"
+	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "Adminer"          "http://localhost:8080"
+	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "Mailpit"          "http://192.168.0.25:8025"
 	@echo
 	@echo "  ${YELLOW}Produktion${RESET}"
 	@echo

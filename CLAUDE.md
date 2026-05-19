@@ -197,6 +197,7 @@ export function useProblems() {
 - **FastAPI Soft-Delete-Filter:** `deleted_at IS NULL` wird NICHT automatisch gefiltert — jede Query braucht diesen Filter explizit. Gilt auch fuer `/internal/*`-Endpoints (`store_embedding`, `update_status`) — nicht nur in den oeffentlichen Routes.
 - **FastAPI Ownership-Check:** `current_user` authentifiziert — aber PATCH/DELETE auf user-eigene Ressourcen brauchen explizite Ownership-Pruefung: `if resource.author_id != current_user.id: raise HTTPException(403)`. Fehlt der Check, kann jeder eingeloggte User fremde Eintraege manipulieren.
 - **FastAPI Secret-Defaults:** `SECRET_KEY` und `SERVICE_TOKEN` nie mit funktionsfaehigen Prod-Werten defaulten. Leer lassen oder `None` erzwingen — ein vergessenes `.env` in Produktion faellt sonst nicht auf.
+- **FastAPI `EMAIL_FROM` — kein `.local`:** Ist `EMAIL_FROM` auf eine `.local`-Domain gesetzt (z.B. `noreply@decisionmap.local`), startet das Backend nicht — auch wenn `MAIL_SUPPRESS=true`. Immer eine gueltige Domain verwenden.
 - **FastAPI WebSocket-Events explizit:** FastAPI feuert keine automatischen DB-Events — nach jedem Mutations-Endpoint `ws_manager.broadcast()` aufrufen.
 - **FastAPI Background Tasks:** Brauchen eigene DB-Connection — Request-scoped Connection ist beim Task-Start geschlossen.
 - **CORS:** `allow_credentials=True` + `allow_origins=["*"]` ist browser-invalid — nie zusammen.

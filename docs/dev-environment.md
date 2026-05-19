@@ -56,18 +56,18 @@ Mailpit und Adminer laufen im Backend-Docker-Compose — Teil von `make -C apps/
 |---|---|---|
 | nginx Dev-Proxy | 80 | http://int.decisionmap.ai |
 | Frontend (Nuxt dev) | 3000 | http://localhost:3000 |
-| Backend-API (FastAPI) | 8001 | http://localhost:8001/docs |
+| Backend-API (FastAPI) | 8001 | http://localhost:8001 — `GET /` → 307 → `/docs` (Swagger) |
 | AI-Service (FastAPI) | 8000 | http://localhost:8000 |
 | PostgreSQL | 5432 | localhost:5432 |
 | Mailpit (SMTP-Sink) | 8025 | http://localhost:8025 |
-| Adminer (DB-UI) | 8080 | http://localhost:8080 |
+| Adminer (DB-UI) | 8080 | http://localhost:8080 — Server: `postgres`, DB/User/PW: `decisionmap` |
 
 **Via nginx-Proxy (`int.decisionmap.ai`):**
 
 | URL | Ziel |
 |---|---|
 | http://int.decisionmap.ai | Frontend (Nuxt dev) |
-| http://backend.int.decisionmap.ai | Backend API (FastAPI) |
+| http://backend.int.decisionmap.ai | Backend API (FastAPI) — öffnet Swagger direkt |
 | http://int.decisionmap.ai/api/docs | AI-Service (FastAPI Swagger) |
 
 [↑ Inhalt](#inhalt)
@@ -159,8 +159,18 @@ DATABASE_URL=postgresql+asyncpg://decisionmap:decisionmap@localhost:5432/decisio
 SECRET_KEY=dev-secret-key-change-in-production
 FRONTEND_URL=http://localhost:3000    # Basis-URL für E-Mail-Links (Verify, Reset, Magic Link)
 MAIL_SUPPRESS=true                    # kein echter E-Mail-Versand in Dev
+EMAIL_FROM=noreply@decisionmap.ai     # Darf keine .local-Domain sein — Backend startet sonst nicht
 SERVICE_TOKEN=dev-service-token       # Shared Secret apps/backend ↔ apps/ai-service
+AI_SERVICE_URL=http://localhost:8000  # Docker löst localhost:8000 als host.docker.internal auf
 ```
+
+> **Gotcha `EMAIL_FROM`:** Ist `EMAIL_FROM` auf eine `.local`-Domain gesetzt (z.B. `noreply@decisionmap.local`),
+> startet das Backend nicht. Immer eine gültige Domain verwenden, auch in Dev mit `MAIL_SUPPRESS=true`.
+
+> **Gotcha `AI_SERVICE_URL` in Docker:** Der Backend-Container läuft in Docker, der AI-Service lokal.
+> `http://localhost:8000` im Backend-Container würde den Container selbst ansprechen.
+> Die `docker-compose.dev.yml` löst das via `extra_hosts: host.docker.internal:host-gateway` —
+> `localhost` im Container wird automatisch auf `host.docker.internal` umgeschrieben.
 
 **`apps/frontend/.env`**:
 ```env
