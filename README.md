@@ -278,6 +278,8 @@ make version
 | [`docs/conventions.md`](docs/conventions.md) | Code-Konventionen mit Beispielen |
 | [`docs/data-model.md`](docs/data-model.md) | Vollständiges Datenbankschema |
 | [`docs/features.md`](docs/features.md) | Feature-Spezifikationen im Detail |
+| [`docs/dev-environment.md`](docs/dev-environment.md) | Lokale Entwicklungsumgebung (Ports, Fake-Daten, WebSocket, venv) |
+| [`docs/ses-setup.md`](docs/ses-setup.md) | AWS SES: Domain-Verifizierung → SMTP → Production Access |
 | [`docs/cmdline.md`](docs/cmdline.md) | curl-Beispiele für alle API-Endpunkte |
 
 ---
