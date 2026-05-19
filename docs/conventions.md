@@ -121,7 +121,7 @@ enum ProblemStatus {
 }
 
 async function fetchApprovedProblems(): Promise<Problem[]> {
-  const problems = await directus.request(readItems('problems'))
+  const problems = await backendFetch<Problem[]>('/problems?status=approved')
   return problems ?? []
 }
 ```
@@ -178,7 +178,7 @@ const emit = defineEmits<{
 
 ## Composables
 
-Alle Directus-Kommunikation und Business Logic in Composables. Keine Ausnahmen.
+Alle Backend-Kommunikation und Business Logic in Composables. Keine Ausnahmen.
 
 ```typescript
 export function useProblems() {
@@ -190,7 +190,7 @@ export function useProblems() {
     loading.value = true
     error.value = null
     try {
-      problems.value = await directus.request(readItems('problems'))
+      problems.value = await backendFetch<Problem[]>('/problems?status=approved') ?? []
     } catch (fetchError) {
       error.value = 'Probleme konnten nicht geladen werden'
     } finally {
@@ -381,7 +381,7 @@ class EmbeddingService:
 
 ```typescript
 // richtig
-export function useVoting(apiClient: DirectusClient = defaultClient) { ... }
+export function useVoting(apiClient: BackendClient = defaultClient) { ... }
 ```
 
 - Funktionen klein und fokussiert — eine Sache pro Funktion
@@ -413,7 +413,7 @@ def generate_embedding(text: str) -> list[float]:
 
 **TypeScript:** JSDoc, einzeilig wenn ausreichend
 ```typescript
-/** Alle freigegebenen Probleme aus Directus laden. */
+/** Alle freigegebenen Probleme aus dem Backend laden. */
 async function fetchApprovedProblems(): Promise<Problem[]>
 ```
 
@@ -482,7 +482,7 @@ class ProblemRepository:
 ### Frontend (Vitest)
 
 - Unit-Tests nur fur Composables — keine UI-Tests vorerst
-- Alle Directus API-Aufrufe mocken
+- Alle Backend-API-Aufrufe mocken
 - Testdatei spiegelt Quelle: `composables/useProblems.ts` → `tests/composables/useProblems.spec.ts`
 - `vi.mock()` muss **vor** den Imports stehen — Vitest hoisted Mocks nicht automatisch wenn Imports davor kommen
 
@@ -510,7 +510,7 @@ Ziel: Wenn `USE_FAKE_DATA=false` gesetzt wird, fallen keine neuen Tests noetig �
 **Implementiert fuer:** `useAuth`, `useProblems`, `useVoting`, `useSimilarity`, `useSolutions`, `useTags`, `useClusters`
 (`tests/composables/*.contract.spec.ts` — je mit `describe.each` gegen Fake und Real)
 
-**Vitest-Konfiguration:** `vitest.config.ts` schliesst nur `directusClient.ts` aus Coverage aus —
+**Vitest-Konfiguration:** `vitest.config.ts` schliesst nur `backendClient.ts` aus Coverage aus —
 der gesamte Real-Layer (auth, problems, voting, similarity, tags, solutions, clusters) wird gemessen.
 `tests/setup.ts` stellt `useRuntimeConfig`-Stub und `import.meta.client = true` bereit.
 
@@ -519,7 +519,7 @@ Prioritaetskette: Shell/Jenkins-Env → `.env.test.local` → `.env.test` → Ha
 `.env.test` ist committed (sichere Defaults fuer lokale Entwicklung); `.env.test.local` bleibt gitignored.
 `vitest.config.ts` laedt `.env.test` via `loadEnv`, respektiert bereits gesetzte `process.env`.
 `tests/setup.ts` liest alle URLs/Schwellenwerte aus `process.env` — keine hardcodierten Strings.
-Jenkins: Env-Variablen im Build-Job setzen (`DIRECTUS_URL`, `WS_URL`, `SIMILARITY_THRESHOLD`) —
+Jenkins: Env-Variablen im Build-Job setzen (`BACKEND_URL`, `WS_URL`, `SIMILARITY_THRESHOLD`) —
 sie ueberschreiben automatisch die `.env.test`-Defaults, ohne dass eine Datei noetig waere.
 
 **Konkreter Fund 1:** `realVoting.ts` hatte keinen Duplicate-Vote-Guard — ein zweiter Vote
@@ -530,15 +530,13 @@ vor dem Merge korrigiert.
 rejection wenn der Data-Layer wirft. Aufgedeckt beim Schreiben von Verhaltens-Tests; `catch` ergaenzt
 (loggt Warnung, setzt State leer).
 
-**Konkreter Fund 3:** `useLogin.ts` pruefte Directus-Fehlermeldungen nicht prazise genug —
-"email already taken" wurde nicht als `login.errorEmailTaken` erkannt (Directus liefert
-`"Value for email has to be unique."`). Fix: `includes('unique')` ergaenzt. Ausserdem:
-Fallback zeigte immer `"Something went wrong"` statt der tatsaechlichen Directus-Meldung —
-jetzt wird `error.message` direkt angezeigt, generischer Fallback nur wenn kein Text vorhanden.
+**Konkreter Fund 3:** `useLogin.ts` pruefte Backend-Fehlermeldungen nicht prazise genug —
+"email already taken" wurde nicht als `login.errorEmailTaken` erkannt. Fix: HTTP-Status pruefen
+(422 = Validierungsfehler, `detail`-Feld auswerten). Fallback zeigt `error.message` direkt statt
+immer "Something went wrong".
 
-**Konkreter Fund 4:** `useLogin.ts` (`verify-email`-Pfad) — Directus gibt **302** zurueck, nicht 200.
-`fetch` ohne `redirect: 'manual'` folgt dem Redirect, bekommt HTML und wirft einen Parse-Fehler.
-Fix: `fetch(url, { redirect: 'manual' })` + `response.ok || response.type === 'opaqueredirect'` als Erfolg-Check.
+**Konkreter Fund 4:** `useLogin.ts` (`verify-email`-Pfad) — fastapi-users gibt **204** zurueck.
+Kein Response-Body — nur `response.ok` pruefen, nicht parsen.
 I18n-Fallout: `login.loading` existierte nicht — Composable nutzt jetzt `login.verifying`.
 
 **Konkreter Fund 5:** `default.vue` Layout — Auth-Token-Race-Condition.
@@ -547,17 +545,11 @@ I18n-Fallout: `login.loading` existierte nicht — Composable nutzt jetzt `login
 `setup()`-Block aufrufen; `restoreSession()` (API-Aufruf) bleibt in `onMounted`. Reihenfolge:
 `setup()` → Token aus localStorage → `onMounted` fetchTags (Token vorhanden) → `onMounted` restoreSession.
 
-**Konkreter Fund 6:** `realProblems.ts` — Directus M2M Virtual-Field-Naming.
-`PROBLEM_FIELDS` und `DirectusProblem`-Interface verwendeten `problem_tag.tag_id` / `problem_region.region_id`,
-aber Directus benennt M2M-Aliasfelder nach `one_field` in der Relation-Definition (`tags`, `regions`).
-Fix: `problem_tag` → `tags`, `problem_region` → `regions` in Fields-Liste und Interface;
-`mapProblem` nutzt `raw.tags ?? []` / `raw.regions ?? []` (defensiver Null-Guard).
-Gleichzeitig: `tags.deleted_by` fehlte im Directus-Schema (selbes Muster wie `deleted_at`) — via REST hinzugefuegt und `schema.json` aktualisiert.
+**Konkreter Fund 6:** `realProblems.ts` — Internal-API Tag-Naming (`label` vs. `name`).
+Backend-API gibt Tags mit Feld `label` zurueck (nicht `name` wie in DB-Spalte). Contract-Test deckte auf, dass `mapProblem` `tag.name` las — gibt `undefined`. Fix: `tag.label` verwenden. Gilt fuer alle `/internal/tags`-Endpoints.
 
-**Konkreter Fund 7:** `realAuth.ts` — Directus 11 `admin_access` auf Policy, nicht Role.
-`role.admin_access` liefert immer `undefined` in Directus 11 (Feld auf `directus_roles` entfernt).
-Korrekt: `role.policies.policy.admin_access` abfragen — `USER_FIELDS` um `"role.policies.policy.admin_access"` ergaenzt, `mapUser` prueft `raw.role?.policies?.some(p => p.policy?.admin_access)`.
-Gleichzeitig: `date_created` existiert nicht auf `directus_users` in Directus 11 — `createdAt` nutzt `''`-Fallback. `display_name` / `company` sind Custom-Felder die `seed-users.sh` anlegt; fehlen sie, ist das Profil leer ohne Fehler.
+**Konkreter Fund 7:** `useServiceStatus.ts` — URL-Detection-Logik und `fetchJson`.
+Composable unterscheidet Backend (:8001) von AI-Service (/api/health) per URL-String-Pattern. `fetchJson()` prueft `res.ok` vor dem Parsen — Mock ohne `ok: true` gibt `null` zurueck (kein Parse-Fehler). Contract-Test deckte auf: Mocks benoetigen `ok: true, status: 200`.
 
 Diese Faelle bestaetigen: Contract-Tests und Implementierungsdetails finden echte Bugs, nicht nur strukturelle Abweichungen.
 

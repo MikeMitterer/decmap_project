@@ -74,10 +74,10 @@ curl -s http://localhost:8000/similarity \
 
 ---
 
-### Hooks (Directus Flows → AI-Service)
+### Hooks (Backend BackgroundTasks → AI-Service)
 
-Diese Endpunkte werden von Directus Flows aufgerufen. Für manuelle Tests
-simulieren sie den Directus-Trigger.
+Diese Endpunkte werden vom FastAPI-Backend als BackgroundTasks aufgerufen. Für manuelle Tests
+simulieren sie den Backend-Trigger.
 
 **Problem eingereicht**
 

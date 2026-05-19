@@ -22,13 +22,13 @@ content_language    string (default "en")       — ISO 639-1, z.B. "de", "fr", 
 status              enum: pending | needs_review | approved | rejected
 rejection_reason    string (nullable)
 embedding           vector(1536)                — generiert aus title_en + description_en
-user_id             FK → directus_users (nullable — anonyme Submissions erlaubt)
+user_id             FK → users (nullable — anonyme Submissions erlaubt)
 session_id          string (nullable)
 vote_score          integer (default 0)
 is_ai_generated     boolean (default false)
 edited_at           timestamp (nullable)
 deleted_at          timestamp (nullable)        — Soft Delete durch Admin
-deleted_by          FK → directus_users (nullable)
+deleted_by          FK → users (nullable)
 created_at          timestamp
 ```
 
@@ -40,13 +40,13 @@ content_en          text (required)             — Englisch, automatisch uberse
 content_language    string (default "en")       — ISO 639-1
 status              enum: pending | needs_review | approved | rejected
 problem_id          FK → problems
-user_id             FK → directus_users (nullable)
+user_id             FK → users (nullable)
 session_id          string (nullable)
 vote_score          integer (default 0)
 is_ai_generated     boolean (default false)
 edited_at           timestamp (nullable)
 deleted_at          timestamp (nullable)        — Soft Delete durch Admin
-deleted_by          FK → directus_users (nullable)
+deleted_by          FK → users (nullable)
 created_at          timestamp
 ```
 
@@ -62,7 +62,7 @@ updated_at          timestamp
 
 **`problem_cluster`** — Junction: Problem ↔ Cluster (n:m). Ein Problem kann in mehreren Clustern vorkommen. Weight ist der Soft-Clustering-Score aus HDBSCAN.
 ```
-id                  uuid (PK, uuid_generate_v4())  — Directus benoetigt Single-Column-PK fuer M2M
+id                  uuid (PK, uuid_generate_v4())
 problem_id          FK → problems
 cluster_id          FK → clusters
 weight              float (Soft-Clustering-Score, 0.0–1.0)
@@ -90,7 +90,7 @@ Beim KI-Clustering werden nur L1–L9 neu generiert. L0 (Root) und L10 (User-Tag
 
 **`problem_tag`** — Junction: Problem ↔ Tag (n:m) mit optionalem Weight.
 ```
-id                  uuid (PK, uuid_generate_v4())  — Directus benoetigt Single-Column-PK fuer M2M
+id                  uuid (PK, uuid_generate_v4())
 problem_id          FK → problems
 tag_id              FK → tags
 weight              float (0.0–1.0, default 1.0)
@@ -106,7 +106,7 @@ name                string           — z.B. "European Union", "United States"
 
 **`problem_region`** — Junction: Problem ↔ Region (n:m). Beeinflusst Ranking und optionale Filterung im Graph.
 ```
-id                  uuid (PK, uuid_generate_v4())  — Directus benoetigt Single-Column-PK fuer M2M
+id                  uuid (PK, uuid_generate_v4())
 problem_id          FK → problems
 region_id           FK → regions
 UNIQUE (problem_id, region_id)
@@ -118,7 +118,7 @@ id                  uuid (PK)
 entity_type         enum: problem | solution
 entity_id           uuid
 vote_type           enum: up | down
-user_id             FK → directus_users (nullable)
+user_id             FK → users (nullable)
 session_id          string (nullable)
 ip_hash             string
 created_at          timestamp
@@ -131,7 +131,7 @@ id                  uuid (PK)
 entity_type         enum: problem | solution
 entity_id           uuid
 previous_content    text
-edited_by           FK → directus_users
+edited_by           FK → users
 edited_at           timestamp
 ```
 
@@ -142,7 +142,7 @@ entity_type         enum: problem | solution
 entity_id           uuid
 action              enum: approved | rejected | flagged
 reason              string (nullable)
-moderator_id        FK → directus_users
+moderator_id        FK → users
 created_at          timestamp
 ```
 
@@ -168,16 +168,14 @@ users ──< problems ──< solution_approaches
 
 ## Datenbank-Versionierung (Alembic)
 
-Alembic verwaltet **Schema-Aenderungen** nach dem initialen Setup.
-Der initiale Zustand gehoert Directus (`schema.json`) — Alembic greift erst danach.
+Alembic verwaltet das gesamte Schema — vom initialen Setup bis zu allen Migrationen.
 
 ```
-database/init/000_schema.sql  → nur PostgreSQL-Extensions (uuid-ossp, vector)
-directus/schema.json          → Tabellen + Directus-Metadaten (single source of truth)
-database/constraints.sql      → vector(1536), CHECK-Constraints, custom Indizes
+database/init/000_schema.sql     → nur PostgreSQL-Extensions (uuid-ossp, vector)
+alembic/versions/001_initial.py  → initiale Tabellen (Alembic baseline)
+alembic/versions/00N_*.py        → inkrementelle Schema-Aenderungen
+database/constraints.sql         → vector(1536), CHECK-Constraints, custom Indizes
 ```
-
-Directus-System-Tabellen sind ausgenommen — die verwaltet Directus selbst.
 
 ### Regeln
 

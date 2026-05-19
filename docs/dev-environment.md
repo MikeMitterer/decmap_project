@@ -17,7 +17,7 @@
 
 | Tool | Zweck | Version |
 |---|---|---|
-| Docker + Docker Compose V2 | Postgres, Directus, Mailpit | `docker compose` (Plugin), nicht `docker-compose` |
+| Docker + Docker Compose V2 | Postgres, Backend-API, Mailpit, Adminer | `docker compose` (Plugin), nicht `docker-compose` |
 | Node.js | Frontend (Nuxt) | 20+ |
 | Python | AI-Service (FastAPI) | 3.11+ |
 | overmind | Prozess-Manager für Procfile | `brew install overmind` |
@@ -39,15 +39,16 @@ make dev-up
     │
     ├── make -C apps/backend dev-up          → Docker Compose (docker-compose.dev.yml)
     │       ├── decisionmap-postgres :5432   (pgvector/pgvector:pg16)
-    │       ├── decisionmap-directus :8055   (directus/directus:11)
-    │       └── decisionmap-directus-seed    (einmaliger Seed-Run)
+    │       ├── decisionmap-backend-api :8001 (FastAPI + Alembic auto-migrate)
+    │       ├── decisionmap-mailpit :8025    (SMTP-Sink)
+    │       └── decisionmap-adminer :8080    (DB-UI)
     │
     └── overmind start -f Procfile.dev
             ├── frontend   → npm --prefix apps/frontend run dev    :3000
             └── aiservice  → uvicorn main:app --reload             :8000
 ```
 
-Mailpit läuft separat (z.B. auf Unraid oder lokal) — nicht Teil von `make dev-up`.
+Mailpit und Adminer laufen im Backend-Docker-Compose — Teil von `make -C apps/backend dev-up`.
 
 **Ports (direkt):**
 
@@ -55,17 +56,18 @@ Mailpit läuft separat (z.B. auf Unraid oder lokal) — nicht Teil von `make dev
 |---|---|---|
 | nginx Dev-Proxy | 80 | http://int.decisionmap.ai |
 | Frontend (Nuxt dev) | 3000 | http://localhost:3000 |
-| Directus (CMS) | 8055 | http://localhost:8055 |
+| Backend-API (FastAPI) | 8001 | http://localhost:8001/docs |
 | AI-Service (FastAPI) | 8000 | http://localhost:8000 |
 | PostgreSQL | 5432 | localhost:5432 |
-| Mailpit (SMTP-Sink) | 8025 | http://localhost:8025 (separat) |
+| Mailpit (SMTP-Sink) | 8025 | http://localhost:8025 |
+| Adminer (DB-UI) | 8080 | http://localhost:8080 |
 
 **Via nginx-Proxy (`int.decisionmap.ai`):**
 
 | URL | Ziel |
 |---|---|
 | http://int.decisionmap.ai | Frontend (Nuxt dev) |
-| http://cms.int.decisionmap.ai/admin | Directus Admin |
+| http://backend.int.decisionmap.ai | Backend API (FastAPI) |
 | http://int.decisionmap.ai/api/docs | AI-Service (FastAPI Swagger) |
 
 [↑ Inhalt](#inhalt)
@@ -120,32 +122,28 @@ cd ../..
 cp apps/backend/.env.example    apps/backend/.env
 cp apps/frontend/.env.example   apps/frontend/.env
 cp apps/ai-service/.env.example apps/ai-service/.env
-# → Werte eintragen (DB-Credentials, API-Keys, Directus-Token etc.)
+# → Werte eintragen (DB-Credentials, SECRET_KEY, SERVICE_TOKEN etc.)
 
 # 5. DNS-Einträge setzen (einmalig, /etc/hosts oder lokaler DNS)
 # 192.168.0.25  int.decisionmap.ai
-# 192.168.0.25  cms.int.decisionmap.ai
+# 192.168.0.25  backend.int.decisionmap.ai
 
 # 6. Stack starten
 make dev-up
 
 # 7. DB initialisieren (einmalig, nach erstem Start)
 make -C apps/backend db-reset
-
-# 8. Directus-Permissions setzen (einmalig, nach db-reset)
-make -C apps/backend db-permissions
 ```
 
 ### DNS-Voraussetzung (`int.decisionmap.ai`)
 
-Die lokalen Dev-URLs (`int.decisionmap.ai`, `cms.int.decisionmap.ai`) müssen auf
-die IP-Adresse des Dev-Rechners zeigen — entweder per `/etc/hosts` oder via lokalem DNS
-(z.B. Unraid-DNS, Pi-hole, Adguard Home):
+Die lokalen Dev-URLs müssen auf die IP-Adresse des Dev-Rechners zeigen — per `/etc/hosts`
+oder lokalem DNS (z.B. Unraid-DNS, Pi-hole, Adguard Home):
 
 ```
 # /etc/hosts (oder lokaler DNS-Server)
 192.168.0.25  int.decisionmap.ai
-192.168.0.25  cms.int.decisionmap.ai
+192.168.0.25  backend.int.decisionmap.ai
 ```
 
 Die `docker-compose.dev.yml` konfiguriert nginx als Reverse-Proxy auf Port 80.
@@ -155,20 +153,20 @@ nur auf `127.0.0.1` horcht, `NUXT_HOST=0.0.0.0` ergänzen.
 
 ### Wichtige .env-Variablen für lokale Entwicklung
 
-**`apps/backend/.env`** (Directus):
+**`apps/backend/.env`**:
 ```env
-WEBSOCKETS_ENABLED=true                                    # Pflicht — sonst kein Live-Vote-Update
-WEBSOCKETS_REST_AUTH=public                                # Anonyme WS-Subscriptions erlauben
-PUBLIC_URL=http://cms.int.decisionmap.ai                   # Pflicht — Directus CORS + Auth-Mails
-CORS_ORIGIN=http://int.decisionmap.ai                      # Frontend-Origin erlauben
-USER_REGISTER_URL_ALLOW_LIST=http://int.decisionmap.ai/verify-email  # E-Mail-Verifizierungslink
+DATABASE_URL=postgresql+asyncpg://decisionmap:decisionmap@localhost:5432/decisionmap
+SECRET_KEY=dev-secret-key-change-in-production
+FRONTEND_URL=http://localhost:3000    # Basis-URL für E-Mail-Links (Verify, Reset, Magic Link)
+MAIL_SUPPRESS=true                    # kein echter E-Mail-Versand in Dev
+SERVICE_TOKEN=dev-service-token       # Shared Secret apps/backend ↔ apps/ai-service
 ```
 
 **`apps/frontend/.env`**:
 ```env
-USE_FAKE_DATA=false            # true = kein Backend nötig (UI-Entwicklung)
-DEV_TOOLS=true                 # Dev-Tools-Seite (/dev-tools) aktivieren — in .env.example leer lassen
-                               # Erfordert Admin-Login — ohne Login werden Tools ausgeblendet
+BACKEND_URL=http://localhost:8001     # FastAPI Backend
+USE_FAKE_DATA=false                   # true = kein Backend nötig (UI-Entwicklung)
+DEV_TOOLS=true                        # Dev-Tools-Seite (/dev-tools) — Erfordert Admin-Login
 ```
 
 [↑ Inhalt](#inhalt)
@@ -179,7 +177,7 @@ DEV_TOOLS=true                 # Dev-Tools-Seite (/dev-tools) aktivieren — in 
 
 ```env
 USE_FAKE_DATA=true   # In-Memory-Daten, kein Backend nötig — ideal für reine UI-Arbeit
-USE_FAKE_DATA=false  # Echter Directus + AI-Service
+USE_FAKE_DATA=false  # Echter FastAPI-Backend + AI-Service
 ```
 
 Beide Layer implementieren dasselbe Interface — kein Unterschied für Komponenten.
@@ -206,7 +204,7 @@ Consumer-Repos editieren.
 
 | Composable | WebSocket-Quelle | Verantwortlich für |
 |---|---|---|
-| `useDirectusRealtime.ts` | Directus WS (`/websocket`) | Vote-Score-Updates (`problems.vote_score`) |
+| `useBackendRealtime.ts` | Backend WS `ws://localhost:8001/ws` | Mutations: Vote-Scores, Problem/Solution CRUD |
 | `useRealtimeUpdates.ts` | AI-Service WS (`/ws`) | AI-Events: `problem.approved`, `cluster.updated`, `solution.generated` |
 
 ### Vote-Score-Flow
@@ -214,43 +212,30 @@ Consumer-Repos editieren.
 ```
 User klickt Vote
       ↓
-POST /items/votes  (Directus REST)
+POST /votes  (FastAPI Backend, Port 8001)
       ↓
-GET /items/{collection}/{id}?fields=vote_score  (aktuellen Score laden)
+Backend berechnet neuen vote_score (Toggle-Semantik)
       ↓
-PATCH /items/{collection}/{id}  { vote_score: n+1 }  (via Directus REST)
-      ↓  (löst Directus WS-Event aus)
-Directus WebSocket → alle verbundenen Clients
+Response enthält aktualisierten vote_score direkt — kein Re-Fetch nötig
+      ↓  (Backend feuert WS-Event)
+Backend WebSocket /ws → alle verbundenen Clients
       ↓
-useDirectusRealtime.ts → applyProblemUpdate(update)
+useBackendRealtime.ts → applyProblemUpdate(update)
       ↓
 UI aktualisiert sich live (kein Reload)
 ```
 
-> **Kein PostgreSQL-Trigger:** `trg_vote_score` / `fn_update_vote_score()` wurden entfernt.
-> Der Score wird stattdessen per REST API berechnet und via `PATCH` geschrieben — Directus
-> löst dabei automatisch WS-Events aus. Voraussetzung: `update`-Permission auf `vote_score`
-> für die Public-Policy (`make -C apps/backend db-permissions`).
+**Vote-Toggle-Semantik:** Gleiche Richtung wie vorhandenes Vote → zurückziehen (delta = -1).
+Entgegengesetzte Richtung → Flip (delta = ±2). Neues Vote → delta = ±1.
 
-**Sofort-Feedback für den votenden User:**
-Nach `submitVote()` ruft `handleVote()` in `ProblemPanel.vue` sofort `fetchProblemById()`
-auf — zeigt den echten DB-Wert ohne auf den WS-Event zu warten.
+**Sofort-Feedback:** `ProblemPanel.vue` aktualisiert den Score direkt aus dem Response-Body —
+zeigt echten DB-Wert ohne auf WS-Event zu warten.
 
 ### Kritische Voraussetzungen
 
-1. **`WEBSOCKETS_ENABLED=true`** in `apps/backend/.env`
-2. **`WEBSOCKETS_REST_AUTH=public`** in `apps/backend/.env`
-3. **`PUBLIC_URL=http://cms.int.decisionmap.ai`** in `apps/backend/.env` — Directus prüft die
-   Origin gegen PUBLIC_URL. Stimmt sie nicht überein, verwirft Directus die WS-Verbindung
-   nach ~3 s lautlos (Reconnect-Loop). Zusammen mit `CORS_ORIGIN=http://int.decisionmap.ai` setzen.
-4. **`connect()` explizit in `onMounted` aufrufen** — beide Composables verbinden sich
+1. **`connect()` explizit in `onMounted` aufrufen** — beide Composables verbinden sich
    nicht automatisch. Fehlt der Call, bleibt der Socket stumm (kein Fehler, kein Event).
-5. **Directus Flow "Vote Score Broadcast"** muss angelegt sein:
-   ```bash
-   make -C infrastructure setup-vote-flow
-   # Neu anlegen (falls bereits vorhanden):
-   make -C infrastructure setup-vote-flow -- --force
-   ```
+2. **Backend läuft auf Port 8001** — WS-Endpoint: `ws://localhost:8001/ws`.
 
 ### Voting-Zustand für Tests zurücksetzen
 
@@ -270,13 +255,13 @@ Danach kann beliebig oft gevoted werden — nützlich für manuelle Tests des Vo
 
 ### nginx (Produktion)
 
-Für Directus WebSocket hinter nginx muss der `cms.decisionmap.ai`-Serverblock Upgrade-Headers weiterleiten:
+Der `api.decisionmap.ai`-Serverblock muss WebSocket-Upgrade-Headers weiterleiten:
 
 ```nginx
 server {
-    server_name cms.decisionmap.ai;
+    server_name api.decisionmap.ai;
     location / {
-        proxy_pass http://directus:8055;
+        proxy_pass http://backend:8001;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         proxy_read_timeout 3600s;   # Pflicht — default 60s bricht WS-Verbindung bei Stille
@@ -285,8 +270,7 @@ server {
 ```
 
 Ohne Upgrade-Header schlägt der WS-Handshake lautlos fehl.
-Ohne `proxy_read_timeout 3600s` wird die Verbindung nach 60 s Inaktivität getrennt —
-auch wenn Directus Pings schickt (Ping-Intervall kann > 60 s sein).
+Ohne `proxy_read_timeout 3600s` wird die Verbindung nach 60 s Inaktivität getrennt.
 
 [↑ Inhalt](#inhalt)
 

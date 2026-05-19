@@ -1,7 +1,7 @@
 # AWS SES Setup — E-Mail-Versand für DecisionMap
 
 Vollständige Anleitung: Domain-Verifizierung → SMTP-Credentials → Sandbox-Tests →
-Production Access → Directus-Konfiguration → Systemtest.
+Production Access → Backend-Konfiguration → Systemtest.
 
 ---
 
@@ -14,9 +14,9 @@ Production Access → Directus-Konfiguration → Systemtest.
 - [Phase 4 — Absender-Adresse verifizieren](#phase-4--absender-adresse-verifizieren)
 - [Phase 5 — Sandbox: Zieladresse verifizieren + Tests](#phase-5--sandbox-zieladresse-verifizieren--tests)
 - [Phase 6 — SMTP Credentials generieren](#phase-6--smtp-credentials-generieren)
-- [Phase 7 — Test via Script](#phase-7--test-via-script-ohne-directus)
+- [Phase 7 — Test via Script](#phase-7--test-via-script)
 - [Phase 8 — Production Access beantragen](#phase-8--production-access-beantragen)
-- [Phase 9 — Directus konfigurieren](#phase-9--directus-konfigurieren-hetzner-server)
+- [Phase 9 — Backend konfigurieren](#phase-9--backend-konfigurieren-hetzner-server)
 - [Phase 10 — Gesamtsystem-Verifikation](#phase-10--gesamtsystem-verifikation)
 - [Referenz](#referenz)
 
@@ -214,9 +214,9 @@ SMTP Password: <generiertes Passwort>
 
 ---
 
-## Phase 7 — Test via Script (ohne Directus)
+## Phase 7 — Test via Script
 
-Verbindung und Versand direkt testen — kein Directus, kein Docker nötig.
+Verbindung und Versand direkt testen — kein Docker nötig.
 
 ### Python (ohne externe Dependencies)
 
@@ -287,7 +287,7 @@ Für echte User-Registrierungen muss der Sandbox-Modus aufgehoben werden.
 
 ---
 
-## Phase 9 — Directus konfigurieren (Hetzner-Server)
+## Phase 9 — Backend konfigurieren (Hetzner-Server)
 
 ### .env auf dem Server aktualisieren
 
@@ -313,12 +313,11 @@ EMAIL_SMTP_SECURE=false
 ```
 
 > ⚠️ **Gotcha:** `EMAIL_SMTP_HOST` nur setzen wenn SMTP tatsächlich erreichbar ist.
-> Ist der Host gesetzt aber nicht erreichbar, wartet Directus beim Start **60 Sekunden**
-> auf eine SMTP-Verbindung → Container wird `unhealthy` → alle anderen Services blockiert.
+> Ist der Host gesetzt aber nicht erreichbar, kann der Backend-Container beim Start verzögert starten.
 > Während der Einrichtung `EMAIL_SMTP_HOST=` (leer) lassen und erst nach erfolgreichem
 > Phase-7-Test setzen.
 
-### Directus neu starten
+### Backend neu starten
 
 ```bash
 make -C infrastructure server-update SVC=backend
@@ -335,8 +334,7 @@ ssh decmap "cd /srv/decisionmap && docker compose restart backend"
 
 Alternativ: Passwort-Reset im Frontend auslösen → Reset-Mail muss ankommen (ab Phase 8: an beliebige Adresse).
 
-> **Hinweis:** Directus 11 hat den "Test-Mail senden"-Button in `Settings → Email` entfernt.
-> SMTP-Verifikation ausschließlich über `scripts/smtp-test.py` oder den Passwort-Reset-Flow.
+> SMTP-Verifikation über `scripts/smtp-test.py` oder den Passwort-Reset-Flow.
 
 [↑ Übersicht](#übersicht)
 
@@ -367,6 +365,5 @@ Nach Produktionsfreigabe den kompletten Registrierungs-Flow testen:
 | IAM Users | [console.aws.amazon.com/iam](https://console.aws.amazon.com/iam/home#/users) |
 | Hetzner DNS | [dns.hetzner.com](https://dns.hetzner.com) |
 | DNS-Propagation prüfen | [dnschecker.org — decisionmap.ai ALL Records](https://dnschecker.org/all-dns-records-of-domain.php?query=decisionmap.ai&rtype=ALL&dns=google) |
-| Directus Admin Email | [cms.decisionmap.ai/admin/settings/email](https://cms.decisionmap.ai/admin/settings/email) |
 | SMTP Endpoint | `email-smtp.eu-west-1.amazonaws.com:587` |
 | Tracking Issue | MikeMitterer/decmap_project#1 |

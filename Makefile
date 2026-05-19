@@ -49,22 +49,22 @@ hints: ## Nützliche Links und Hinweise anzeigen
 	@echo
 	@echo "  ${YELLOW}Docker Images (ghcr.io/mangolila)${RESET}"
 	@echo
-	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Directus"   "https://github.com/users/mangolila/packages/container/package/decisionmap-backend"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Backend"    "https://github.com/users/mangolila/packages/container/package/decisionmap-backend"
 	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Frontend"   "https://github.com/users/mangolila/packages/container/package/decisionmap-frontend"
 	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "AI-Service" "https://github.com/users/mangolila/packages/container/package/decisionmap-ai-service"
 	@echo
 	@echo "  ${YELLOW}Lokale Entwicklung${RESET}"
 	@echo
-	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "App"        "http://int.decisionmap.ai"
-	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "CMS"        "http://cms.int.decisionmap.ai/admin"
-	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "AI-Docs"    "http://int.decisionmap.ai/api/docs"
-	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Mailpit"    "http://192.168.0.25:8025"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "App"         "http://int.decisionmap.ai"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Backend API" "http://backend.int.decisionmap.ai"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "AI-Docs"     "http://int.decisionmap.ai/api/docs"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Mailpit"     "http://192.168.0.25:8025"
 	@echo
 	@echo "  ${YELLOW}Produktion${RESET}"
 	@echo
-	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "App"        "https://decisionmap.ai"
-	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "CMS"        "https://cms.decisionmap.ai/admin"
-	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "AI-Docs"    "https://decisionmap.ai/api/docs"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "App"         "https://decisionmap.ai"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Backend API" "https://api.decisionmap.ai"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "AI-Docs"     "https://decisionmap.ai/api/docs"
 	@echo
 
 ##@ Setup

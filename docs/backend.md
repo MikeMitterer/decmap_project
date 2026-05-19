@@ -4,7 +4,7 @@
 
 - [Umgebungsvariablen](#umgebungsvariablen)
 - [Feature Flags](#feature-flags)
-- [Directus-Einrichtung](#directus-einrichtung)
+- [Backend-Einrichtung](#backend-einrichtung)
 - [Datenfluss](#datenfluss)
 - [Code-Formatierung und Linting](#code-formatierung-und-linting)
 - [CI/CD — Jenkins Pipeline](#cicd--jenkins-pipeline)
@@ -37,17 +37,11 @@ Diese Variablen gehoeren nicht in `.env.example` — sie werden einmalig in der 
 ```
 # Frontend
 USE_FAKE_DATA=true             # true = in-memory Fake-Daten, false = echter Server
+BACKEND_URL=http://localhost:8001  # FastAPI-Backend (apps/backend/, Port 8001)
 WS_URL=ws://localhost:8000     # WebSocket-URL des FastAPI-Service
 SHOW_VOTING=false              # Feature Flag: Voting-Visualisierung aktivieren
 REQUIRE_AUTH=false             # Feature Flag: Login fuer Einreichungen erzwingen
 AUTO_APPROVE=false             # Feature Flag: Neue Problems automatisch freischalten (ohne Moderations-Review)
-
-# Directus
-DIRECTUS_URL=                  # Directus-Instanz URL
-DIRECTUS_TOKEN=                # Directus Admin-Token
-CORS_ORIGIN=http://localhost:3000  # Erlaubter Browser-Origin fuer Directus (nicht Wildcard — browser-invalid mit credentials)
-WEBSOCKETS_ENABLED=true        # Pflicht fuer useDirectusRealtime.ts (Vote-Score-Updates via WS Subscription)
-WEBSOCKETS_REST_AUTH=public    # Anonyme WS-Subscriptions erlauben (vote_score ist oeffentlich lesbar)
 
 # Datenbank
 POSTGRES_URL=                  # PostgreSQL Connection String (ai-service)
@@ -68,8 +62,21 @@ DUPLICATE_THRESHOLD=0.92       # Schwellenwert fuer Duplikat-Erkennung
 BOT_SUBMIT_MIN_SECONDS=10      # Mindestzeit zwischen Seitenaufruf und Submit
 BOT_SESSION_MAX_HOURLY=10      # Max. Submissions pro Session pro Stunde
 BOT_IP_MAX_SESSIONS=5          # Max. verschiedene Sessions pro ip_hash
-WEBHOOK_SECRET=                # Shared Secret fuer Directus Flows (X-Webhook-Secret Header); leer = Dev-Mode
+WEBHOOK_SECRET=                # Shared Secret (X-Webhook-Secret Header); leer = Dev-Mode (kein Check)
 CORS_ORIGINS=["http://localhost:3000"]  # JSON-Array erlaubter Browser-Origins
+
+# apps/backend/ — FastAPI Backend (Port 8001)
+DATABASE_URL=postgresql+asyncpg://decisionmap:decisionmap@localhost:5432/decisionmap
+SECRET_KEY=dev-secret-key-change-in-production
+FRONTEND_URL=http://localhost:3000    # Basis-URL fuer E-Mail-Links (Verify, Reset, Magic Link)
+MAIL_SERVER=email-smtp.eu-west-1.amazonaws.com
+MAIL_PORT=587
+MAIL_USERNAME=                        # AWS SES SMTP-Zugangsdaten
+MAIL_PASSWORD=
+MAIL_FROM=noreply@decisionmap.ai
+MAIL_SUPPRESS=false                   # true = kein echter E-Mail-Versand (Pflicht in Tests)
+AI_SERVICE_URL=http://localhost:8000
+SERVICE_TOKEN=dev-service-token       # Shared Secret apps/backend ↔ apps/ai-service
 ```
 
 ## Feature Flags
@@ -92,120 +99,54 @@ make deploy-service SVC=frontend
 
 ---
 
-## Directus-Einrichtung
+## Backend-Einrichtung
 
 **Frische Dev-Umgebung:** Ein Befehl richtet alles ein:
 
 ```bash
-make db-reset   # down -v → up → schema apply → constraints → seed
+make db-reset   # down -v → up → wait PostgreSQL → db-migrate (Alembic) → db-seed → up
 ```
 
 **Verantwortlichkeiten:**
 
 ```
-database/init/000_schema.sql  → nur PostgreSQL-Extensions (uuid-ossp, vector)
-directus/schema.json          → Tabellen + Directus-Metadaten (single source of truth)
-database/constraints.sql      → was Directus nicht kann: vector(1536), CHECK-Constraints,
-                                 UNIQUE-Constraints (Junction-Tabellen), custom Indizes
+alembic/                 → alle DDL: Tabellen, vector-Spalten, Constraints, Indizes (SSoT)
+database/seeds/          → Seed-Daten (alphabetisch, idempotent)
 ```
 
-**Junction-Tabellen** (`problem_cluster`, `problem_tag`, `problem_region`) haben eine
-`id UUID PRIMARY KEY` + `UNIQUE(problem_id, ...)` — Directus benoetigt eine Single-Column-PK
-fuer M2M-Relationen. M2M-Relationen und Alias-Felder sind in `schema.json` enthalten.
-
-**Was NICHT im Snapshot enthalten ist:**
-- `vector(1536)` Spalten (`embedding`, `centroid`) — werden von `db-constraints` + AI-Service via psycopg3 verwaltet
-- Directus Flows — muessen einmalig manuell angelegt werden (siehe unten)
+**Junction-Tabellen** (`problem_cluster`, `problem_tag`, `problem_region`) haben `id UUID PRIMARY KEY` + `UNIQUE(problem_id, ...)`.
 
 **Einzelne Schritte (bei Bedarf):**
 ```bash
-make directus-schema-apply   # Tabellen + Metadaten via schema.json
-make db-constraints          # vector-Spalten, Constraints, Junction-Tables, Indizes
-make db-seed                 # Seed-Daten
-make seed-users              # Test-User + Rolle + Policy in Directus
-make db-permissions          # Public-Policy (Anon-READ) + User-Policy (CREATE/UPDATE/DELETE) anlegen
+make db-migrate          # Alembic upgrade head
+make db-seed             # Seed-Daten einspielen
+make api-dev             # FastAPI-Dev-Server (Port 8001, --reload)
 ```
 
-**Gotcha — schema apply nach Alembic-Migration:**
-Wenn Alembic zuerst laeuft und dabei Directus-Tabellen anlegt, hinterlaesst es verwaiste `directus_*` Metadata-Eintraege. Ein anschliessendes `make directus-schema-apply` schlaegt dann mit Konflikt-Fehler fehl. Loesung: verwaiste `directus_*` Metadata-Eintraege aus den betroffenen Tabellen loeschen, dann erneut `make directus-schema-apply`.
+**Dev-URLs (nach `make dev-up`):**
 
-**Gotcha — Direktus Benutzer-Registrierung:**
-`USERS_REGISTER_ALLOW_PUBLIC: "true"` muss im Directus-Container gesetzt sein (docker-compose.yml), damit der `/users/register`-Endpunkt fuer anonyme Requests freigegeben ist. Ohne diesen Flag liefert Directus 403 — auch wenn alle anderen Permissions korrekt konfiguriert sind.
-`make seed-users` setzt `public_registration: true` automatisch via `PATCH /settings` — kein manueller UI-Schritt noetig. `make db-reset` ruft `seed-users` mit auf.
+| URL | Dienst |
+|---|---|
+| http://int.decisionmap.ai | App (Frontend) |
+| http://backend.int.decisionmap.ai | Backend API (FastAPI) |
+| http://localhost:8001/docs | FastAPI Swagger |
+| http://localhost:8025 | Mailpit (SMTP-Sink) |
+| http://localhost:8080 | Adminer (DB-UI, Server: `postgres`, User/DB: `decisionmap`) |
 
-**Gotcha — E-Mail-Verifizierung:**
-E-Mail-Verifizierung und Auto-Login nach Register sind inkompatibel: Directus schickt nach `/users/register` eine Verifizierungsmail — ein unmittelbarer Login-Versuch schlaegt fehl, weil der Account noch unverifiziert ist.
-`make seed-users` setzt `public_registration_verify_email: true` — in allen Umgebungen aktiv. Dev nutzt Mailpit als SMTP-Sink. Auto-Login nach Register entfaellt komplett; stattdessen zeigt das Frontend eine "Check your email"-Box (`registrationSent`-Flag in `login.vue`). User klickt Verifizierungslink → dann erst einloggen.
-Directus 11: `/users/verify-email?token=XXX` ist ein reiner API-Endpunkt — nach erfolgreichem Verify erfolgt ein Redirect auf `PUBLIC_URL`. Der Token wird beim ersten Aufruf verbraucht; ein zweiter Klick liefert "Invalid verification code". `PUBLIC_URL` in der Directus-Konfiguration auf `http://localhost:3000/login` (Dev) bzw. die Produktions-URL setzen, damit der Browser nach der Verifizierung direkt zum Login weitergeleitet wird.
-Frontend-seitig: `/verify-email.vue` ruft `GET /users/register/verify-email?token=XXX` an Directus auf und leitet bei Erfolg auf `/login?verified=true` weiter. Die Login-Seite zeigt dort ein gruenes Banner "Email verified — you can now sign in."
-Directus antwortet auf den Verify-Endpunkt mit **302** (nicht 200) — fetch muss daher mit `redirect: 'manual'` aufgerufen werden, sonst folgt es dem Redirect, bekommt HTML statt JSON und die Fehlerbehandlung schlaegt fehl. Status-Check: `response.ok || response.type === 'opaqueredirect'` (2xx + Redirect = Erfolg).
+**Auth (fastapi-users):**
+E-Mail-Verifizierung nach Registrierung — `registrationSent`-Flag im Frontend, kein Auto-Login.
+`/verify-email.vue` → `GET /auth/verify?token=XXX` → Redirect auf `/login?verified=true`.
+Dev: Mailpit als SMTP-Sink (`http://localhost:8025`).
 
-**Security:** `USER_REGISTER_URL_ALLOW_LIST` im Directus-Container setzen (kommagetrennte erlaubte URL-Prefixes, z.B. `http://localhost:3000,https://decisionmap.example.com`). Ohne diesen Guard akzeptiert Directus jede beliebige `verification_url` im Register-Request — Phishing-Vektor. Directus prueft nur, ob die URL mit einem der erlaubten Prefixes beginnt.
-
-**SMTP-Konfiguration testen (Directus 11):** Directus 11 hat keinen Mail-Test-Button mehr im UI — Konfiguration nur per Env-Variablen, Testen per API:
-```bash
-curl -X POST https://cms.decisionmap.ai/utils/mail/test \
-  -H "Authorization: Bearer <DIRECTUS_TOKEN>" \
-  -H "Content-Type: application/json" \
-  -d '{"to": "test@example.com"}'
+**SMTP — AWS SES (Produktion):**
 ```
-Antwort: `{}` bei Erfolg, Fehlerobjekt mit SMTP-Details bei Fehler.
-
-Alternativ als E2E-Test (kein Token nötig) — triggert die echte Reset-Mail-Pipeline:
-```bash
-curl -X POST https://cms.decisionmap.ai/auth/password/request \
-  -H "Content-Type: application/json" \
-  -d '{"email": "test@example.com"}'
+MAIL_SERVER=email-smtp.eu-west-1.amazonaws.com
+MAIL_PORT=587
+MAIL_USERNAME=<IAM-SMTP-Credentials-User>
+MAIL_PASSWORD=<IAM-SMTP-Credentials-Secret>
+MAIL_FROM=noreply@decisionmap.ai
 ```
-Antwort ist immer leer (`204`) — Mail kommt an wenn SMTP korrekt konfiguriert ist.
-
-**Gotcha — Hetzner blockiert SMTP-Port 587:**
-Hetzner VPS blockiert ausgehende SMTP-Verbindungen auf Port 587 (STARTTLS) standardmäßig. Test: `nc -zv in-v3.mailjet.com 587` — Timeout bedeutet blockiert. Lösung: Port 465 (TLS) verwenden:
-```
-EMAIL_SMTP_PORT=465
-EMAIL_SMTP_SECURE=true
-```
-Port 465 ist auf Hetzner in der Regel offen. Falls nicht: Hetzner Cloud Firewall im Panel prüfen (Firewalls → Outbound Rules, Port 465/587 freischalten) — die externe Cloud Firewall überschreibt `ufw`. Alternativ: Hetzner-Support (Port-Freischaltung beantragen) oder Mailjet HTTP-API statt SMTP verwenden.
-
-**Gotcha — Mailjet "Relay access denied":**
-SMTP-Verbindung klappt (Port 465 offen), aber Mailjet lehnt den Versand ab: `535 Relay access denied`. Ursachen:
-1. **Falsche Credentials:** `EMAIL_SMTP_USER` = Mailjet API Key, `EMAIL_SMTP_PASSWORD` = Mailjet Secret Key (nicht Passwort des Mailjet-Accounts).
-2. **Unbekannte Sender-Domain:** `EMAIL_FROM=noreply@decisionmap.ai` — die Domain muss in Mailjet als verifizierte Sender-Domain eingetragen sein (Mailjet Dashboard → Sender domains & addresses).
-3. **Fehlender SPF-Record:** Mailjet prüft ob der sendende Server in der SPF-Policy der Domain autorisiert ist. DNS TXT-Record für `decisionmap.ai` muss `include:spf.mailjet.com` enthalten. Es darf nur **einen** SPF-Record pro Domain geben — bestehende Einträge ergänzen, nicht ersetzen. Beispiel (inkl. typischer `+a +mx` Einträge): `v=spf1 +a +mx include:spf.mailjet.com ~all`. Vorhandenes `?all` (neutral) durch `~all` (SoftFail) ersetzen — bessere Zustellbarkeit. Änderungen im DNS können bis zu 30 Minuten propagieren.
-```
-EMAIL_SMTP_USER=<Mailjet API Key>
-EMAIL_SMTP_PASSWORD=<Mailjet Secret Key>
-EMAIL_FROM=noreply@decisionmap.ai
-```
-4. **Mailjet Trial-Account:** Im Trial-Modus kann Mailjet nur an verifizierte Test-Empfänger senden. Mailjet Dashboard → **Account → My Plan** prüfen. Falls "Trial" steht: Account aktivieren/upgraden oder Test-Empfänger in Mailjet whitelisten (Senders & Domains → Test Recipients).
-
-**Gotcha — Directus SMTP-Healthcheck blockiert Container-Start:**
-Directus prüft im `/server/health`-Endpunkt die SMTP-Verbindung. Ist `EMAIL_SMTP_HOST` gesetzt aber nicht erreichbar, wartet Directus bis zu 60 Sekunden auf Timeout — Docker markiert den Container inzwischen als `unhealthy`. Lösung: `EMAIL_SMTP_HOST=` (leer) setzen, solange SMTP nicht benötigt wird, dann Container neu starten:
-```bash
-# In /srv/decisionmap/.env
-EMAIL_SMTP_HOST=
-```
-```bash
-docker compose up -d --no-deps --force-recreate backend
-```
-
-Tipp: `GET /server/ping` antwortet sofort mit `{"data":"pong"}` — unabhängig von SMTP. Eignet sich für einfache Verfügbarkeitsprüfungen ohne den SMTP-Timeout-Pfad.
-
-**SMTP-Provider — Wechsel:** Mailjet (unzuverlässig) → smtp2go evaluiert → **AWS SES** gewählt (vollständige Einrichtungsanleitung: [`docs/ses-setup.md`](ses-setup.md)).
-Bis zur Konfiguration: `EMAIL_SMTP_HOST=` (leer) — sonst 60s-Timeout bei Container-Start.
-Tracking: MikeMitterer/decmap_project#1.
-
-**SMTP-Provider — AWS SES (Produktion):**
-AWS SES skaliert besser als smtp2go für Produktion. Konfiguration:
-```
-EMAIL_SMTP_HOST=email-smtp.<region>.amazonaws.com
-EMAIL_SMTP_PORT=587
-EMAIL_SMTP_USER=<IAM-SMTP-Credentials-User>
-EMAIL_SMTP_PASSWORD=<IAM-SMTP-Credentials-Secret>
-EMAIL_SMTP_SECURE=false
-EMAIL_FROM=noreply@decisionmap.ai
-```
-SMTP-Credentials in der AWS Console erstellen: SES → "Create SMTP credentials" → IAM-User mit `ses:SendRawEmail`. Sandbox-Modus initial aktiv — nur verifizierte Empfänger erreichbar bis Production-Access beantragt.
+Vollständige Einrichtungsanleitung: [`docs/ses-setup.md`](ses-setup.md). Tracking: MikeMitterer/decmap_project#1.
 
 SMTP-Verbindung testen: `./scripts/smtp-test.py --send --to dein@email.com` (liest `apps/backend/.env` automatisch).
 
@@ -221,99 +162,42 @@ Wenn `dns.hetzner.com` ebenfalls blockiert: DNS auf Route 53 oder Cloudflare del
 **Gotcha — Custom MAIL FROM Domain — AWS-Standard nicht übernehmen:**
 SES schlägt `no-reply.decisionmap.ai` als Standard-Subdomain vor. Bessere Wahl: `mail.decisionmap.ai` (kürzer, klarer, zukunftssicher). Im Bearbeiten-Dialog im Abschnitt *Benutzerdefinierte MAIL-From-Domain* vor dem Speichern anpassen. Für Custom MAIL FROM sind zwei DNS-Records nötig: MX (`feedback-smtp.eu-west-1.amazonses.com.`, Priority 10) und SPF-TXT (`v=spf1 include:amazonses.com ~all`) — beide auf `mail.decisionmap.ai`. Trailing Dot gilt auch hier: nur beim MX-Ziel-Wert, **nicht** beim Name/Host-Eintrag. Details: [`docs/ses-setup.md#phase-2b`](ses-setup.md).
 
-**Gotcha — Directus Permissions nie per direktem SQL setzen:**
-`INSERT INTO directus_permissions ...` umgeht den Directus-In-Memory-Cache. Permissions greifen dann erst nach einem Neustart — ohne sichtbare Fehlermeldung erscheint trotzdem 403. Permissions immer ueber die Directus REST API setzen (`PATCH /policies/{id}` oder `POST /permissions`). `make db-permissions` und `make seed-users` verwenden ausschliesslich REST-Aufrufe.
+**Flows (FastAPI BackgroundTasks):**
 
-**Gotcha — Alembic-Spalten fehlen im Directus-Schema:**
-Spalten die Alembic anlegt (z.B. `deleted_at`, `deleted_by` auf `tags`), sind Directus nicht bekannt, solange sie nicht explizit in `schema.json` definiert oder via Directus API hinzugefuegt werden. Fehlt die Definition, lehnt Directus Filter auf diese Spalte (z.B. `filter[deleted_at][_null]=true`) mit einem Validierungsfehler ab. Fix: Feld via `POST /fields/{collection}` hinzufuegen und `schema.json` aktualisieren, damit es bei `make directus-schema-apply` reproduzierbar ist. Gilt fuer alle Alembic-Spalten — nicht nur `deleted_at`, sondern auch `deleted_by` und andere Audit-Felder.
+> **Phase 5–8 abgeschlossen (Directus vollständig entfernt):** Phase 5: `problem-submitted`, `problem-approved`, `solution-approved` vom FastAPI-Backend gefeuert (BackgroundTasks). Phase 6: Internal API `/internal/*` (11 Endpoints, `X-Service-Token`). Phase 7: AI-Service nutzt `BackendClient` (httpx) statt direktem DB-Zugriff — `app/repositories/` gelöscht, `psycopg[binary]` entfernt, alle Services + hooks.py + scheduler.py auf BackendClient umgestellt. Migration 004: `cluster_tag`-Junction + UNIQUE auf `clusters.label` + UNIQUE auf `tags(name, level)`. Phase 8: Directus aus docker-compose, nginx, env vars, CLAUDE.md entfernt. `cms.decisionmap.ai` → `api.decisionmap.ai` (Port 8001). `useDirectusRealtime.ts` → `useBackendRealtime.ts`. `directusClient.ts`, `apps/backend/directus/` gelöscht.
 
-**Gotcha — Directus M2M Virtual-Field-Naming:**
-Directus benennt M2M-Aliasfelder auf der "One"-Seite nach dem `one_field`-Wert in der Relation-Definition — nicht nach dem Junction-Table-Namen. Beispiel: die Relation `problems` → `problem_tag` → `tags` heisst im `readItems`-Ergebnis `tags` (nicht `problem_tag`), weil `one_field: "tags"` gesetzt ist. Ebenso `regions` statt `problem_region`. In `PROBLEM_FIELDS` und `DirectusProblem`-Interface deshalb `tags.tag_id` (nicht `problem_tag.tag_id`) und `regions.region_id` (nicht `problem_region.region_id`) verwenden. Defensiver Null-Guard im Mapper: `raw.tags ?? []` statt direktem Zugriff.
+Alle Flows werden jetzt vom FastAPI-Backend ausgeloest (keine Directus-Abhaengigkeit mehr):
 
-**Gotcha — Directus 11 Nullable-FK-Validierungsbug:**
-Directus 11 validiert nullable Foreign-Key-Felder (z.B. `tags.parent_id`, `problems.deleted_by`, `solution_approaches.deleted_by`) zur Laufzeit gegen seine eigene Relation-Metadata — auch wenn PostgreSQL `NULL` erlaubt. Ein `PATCH`-Request mit `null` auf einem solchen Feld schlaegt mit einem Validierungsfehler fehl, obwohl die DB die `NULL`-Schreibung akzeptieren wuerde. Fix: die Directus-Relation-Metadata fuer diese Felder ueber die REST API entfernen (`DELETE /relations/{collection}/{field}`). Die PostgreSQL-FK-Constraint bleibt erhalten — nur Directus prueft nicht mehr. `make db-permissions` / `make seed-users` enthalten diesen Fix idempotent. Symptom: `PATCH` auf Item mit Soft-Delete oder selbst-referenzierendem Parent schlaegt mit 400 fehl.
+| Flow | Status |
+|---|---|
+| `problem-submitted` | ✓ Backend Phase 5 (BackgroundTask) |
+| `problem-approved` | ✓ Backend Phase 5 (BackgroundTask) |
+| `solution-approved` | ✓ Backend Phase 5 (BackgroundTask) |
+| `vote-changed` | ✓ Backend Phase 8 (`POST /votes` → WS broadcast) |
 
-**Gotcha — Directus M2M PATCH — Junction-Record-`id` Pflicht:**
-Beim PATCH einer M2M-Relation (z.B. `problem_tags`, `problem_regions`) unterscheidet Directus anhand der `id` im Junction-Objekt:
-- Junction-Record **mit** `id` → UPDATE (existierender Eintrag bleibt erhalten)
-- Junction-Record **ohne** `id` → INSERT (neuer Eintrag wird angelegt)
+**Vote-Toggle-Semantik (`POST /votes`):** Gleiche Richtung → Vote wird zurückgezogen (delta = -1). Entgegengesetzte Richtung → Flip (delta = ±2). Neues Vote → delta = ±1. Backend gibt `vote_score` direkt im Response zurück — kein Re-Fetch nötig. `fakeVoting.ts` implementiert dieselbe Logik (Contract-Test in `useVoting.contract.spec.ts` verifiziert den Vertrag).
 
-Werden alle Tags ohne `id` geschickt (z.B. `[{tag_id: "uuid1"}, ...]`), versucht Directus fuer jeden Tag einen neuen Junction-Row einzufuegen → Unique-Constraint `(problem_id, tag_id)` schlaegt fehl.
+**Internal API `/internal/*` (Phase 6 — Phase 7 abgeschlossen, AI-Service nutzt ausschließlich diese API):**
 
-**Fix A (include `id`):** Vor dem PATCH existierende Junction-Records laden (`GET /items/problem_tag?filter[problem_id][_eq]=<id>&fields=id,tag_id`), per `tag_id` mappen und die Junction-`id` fuer bereits vorhandene Eintraege mitschicken. Neue Tags bekommen keine `id` → Directus legt sie an. Fehlende Tags → Directus loescht sie.
+Alle Endpoints erfordern `X-Service-Token: <SERVICE_TOKEN>` Header (`verify_service_token` Dependency, 403 bei Fehler, Dev-Wert `dev-service-token`).
 
-**Fix B (explicit DELETE + POST) — bevorzugt in `realProblems.ts`:** Scalar-Felder und M2M-Relationen trennen.
-1. `PATCH /items/problems/{id}` — nur Scalar-Felder (kein `tags`/`regions` im Body)
-2. `DELETE /items/problem_tag?filter[problem_id][_eq]=<id>` — alle bestehenden Junction-Records loeschen
-3. `POST /items/problem_tag` — neue Records mit explizitem `problem_id` anlegen
-4. Dasselbe fuer `problem_region`
-5. Re-fetch via `fetchProblemById()` — damit `tagIds` im Rueckgabewert die frisch angelegten Records widerspiegelt
+| Endpoint | Zweck |
+|---|---|
+| `POST /internal/problems/{id}/embedding` | Embedding speichern |
+| `PATCH /internal/problems/{id}/status` | Status aktualisieren |
+| `GET /internal/problems/approved` | Approved-Problems + Embeddings für Clustering |
+| `GET /internal/problems/{id}` | Problem by ID |
+| `POST /internal/problems/{id}/solutions` | AI-generierte Lösung anlegen |
+| `POST /internal/similarity` | pgvector Cosine-Similarity-Suche |
+| `POST /internal/clusters/upsert` | Cluster upsert by label |
+| `POST /internal/clusters/{id}/assign-problem` | problem_cluster upsert |
+| `POST /internal/tags/upsert` | Tag upsert (API: `label` → DB: `name`) |
+| `POST /internal/tags/{id}/assign-cluster` | cluster_tag insert |
+| `GET /internal/tags/for-cluster/{id}` | Tags für Cluster |
 
-Fix B ist expliziter und funktioniert unabhaengig davon wie Directus M2M intern verarbeitet.
+**Gotcha — Tags: API-Feld `label` ↔ DB-Spalte `name`:** Die `tags`-Tabelle hat eine Spalte `name` (historisch — Umbenennung nicht nötig). Der AI-Service schickt/erwartet `label`. Die Internal API mappt transparent: `label` im Request-Body → `name` in der DB, `name` in der DB → `label` im Response.
 
-**Gotcha — Directus Filter-Queries in curl / Shell-Scripts:**
-Directus-Filterpfade enthalten eckige Klammern (`filter[field][_eq]=value`). curl interpretiert diese als URL-Bereich und schlaegt mit "URL rejected" fehl. Loesung: `--get --data-urlencode` verwenden oder die gesamte URL in Anfuehrungszeichen setzen und die Klammern mit `%5B`/`%5D` encoden. Beides gilt auch fuer `filter[_and][]`-Arrays.
-
-**Gotcha — Directus User-Rollen und Permissions (Directus 11):**
-Neu registrierte User erhalten automatisch die Rolle "User" (`app_access: false`) — sie koennen sich nicht im Directus-Admin-Backend einloggen. Nur der Admin-User hat `admin_access: true`.
-Directus 11: Permissions sind nicht direkt an Rollen geknuepft, sondern an **Policy-Objekte** (`directus_policies`), die dann der Rolle (oder direkt dem Public-Access) zugewiesen werden. `make seed-users` legt Role + Policy idempotent an; `make db-permissions` richtet Public- und User-Policy ein.
-
-Permission-Matrix:
-
-| Rolle | READ | CREATE/UPDATE | DELETE |
-|---|---|---|---|
-| **Public (anonym)** | `problems`, `solution_approaches`, `clusters`, `tags`, `regions`, `problem_cluster`, `problem_tag`, `problem_region` | — | — |
-| **User (eingeloggt)** | wie Public + `votes` | `problems`, `solution_approaches`, `tags`, `votes`, `problem_tag` (M2M), `problem_region` (M2M) | `votes`, `problem_tag`, `problem_region` |
-| **Admin** | alle | alle | alle |
-
-`votes` ist bewusst nicht in der Public-Policy — Vote-Scores sind in `problems.vote_score` eingebettet, einzelne Stimmen muessen anonym nicht abrufbar sein.
-
-**Wichtig — `fields: ["*"]`:** Jede Permission in der Public-Policy muss `fields: ["*"]` (alle Felder) gesetzt haben. Fehlt diese Angabe, antwortet Directus zwar mit 200, liefert aber leere Objekte — der Graph bleibt leer ohne sichtbaren Fehler. `make db-permissions` setzt dies automatisch.
-
-**Debugging — User bekommt 403 obwohl Permissions korrekt konfiguriert sind:**
-Wenn Role → Policy → Permissions alle korrekt gesetzt sind, aber der eingeloggte User trotzdem 403 bekommt, hat er wahrscheinlich **keine Rolle zugewiesen** (`"role": null`). Pruefung:
-```bash
-curl -s "http://localhost:8055/users?fields=id,email,role&limit=20" \
-  -H "Authorization: Bearer $TOKEN"
-```
-Fehlende Rolle kann passieren wenn `make seed-users` nicht `default_role` in Directus-Settings setzt oder der User vor dem Seed-Lauf angelegt wurde. Loesung: Rolle im Directus-Admin manuell zuweisen oder User loeschen und neu registrieren (nach `make seed-users`).
-
-**Gotcha — Directus 11: `admin_access` nicht mehr auf Role-Objekt:**
-In Directus 11 ist `admin_access` von `directus_roles` nach `directus_policies` gewandert. `role.admin_access` existiert nicht mehr und gibt immer `undefined` zurueck — das Admin-Menue bleibt unsichtbar ohne Fehlermeldung.
-Korrekte Pruefung: `role.policies?.some(p => p.policy?.admin_access === true)` (Directus gibt `role.policies` als Array von `{policy: {admin_access: boolean}}` zurueck, wenn `policies.policy.admin_access` in `USER_FIELDS` requested wird). In `realAuth.ts`: `USER_FIELDS` muss `"role.policies.policy.admin_access"` enthalten; `mapUser` liest `raw.role?.policies?.some(p => p.policy?.admin_access)`.
-
-**Gotcha — Directus 11: Custom-Felder auf `directus_users` und fehlende Systemfelder:**
-`directus_users` hat in Directus 11 kein `date_created`-Feld — `createdAt` muss auf `''` als Fallback gemappt werden (kein Query-Fehler, aber `undefined` wenn requested).
-`display_name` und `company` sind nicht im Standard-Schema — sie muessen als Custom-Felder via API (`POST /fields/directus_users`) oder `seed-users.sh` angelegt werden. Fehlen sie, gibt Directus beim Lesen `undefined` zurueck (kein Fehler).
-User-Policy braucht ausserdem READ auf `directus_users` (filter: `id == $CURRENT_USER`, alle Felder) und UPDATE auf `directus_users` (filter: `id == $CURRENT_USER`, Felder: `display_name, company`) — ohne diese Permissions schlaegt das Laden und Speichern des User-Profils mit 403 fehl. `make seed-users` richtet beides idempotent ein.
-
-**Flows einrichten (einmalig manuell — nicht im Snapshot):**
-Directus Flows verbinden Datenereignisse mit dem AI-Service.
-
-| Flow | Trigger | Ziel |
-|---|---|---|
-| `problem-submitted` | Action: `problems.items.create` | `POST http://ai-service:8000/hooks/problem-submitted` |
-| `problem-approved` | Action: `problems.items.update` (filter: `status=approved`) | `POST http://ai-service:8000/hooks/problem-approved` |
-| `solution-approved` | Action: `solution_approaches.items.update` (filter: `status=approved`) | `POST http://ai-service:8000/hooks/solution-approved` |
-| `vote-changed` | Action: `votes.items.create` | `POST http://ai-service:8000/hooks/vote-changed` |
-
-Jeder Flow: Trigger → HTTP-Request-Action → Ziel-URL, Methode POST, Header `X-Webhook-Secret: <WEBHOOK_SECRET>`.
-
-Der `vote-changed`-Flow kann per Script angelegt werden (benötigt laufendes Directus):
-```bash
-make -C infrastructure setup-vote-flow
-# Neu anlegen falls bereits vorhanden:
-make -C infrastructure setup-vote-flow -- --force
-```
-
-**Gotcha — `vote-changed` Flow Body:** Directus-Flow-Trigger-Payload muss explizit auf den HTTP-Request-Body gemappt werden. Body im HTTP-Request-Operation:
-```json
-{
-  "entity_id": "{{$trigger.payload.entity_id}}",
-  "entity_type": "{{$trigger.payload.entity_type}}"
-}
-```
-`new_score` muss **nicht** mitgeschickt werden — der AI-Service liest `problems.vote_score` direkt aus der DB.
+**Gotcha — `useServiceStatus` URL-Detection:** Das Composable unterscheidet die zwei Services anhand der URL-Signatur, nicht anhand eines Namens-Parameters. Backend wird an `:8001` erkannt (Port im URL-String), AI-Service an `/api/health` (Pfad-Präfix nach nginx-Proxy). In Tests müssen Mock-URLs diese Muster enthalten (`url.includes(':8001')` vs. `url.includes('/api/health')`). Außerdem prüft `fetchJson()` `res.ok` bevor es parst — Mocks müssen `ok: true, status: 200` setzen, sonst gibt `fetchJson` immer `null` zurück.
 
 [↑ Inhalt](#inhalt)
 
@@ -323,20 +207,21 @@ make -C infrastructure setup-vote-flow -- --force
 
 ```
 User reicht Problem ein
-    → Directus speichert mit status: pending
-    → Directus Flow → POST /hooks/problem-submitted (X-Webhook-Secret Header)
-        → _verify_webhook_secret() Dependency pruft Header (leer = Dev-Mode)
-        → SpamFilter bewertet (sync, LLM-Call)
-            → Klarer Spam: status: rejected (automatisch)
-            → Unklar / gultig: status: needs_review
-        → DB-Write mit eigener psycopg-Connection
-        → background_tasks.add_task(...) → 200 sofort zurueck
-        → [async, nach Response]:
-            embed (eigene Conn) → solution generieren (eigene Conn)
-            → cluster aktualisieren (eigene Conn) → WebSocket broadcast
-    → Admin pruft Moderations-Queue
-        → Freigegeben: status: approved
-    → Frontend liest freigegebene Probleme + Cluster aus Directus
+    → FastAPI POST /problems (apps/backend/, Port 8001)
+        → _ip_hash(request) hasht X-Forwarded-For/client.host (SHA256)
+        → Problem in DB schreiben (status: pending)
+        → BackgroundTask: notify_problem_submitted → POST /hooks/problem-submitted (ai-service)
+            → _verify_webhook_secret() prueft X-Webhook-Secret
+            → SpamFilter bewertet (sync, LLM-Call)
+                → Klarer Spam: status: rejected
+                → Unklar / gueltig: status: needs_review
+            → [async, nach Response]:
+                embed (eigene Conn) → WebSocket broadcast
+    → Admin prueft Moderations-Queue → Freigabe
+        → FastAPI PATCH /admin/problems/:id → status: approved
+        → BackgroundTask: notify_problem_approved → POST /hooks/problem-approved (ai-service)
+            → embed + AI-Loesung generieren + Cluster aktualisieren → WS broadcast
+    → Frontend empfaengt Updates via useBackendRealtime.ts (WS /ws, Port 8001)
     → Cytoscape.js rendert Graph
 ```
 
@@ -502,23 +387,23 @@ volumes:
 
 **nginx.conf:**
 - Port 80: reiner `301`-Redirect zu HTTPS
-- Port 443: TLS (`TLSv1.2/1.3`), alle Location-Bloecke (Frontend, CMS, AI-Service, WebSocket)
+- Port 443: TLS (`TLSv1.2/1.3`), alle Location-Bloecke (Frontend, Backend-API, AI-Service, WebSocket)
 
-**Directus auf Subdomain `cms.decisionmap.ai`:**
-Directus läuft auf einer eigenen Subdomain — kein `/cms`-Pfad-Prefix, kein `proxy_redirect`. `PUBLIC_URL=https://cms.decisionmap.ai` in `.env` Pflicht.
+**Backend API auf Subdomain `api.decisionmap.ai`:**
+FastAPI Backend läuft auf Port 8001 — kein Pfad-Prefix, direkte Subdomain.
 
 ```nginx
 server {
-    server_name cms.decisionmap.ai;
+    server_name api.decisionmap.ai;
     location / {
-        proxy_pass http://directus:8055;
+        proxy_pass http://backend:8001;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
     }
 }
 ```
 
-**Directus WebSocket-Subscriptions hinter nginx:** Der Subdomain-Block muss WebSocket-Upgrade-Headers weiterleiten — sonst schlägt `useDirectusRealtime.ts` lautlos fehl.
+**Backend WebSocket hinter nginx:** Der Subdomain-Block muss WebSocket-Upgrade-Headers weiterleiten — sonst schlägt `useBackendRealtime.ts` lautlos fehl.
 
 **nginx — `proxy_pass` mit Variable + `rewrite` — drei Gotchas:**
 
@@ -554,20 +439,22 @@ Bei `docker.io`-Installation (Ubuntu-Paket statt Docker-Repo) muss zuerst das of
 
 ## Makefile-Struktur
 
-Jedes Sub-Repo hat ein eigenes Makefile fuer seinen Kontext. `make help` zeigt die Befehle des jeweiligen Repos, `make hints` zeigt Service-URLs, SSH-Befehle und Abhaengigkeiten.
+Jedes Sub-Repo hat ein eigenes Makefile fuer seinen Kontext. `make help` zeigt die Befehle des jeweiligen Repos, `make hints` zeigt Service-URLs, SSH-Befehle und Abhaengigkeiten — eigenstaendiges Target, kein `@$(MAKE) hints` am Ende von `help`.
 
 Konventionen (Struktur, `##@`-Gruppen, `.PHONY`, `info`/`hints`-Targets, Farben): `/code-standards`
 
 **Comment-Syntax (awk-basiertes `make help`):**
 
 ```makefile
-##@ Setup                    # Gruppen-Header (gelb eingerückt)
+##@ Setup                     # Gruppen-Header (gelb eingerückt)
 
 .PHONY: setup
-setup: ## Symlinks erstellen  # Target + Beschreibung (awk parst ":.*## ")
+setup: ## Symlinks erstellen   # Standard-Target (blau)
+deploy: ##R Deploy auf Server  # Server-Op → gelb hervorgehoben
+db-reset: ##D DB zurücksetzen  # Danger-Op → rot hervorgehoben
 ```
 
-`help`-Regel greift alle Zeilen mit `##@` (Gruppen) und alle Targets mit `## desc` — kein Boilerplate pro Target nötig. Die `THEME_*`-Variablen (`THEME_COLOR_GROUP`, `THEME_COLOR_TARGET`, `THEME_COLOR_DESC`) kommen aus MakeLib (`include ${DEV_MAKE}/colours.mk` + `include ${DEV_MAKE}/tools.mk`). `.templates/Makefile` verwendet den älteren `usageLine2`/`infoLine2`-Stil — bei neuen Repos das Root-Makefile als Vorlage nehmen.
+`help`-Regel greift alle Zeilen mit `##@` (Gruppen) und alle Targets mit `## desc` — kein Boilerplate pro Target nötig. Die `THEME_*`-Variablen (`THEME_COLOR_GROUP`, `THEME_COLOR_TARGET`, `THEME_COLOR_DESC`) kommen aus MakeLib (`include ${DEV_MAKE}/colours.mk` + `include ${DEV_MAKE}/tools.mk`). `##R`-Marker = Server-Ops (gelb), `##D`-Marker = Danger-Ops (rot).
 
 `make help` unterstützt Farbthemen via `MAKE_THEME` (Env-Variable oder `.env`): `classic` (Standard), `ocean`, `earth`, `night`, `mono`, `sunset`, `forest`, `neon`.
 
@@ -575,11 +462,11 @@ setup: ## Symlinks erstellen  # Target + Beschreibung (awk parst ":.*## ")
 |---|---|
 | `Makefile` (Root) | Workspace-Setup, Delegation an Sub-Repos, Cross-Repo lint/test |
 | `infrastructure/Makefile` | docker-compose, nginx, Server-Orchestrierung |
-| `apps/backend/Makefile` | Directus, Datenbank, Backup, Seeds, Versioning |
+| `apps/backend/Makefile` | FastAPI Backend: Datenbank, Backup, Seeds, Versioning (`install`, `api-dev`, `db-migrate`, `db-seed`, `api-test`, `api-test-contract`) |
 | `apps/frontend/Makefile` | Dev-Server, Lint, Test, Build, Versioning |
 | `apps/ai-service/Makefile` | Dev-Server, Lint, Test, Build, DB-Migrationen, Versioning |
 
-[`.templates/Makefile`](../.templates/Makefile) ist ein generisches Ausgangs-Template. Benoetigt nur `DEV_MAKE` — kein `setup`-Target, kein `DEV_LOCAL`. Root-Makefile als Vorlage bevorzugen (nutzt aktuellen `##@`/`## desc`-Stil statt dem aelteren `usageLine2`/`infoLine2`).
+[`.templates/Makefile`](../.templates/Makefile) ist ein generisches Ausgangs-Template mit `##@`/`## desc`/`##R`/`##D`-Stil. Benoetigt nur `DEV_MAKE` — kein `setup`-Target, kein `DEV_LOCAL`.
 
 **Versioning-Voraussetzung:** `bumpVer` benoetigt `BASH_LIBS` und eine Versionsdatei (`package.json`, `pyproject.toml` oder `VERSION`). Jedes Sub-Repo muss genau eine davon enthalten:
 
@@ -602,17 +489,18 @@ make test              # → delegiert an apps/frontend/ und apps/ai-service/
 
 # Backend (aus apps/backend/ oder via make -C apps/backend ...)
 make up / down / logs                                 # Alle Services
-make dev-up / dev-down / dev-logs                     # Dev-Umgebung (Directus + Mailpit)
-make db-reset                                         # DB zurücksetzen (schema → constraints → seed)
-make directus-schema-apply                            # ↳ Directus-Schema anwenden
-make db-constraints                                   # ↳ vector-Spalten, Constraints, Junction-Tables
+make dev-up / dev-down / dev-logs                     # Dev-Umgebung (Postgres + Backend-API + Mailpit)
+make db-reset                                         # DB zurücksetzen (down -v → up → migrate → seed)
+make db-migrate / db-rollback / db-migrate-status     # Alembic-Migrationen
 make db-seed                                          # ↳ Seed-Daten einspielen
-make db-migrate / db-rollback / db-migrate-status     # Alembic-Migrationen (nach initialem Setup)
-make seed-users                                       # Test-User in Directus
 make backup / backup-schema / backup-restore          # Backup
 make build / deploy                                   # Build & Deploy
 make precheck / version / tags                        # Versioning
 make tag-patch / tag-minor / tag-major                # SemVer Git-Tag setzen + pushen
+make install                                          # FastAPI-Backend Python-Abhaengigkeiten
+make api-dev                                          # FastAPI-Dev-Server (Port 8001, --reload)
+make api-test                                         # Unit-Tests (pytest tests/unit/)
+make api-test-contract                                # Contract-Tests (pytest tests/contract/)
 
 # AI-Service (aus apps/ai-service/ oder via make -C apps/ai-service ...)
 make install / install-dev                            # Abhaengigkeiten
@@ -776,4 +664,4 @@ scripts/db-backup.sh --help   # vollstaendige Optionsliste
 
 Backups nie einchecken — `database/backups/` bzw. `backups/` in `.gitignore`.
 
-**Restore mit aktiven Services:** Directus und AI-Service halten offene DB-Connections. `pg_restore` kann dann keine DROP/CREATE-Operationen auf verwendeten Tabellen ausführen → partieller Restore möglich. Vor einem Restore die betroffenen Services stoppen (`docker compose stop directus ai-service`), danach neu starten.
+**Restore mit aktiven Services:** Backend und AI-Service halten offene DB-Connections. `pg_restore` kann dann keine DROP/CREATE-Operationen auf verwendeten Tabellen ausführen → partieller Restore möglich. Vor einem Restore die betroffenen Services stoppen (`docker compose stop backend ai-service`), danach neu starten.

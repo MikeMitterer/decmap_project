@@ -195,7 +195,7 @@ CRUD uber REST. Ruckmeldungen an das UI uber zwei WebSocket-Quellen.
 
 | Composable | WebSocket | Verantwortlich für |
 |---|---|---|
-| `useDirectusRealtime.ts` | Directus `/websocket` | Vote-Score-Updates (`problems.vote_score`) |
+| `useBackendRealtime.ts` | Backend `/ws` (Port 8001) | Mutations: Vote-Scores, Problem/Solution CRUD |
 | `useRealtimeUpdates.ts` | AI-Service `/ws` | AI-Events: `problem.approved`, `cluster.updated`, `solution.generated` |
 
 Vote-Score-Updates laufen **nicht** über den AI-Service — Basis-Funktionalität darf
@@ -206,23 +206,20 @@ nicht vom AI-Service abhängen.
 ```
 User klickt Vote
       ↓
-POST /items/votes  (Directus REST)
+POST /votes  (FastAPI Backend, Port 8001)
       ↓
-GET /items/{collection}/{id}?fields=vote_score  (aktuellen Score laden)
+Backend berechnet neuen vote_score (Toggle-Logik, s.u.)
       ↓
-PATCH /items/{collection}/{id}  { vote_score: n+1 }  (via Directus REST)
-      ↓  (löst Directus WS-Event aus)
-Directus WebSocket → alle verbundenen Clients
+Response enthält aktualisierten vote_score direkt — kein Re-Fetch nötig
+      ↓  (Backend feuert WS-Event)
+Backend WebSocket /ws → alle verbundenen Clients
       ↓
-useDirectusRealtime.ts → applyProblemUpdate(update) → UI aktualisiert
+useBackendRealtime.ts → applyProblemUpdate(update) → UI aktualisiert
 ```
 
-> **Kein PostgreSQL-Trigger:** `trg_vote_score` / `fn_update_vote_score()` wurden entfernt.
-> Score-Berechnung erfolgt in `realVoting.ts` via REST API. Voraussetzung: `update`-Permission
-> auf `vote_score` für Public-Policy (`make -C apps/backend db-permissions`).
+**Vote-Toggle-Semantik:** Gleiche Richtung wie vorhandenes Vote → zurückziehen (delta = -1). Entgegengesetzte Richtung → Flip (delta = ±2). Neues Vote → delta = ±1. `fakeVoting.ts` implementiert dieselbe Logik (Contract-Test in `useVoting.contract.spec.ts`).
 
-Sofort-Feedback für den votenden User: `ProblemPanel.vue` ruft nach `submitVote()`
-sofort `fetchProblemById()` auf — zeigt echten DB-Wert ohne auf WS-Event zu warten.
+Sofort-Feedback für den votenden User: `ProblemPanel.vue` aktualisiert den Score direkt aus dem Response-Body — zeigt echten DB-Wert ohne auf WS-Event zu warten.
 
 ### AI-Service — Event-Typen
 
@@ -238,11 +235,10 @@ type WebSocketEvent =
 
 Events auf Entity-Ebene — Frontend entscheidet ob Re-fetch oder direktes State-Update.
 
-### Directus WS — nur Scalar-Felder
+### Backend WS — Scalar vs. Relationen
 
-Directus WS-Subscriptions liefern **ausschließlich Scalar-Felder** — M2M-Relationen
-(`tags`, `regions`) kommen nie im Event-Payload. `applyProblemUpdate` unterscheidet
-daher zwei Fälle:
+Backend WS-Events liefern Scalar-Felder des Problems. M2M-Relationen (`tags`, `regions`)
+kommen nicht im Event-Payload. `applyProblemUpdate` unterscheidet daher zwei Fälle:
 
 | Update-Typ | `edited_at` im WS-Event? | Strategie |
 |---|---|---|
@@ -278,21 +274,19 @@ sich nicht automatisch. Fehlt der `connect()`-Call, bleibt der Socket stumm (kei
 
 ```typescript
 // pages/index.vue
-const { connect: connectDirectus, disconnect: disconnectDirectus } = useDirectusRealtime({
+const { connect: connectBackend, disconnect: disconnectBackend } = useBackendRealtime({
   onProblemUpdated: applyProblemUpdate,
 })
 const { connect: connectAiWs, disconnect: disconnectAiWs } = useRealtimeUpdates({ ... })
 
-onMounted(() => { connectDirectus(); connectAiWs() })
-onUnmounted(() => { disconnectDirectus(); disconnectAiWs() })
+onMounted(() => { connectBackend(); connectAiWs() })
+onUnmounted(() => { disconnectBackend(); disconnectAiWs() })
 ```
 
 ### Voraussetzungen
 
-- `WEBSOCKETS_ENABLED=true` und `WEBSOCKETS_REST_AUTH=public` in `apps/backend/.env`
-- `PUBLIC_URL` + `CORS_ORIGIN` korrekt gesetzt — sonst Reconnect-Loop (~3 s) ohne Fehlermeldung
-- Directus Flow "Vote Score Broadcast" angelegt (`make -C infrastructure setup-vote-flow`)
-- nginx `cms.decisionmap.ai`-Serverblock: Upgrade-Header + `proxy_read_timeout 3600s`
+- Backend (`apps/backend/`) läuft auf Port 8001 — WS-Endpoint: `ws://localhost:8001/ws`
+- nginx `api.decisionmap.ai`-Serverblock: Upgrade-Header + `proxy_read_timeout 3600s`
 
 → Vollständige Dokumentation: [`docs/dev-environment.md`](dev-environment.md)
 
@@ -469,7 +463,7 @@ Feedback: „Link copied!" fuer 2 Sekunden.
 
 ## Authentifizierung
 
-Directus built-in Auth — kein eigener Auth-Service.
+fastapi-users — JWT-Auth, E-Mail-Verifizierung, Magic Link (`apps/backend/`, Port 8001).
 
 ### Registrierung
 
@@ -478,13 +472,13 @@ User füllt Register-Formular aus (E-Mail + Passwort)
       ↓
 Passwort-Stärke-Checklist live (✓/○ pro Regel, Submit gesperrt bis alle grün)
       ↓
-POST /users/register → Directus schickt Verifizierungsmail
+POST /auth/register → Backend (fastapi-users) schickt Verifizierungsmail
       ↓
 Frontend zeigt „registrationSent"-State (kein Auto-Login)
       ↓
-User klickt Link in Mail → /verify-email.vue → GET /users/register/verify-email?token=XXX
+User klickt Link in Mail → /verify-email.vue → GET /auth/verify?token=XXX
       ↓
-Directus antwortet 302 (redirect: 'manual' + opaqueredirect = Erfolg)
+Backend antwortet 204 (Erfolg)
       ↓
 Frontend leitet weiter auf /login?verified=true → grünes Banner
 ```
@@ -500,6 +494,20 @@ Frontend leitet weiter auf /login?verified=true → grünes Banner
 
 Submit bleibt gesperrt bis alle vier Regeln erfüllt sind.
 
+### Magic Link
+
+```
+User fordert Magic Link an (E-Mail-Eingabe)
+      ↓
+POST /auth/request-magic-link → Backend schickt Mail mit Token
+      ↓
+User klickt Link → /auth/magic-verify.vue → GET /auth/magic-login?token=XXX
+      ↓
+Backend antwortet mit JWT → Frontend speichert Token, leitet auf / weiter
+```
+
+`/auth/magic-verify.vue` ist die Landingpage für Magic-Link-Tokens (B4-Fix: neu angelegt).
+
 ### Login / Logout
 
 - POST `/auth/login` → JWT-Token in `localStorage`
@@ -512,7 +520,7 @@ Mailpit als SMTP-Sink — alle Mails landen auf `http://localhost:8025`, kein ec
 
 ### Konfiguration
 
-Details zur Directus-Konfiguration (`USERS_REGISTER_ALLOW_PUBLIC`, `USER_REGISTER_URL_ALLOW_LIST`, Permissions): [`backend.md`](backend.md)
+Details: [`backend.md`](backend.md)
 
 [↑ Inhalt](#inhalt)
 

@@ -35,7 +35,7 @@ mit Community-Validierung durch Voting.
 | Frontend | Nuxt.js 3 + TypeScript | SPA/SSR-Hybrid, Auto-Imports, SEO-ready |
 | CSS | Tailwind CSS | Utility-Klassen, Theme-System per CSS Custom Properties |
 | Visualisierung | Cytoscape.js | Interaktive Graph-Darstellung |
-| CMS / Backend | Directus | Admin Panel, Auth, REST API (self-hosted) |
+| Backend | FastAPI + fastapi-users + SQLAlchemy (asyncio) | Auth, REST API, WebSocket, Admin-Endpoints |
 | Datenbank | PostgreSQL + pgvector | Relationale Daten + Embeddings in einer DB |
 | KI-Service | FastAPI (Python 3.11+) | Embeddings, Clustering, Spam-Filter, Übersetzung |
 | DB-Migrationen | Alembic | Python-nativ, rollbackfähig |
@@ -74,9 +74,9 @@ DecisionMap/                     ← Workspace-Root (Issues, Doku, CI-Koordinati
 ├── .templates/                  ← Wiederverwendbare Templates (Jenkinsfile, Makefile, Docker)
 ├── .libs/                       ← Lokale Symlinks (BashLib, MakeLib) — gitignored
 ├── apps/                        ← Service-Repos (gitignored, eigene Repos)
-│   ├── backend/                 ← Directus-Konfiguration + Seeds
+│   ├── backend/                 ← FastAPI Backend + Alembic (Schema-Owner)
 │   ├── frontend/                ← Nuxt.js App
-│   └── ai-service/              ← FastAPI + Alembic
+│   └── ai-service/              ← FastAPI KI-Service (kein direkter DB-Zugriff)
 └── infrastructure/              ← docker-compose, nginx (eigenes Repo)
 ```
 
@@ -128,7 +128,7 @@ make deploy        # Full-Stack Deploy via infrastructure/
 
 Sub-Repo-Makefiles:
 ```bash
-make -C apps/backend help      # Directus, DB, Backup
+make -C apps/backend help      # FastAPI Backend, DB, Backup
 make -C apps/frontend help     # dev, lint, test, build
 make -C apps/ai-service help   # FastAPI dev, test, build
 make -C infrastructure help    # Server-Orchestrierung
@@ -139,16 +139,18 @@ make -C infrastructure help    # Server-Orchestrierung
 ## Lokale Entwicklung
 
 ```bash
-make dev-up    # nginx-Proxy + Docker (Postgres + Directus) + overmind (Frontend :3000 + AI-Service :8000)
+make dev-up    # nginx-Proxy + Docker (Postgres + Backend-API :8001) + overmind (Frontend :3000 + AI-Service :8000)
 make dev-down  # overmind beenden + alle Docker-Services stoppen
 ```
 
 | URL | Dienst |
 |---|---|
 | http://int.decisionmap.ai | App (Frontend) |
-| http://cms.int.decisionmap.ai/admin | CMS (Directus) |
+| http://backend.int.decisionmap.ai | Backend API (FastAPI) |
 | http://int.decisionmap.ai/api/docs | AI-Service (Swagger) |
+| http://localhost:8001/docs | FastAPI Backend (Swagger, Port 8001) |
 | http://localhost:8025 | Mailpit (SMTP-Sink) |
+| http://localhost:8080 | Adminer (DB-UI, Server: `postgres`) |
 
 Voraussetzung: `overmind` installiert (`brew install overmind`).
 
@@ -284,16 +286,14 @@ make version
 
 Beide Data-Layer (Fake + Real) sind vollständig implementiert.
 
-- **Frontend:** 172 Tests in 15 Dateien grün — Composables, Contract-Tests (Fake & Real)
-- **AI-Service:** 31 Unit-Tests grün
+- **Frontend:** 180 Tests in 15 Dateien grün — Composables, Contract-Tests (Fake & Real)
+- **Backend:** 14 Unit-Tests grün
+- **AI-Service:** 37 Unit-Tests grün
 
-**Hetzner-Infrastruktur (in Betrieb):** nginx + TLS + Docker Compose laufen. Directus auf Subdomain `cms.decisionmap.ai` (kein `/cms`-Pfad-Prefix, `PUBLIC_URL=https://cms.decisionmap.ai`). SMTP noch offen (Blocker — User-Registrierung): AWS SES in Einrichtung (Domain-Verifizierung läuft, Sandbox-Modus). Tracking: MikeMitterer/decmap_project#1. AI-Service-Image (`decisionmap-ai-service`) auf ghcr.io, deploy via `make -C infrastructure deploy-service SVC=ai-service`.
+**Hetzner-Infrastruktur (in Betrieb):** nginx + TLS + Docker Compose laufen. SMTP: AWS SES (Domain-Verifizierung abgeschlossen, Sandbox-Modus). Tracking: MikeMitterer/decmap_project#1. AI-Service-Image (`decisionmap-ai-service`) auf ghcr.io, deploy via `make -C infrastructure deploy-service SVC=ai-service`.
 
-**Echtzeit-Vote-Updates implementiert:** `useDirectusRealtime.ts` subscribed auf `problems.update` via Directus WebSocket. Vote-Score wird per REST API berechnet (`POST /items/votes` → `GET` → `PATCH`) — kein PostgreSQL-Trigger, kein AI-Service-Umweg. Directus löst beim `PATCH` automatisch WS-Events aus. Erfordert `WEBSOCKETS_ENABLED=true` + `WEBSOCKETS_REST_AUTH=public` + `PUBLIC_URL` + `CORS_ORIGIN` in `backend/.env`.
+**Backend-Migration (Phase 8 abgeschlossen):** Directus vollständig entfernt. Stack: FastAPI (`apps/backend/`, Port 8001) + fastapi-users + SQLAlchemy asyncio. Phase 7: AI-Service nutzt `BackendClient` (httpx) statt direktem DB-Zugriff — `app/repositories/` gelöscht, `psycopg[binary]` entfernt. Phase 8: Directus aus docker-compose, nginx, env vars, CLAUDE.md entfernt — `cms.decisionmap.ai` → `api.decisionmap.ai` (Port 8001), `useDirectusRealtime.ts` → `useBackendRealtime.ts`.
 
-Noch ausstehend: Directus-Schema-Import + API-Token + Flows konfigurieren
-(HTTP-Webhooks auf `http://ai-service:8000/hooks/*` für `problem-submitted`, `problem-approved` etc.)
-`vote-changed`-Flow per Script anlegbar: `make -C infrastructure setup-vote-flow`
 → Details: [`docs/backend.md`](docs/backend.md)
 
 **Offene Punkte:**
@@ -301,3 +301,26 @@ Noch ausstehend: Directus-Schema-Import + API-Token + Flows konfigurieren
 - DNSBL-Check aktivieren (nach Launch bei Bedarf)
 - E2E-Tests mit Playwright
 - Regionsbasierte Filterung und Ranking
+
+**Code-Review 2026-05-18 — alle Bugs gefixt (23 Fixes, alle Tests grün):**
+
+Backend:
+- B1: `PATCH`/`DELETE /problems` — Ownership-Check + Superuser-Gate ergänzt
+- B2: Startup-Warnung bei Default-Werten für `SECRET_KEY`, `SERVICE_TOKEN`, Wildcard-CORS
+- B3: `store_embedding` + `update_status` in `internal.py` filtern jetzt `deleted_at IS NULL`
+- B4: `pages/auth/magic-verify.vue` angelegt — Frontend-Landingpage für Magic-Link-Token
+- B5: WS-Broadcasts nach `create_ai_solution` + `upsert_cluster` in `internal.py` ergänzt
+
+AI-Service:
+- A1–A4: `test_security.py`, `database/`-Dir, `mock_db_conn`-Fixture, tote Config-Felder entfernt
+- A6: `generate_embedding`-Closure ruft `get_embedding_provider()` intern auf (kein Request-Scope-Leak)
+- A7: Veralteter Directus-Kommentar in `main.py` ersetzt
+
+Frontend:
+- F1: `isTextFieldActive()` in `table.vue:255` korrekt deklariert
+- F2: Vote-Buttons in `/problem/[id].vue` zeigen aktiven State nach Vote (kein Permanent-Disable)
+- F3: Admin-Middleware leitet eingeloggten Non-Admin auf `/` statt `/login`
+- F4: `problemTags` in `realTags.ts` als `computed` ref (reaktiv, kein staler Snapshot)
+- F5: External-Update-Banner-Strings nach i18n verschoben
+- F6: Toter `mockDirectusUser`-Alias + 11 Directus-Testdateien aus `apps/backend/tests/` entfernt
+- F7: Ping-Intervall startet in `socket.onopen`, stoppt in `onclose`/`disconnect()`
