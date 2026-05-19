@@ -27,6 +27,9 @@ database/backups/
 # Externe Bibliotheks-Symlinks (lokal via DEV_LOCAL setzen)
 .libs/*
 
+# Referenz-PDFs (lokal, nicht im Repo)
+*.pdf
+
 # Build-Logs (generiert von .templates/docker/build.sh)
 .templates/docker/logs/
 apps/frontend/
