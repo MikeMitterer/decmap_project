@@ -158,9 +158,8 @@ curl -s http://localhost:8000/hooks/solution-approved \
 Generiert Embeddings für alle approved Problems — auch für solche, die bereits ein Embedding haben.
 Nötig nach einem Modellwechsel oder für die initiale Befüllung.
 
-> **Status:** `POST /embeddings/reindex` im AI-Service ist implementiert. Der nötige Backend-Endpoint
-> `GET /internal/problems/approved-all` (ohne Embedding-Filter) fehlt noch — daher schlägt der Aufruf
-> aktuell fehl.
+> **Status:** `POST /embeddings/reindex` (AI-Service) und `GET /internal/problems/approved-all` (Backend)
+> sind implementiert. Smoke-Test: `./scripts/smoke-test.sh reindex`.
 
 ```bash
 curl -s -X POST http://localhost:8000/embeddings/reindex \

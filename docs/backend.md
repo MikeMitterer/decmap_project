@@ -186,6 +186,7 @@ Alle Endpoints erfordern `X-Service-Token: <SERVICE_TOKEN>` Header (`verify_serv
 | `POST /internal/problems/{id}/embedding` | Embedding speichern |
 | `PATCH /internal/problems/{id}/status` | Status aktualisieren |
 | `GET /internal/problems/approved` | Approved-Problems **die bereits ein Embedding haben** — für Clustering (filtert Problems ohne Embedding heraus) |
+| `GET /internal/problems/approved-all` | Alle approved Problems **unabhängig vom Embedding-Status** — für Bulk-Reindex |
 | `GET /internal/problems/{id}` | Problem by ID |
 | `POST /internal/problems/{id}/solutions` | AI-generierte Lösung anlegen |
 | `POST /internal/similarity` | pgvector Cosine-Similarity-Suche |
@@ -195,7 +196,7 @@ Alle Endpoints erfordern `X-Service-Token: <SERVICE_TOKEN>` Header (`verify_serv
 | `POST /internal/tags/{id}/assign-cluster` | cluster_tag insert |
 | `GET /internal/tags/for-cluster/{id}` | Tags für Cluster |
 
-**Fehlender Backend-Endpoint — Bulk-Reindex:** `GET /internal/problems/approved` liefert nur Problems die **bereits** ein Embedding haben. Ein separater `GET /internal/problems/approved-all` (ohne Embedding-Filter) fehlt noch im Backend — nötig für `POST /embeddings/reindex` (AI-Service, bereits implementiert) bei initialer Befüllung oder Re-Embedding nach Modellwechsel.
+**Bulk-Reindex:** `POST /embeddings/reindex` (AI-Service) + `GET /internal/problems/approved-all` (Backend) sind implementiert — letzterer liefert alle approved Problems ohne Embedding-Filter (für initiale Befüllung oder Re-Embedding nach Modellwechsel). Smoke-Test: `./scripts/smoke-test.sh reindex`.
 
 **Gotcha — asyncpg `:param::type` bricht Parameter-Substitution:** In SQLAlchemy `text()` Queries stoppt asyncpg die Substitution beim `::` direkt nach dem Parameternamen. Fix: Klammern setzen — `embedding <=> (:emb)::vector` statt `embedding <=> :emb::vector`.
 

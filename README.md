@@ -312,10 +312,19 @@ Beide Data-Layer (Fake + Real) sind vollständig implementiert.
 
 **Offene Punkte:**
 - Clustering-Job implementieren (HDBSCAN + LLM-Labeling im ai-service)
-- Bulk-Reindex: `POST /embeddings/reindex` (AI-Service) implementiert; Backend `GET /internal/problems/approved-all` (ohne Embedding-Filter) fehlt noch — nötig für initiale Befüllung und Re-Embedding nach Modellwechsel
+- Bulk-Reindex: `POST /embeddings/reindex` (AI-Service) + `GET /internal/problems/approved-all` (Backend) implementiert — noch nicht via Smoke-Test verifiziert
 - DNSBL-Check aktivieren (nach Launch bei Bedarf)
 - E2E-Tests mit Playwright
 - Regionsbasierte Filterung und Ranking
+
+**AI-Service Inbetriebnahme 2026-05-21 — Similarity-Pipeline operational:**
+
+- Procfile.dev: `uvicorn --app-dir` → `bash -c 'cd apps/ai-service && uvicorn ...'` (python-dotenv lädt `.env` aus CWD, nicht aus `--app-dir`)
+- asyncpg Cast-Fix: `embedding <=> :emb::vector` → `embedding <=> (:emb)::vector` (Klammern nötig, sonst stoppt Parametersubstitution)
+- Embedding-Input auf `description_en` normalisiert; Similarity-Query übersetzt via `TranslationService.to_english()` (kein DE/EN-Vektor-Mismatch)
+- `WEBHOOK_SECRET` / `X-Webhook-Secret` → `SERVICE_TOKEN` / `X-Service-Token` (einheitliches Naming mit Backend)
+- Vote-Events laufen ausschließlich über Backend-WS — AI-Service `/hooks/vote-changed` entfernt
+- Dev-Thresholds: `SIMILARITY_THRESHOLD=0.55` / `DUPLICATE_THRESHOLD=0.70` bei &lt;50 Problems (Prod-Werte 0.85/0.92 zu streng)
 
 **Code-Review 2026-05-18 — alle Bugs gefixt (23 Fixes, alle Tests grün):**
 
