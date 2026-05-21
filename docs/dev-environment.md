@@ -311,11 +311,17 @@ python3.11 -m venv .venv
 
 ```
 frontend:  PORT=3000 npm --prefix apps/frontend run dev
-aiservice: apps/ai-service/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --reload --app-dir apps/ai-service
+aiservice: bash -c 'cd apps/ai-service && .venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --reload'
 ```
 
 Alle Pfade relativ zum Workspace-Root (`DecisionMap/`). overmind muss aus dem
 Workspace-Root gestartet werden (das tut `make dev-up` automatisch).
+
+> **Gotcha `uvicorn --app-dir` vs `.env`:** `--app-dir` setzt nur den Python-Suchpfad für
+> das Modul — das Working Directory bleibt der Workspace-Root. python-dotenv sucht `.env`
+> aber im CWD, nicht in `--app-dir`. Deshalb `bash -c 'cd apps/ai-service && uvicorn ...'`
+> statt `uvicorn ... --app-dir apps/ai-service`. Fehlt das, findet der AI-Service seinen
+> OpenAI-Key und andere `.env`-Werte nicht — Similarity-Requests schlagen still fehl.
 
 **Port 3000 (nicht 5000):** Auf macOS belegt AirPlay Receiver `0.0.0.0:5000` — Nuxt würde
 auf 5000 starten, der Port ist aber bereits belegt. `PORT=3000` explizit setzen vermeidet

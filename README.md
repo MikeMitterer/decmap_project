@@ -312,6 +312,7 @@ Beide Data-Layer (Fake + Real) sind vollständig implementiert.
 
 **Offene Punkte:**
 - Clustering-Job implementieren (HDBSCAN + LLM-Labeling im ai-service)
+- Bulk-Reindex: `POST /embeddings/reindex` (AI-Service) implementiert; Backend `GET /internal/problems/approved-all` (ohne Embedding-Filter) fehlt noch — nötig für initiale Befüllung und Re-Embedding nach Modellwechsel
 - DNSBL-Check aktivieren (nach Launch bei Bedarf)
 - E2E-Tests mit Playwright
 - Regionsbasierte Filterung und Ranking

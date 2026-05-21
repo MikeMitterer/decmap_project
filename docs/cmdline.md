@@ -11,6 +11,8 @@ Der Service muss laufen: `make dev` (lokal) oder `make docker-up` (Container).
 - [Endpunkte](#endpunkte)
 - [API-Dokumentation (Browser)](#api-dokumentation-browser)
 
+> **Schneller Einstieg:** `apps/ai-service/scripts/smoke-test.sh` testet alle Endpunkte ohne curl-Tipparbeit.
+
 ---
 
 ## Voraussetzungen
@@ -22,12 +24,14 @@ make dev          # uvicorn mit --reload, Port 8000
 make docker-up    # docker compose mit postgres + ai-service
 ```
 
-Ohne gesetztes `WEBHOOK_SECRET` (Dev-Mode) kann der Header bei Hook-Endpunkten
-weggelassen werden. Mit Secret muss jeder Hook-Aufruf den Header mitschicken:
+Ohne gesetztes `SERVICE_TOKEN` (Dev-Mode) kann der Header bei Hook-Endpunkten
+weggelassen werden. Mit Token muss jeder Hook-Aufruf den Header mitschicken:
 
 ```
--H "X-Webhook-Secret: <dein-secret>"
+-H "X-Service-Token: <dein-token>"
 ```
+
+Alternativ via Env-Variable: `SERVICE_TOKEN=xyz ./smoke-test.sh all`
 
 [↑ Inhalt](#inhalt)
 
@@ -70,7 +74,13 @@ curl -s http://localhost:8000/similarity \
 
 - `score > 0.92` → `has_duplicates: true` (Frontend blockiert Einreichung)
 - `score 0.85–0.92` → ähnlich, Hinweis mit Link
-- `score < 0.85` → kein Hinweis
+- `score < 0.85` → kein Hinweis (z.B. `0.52` für thematisch verwandte, anders formulierte Problems — korrektes Verhalten)
+
+> **Score-Interpretation:** Ein Score von ~0.5 bedeutet semantisch ähnliches Thema, aber andere Formulierung — das ist kein Bug. `text-embedding-3-small` unterscheidet korrekt zwischen *verwandtem Thema* (0.5x) und *fast identischem Text* (0.85+). Der Threshold von 0.85 ist für Duplikat-Erkennung beim Einreichen ausgelegt, nicht für thematische Suche.
+>
+> **Sprachnormalisierung:** Nicht-englischer Input wird vor dem Embedding via `TranslationService.to_english()` übersetzt (langdetect → LLM nur bei Nicht-Englisch). Gespeicherte Embeddings basieren auf `description_en` — ohne Normalisierung würden DE/EN-Vektoren nie den Threshold erreichen.
+>
+> **Dev-Threshold:** Bei weniger als ~50 Problems: `SIMILARITY_THRESHOLD=0.55` / `DUPLICATE_THRESHOLD=0.70` in `.env` setzen. Prod-Werte (0.85/0.92) sind für sparse Datasets zu streng.
 
 ---
 
@@ -84,7 +94,7 @@ simulieren sie den Backend-Trigger.
 ```bash
 curl -s http://localhost:8000/hooks/problem-submitted \
   -H "Content-Type: application/json" \
-  -H "X-Webhook-Secret: <dein-secret>" \
+  -H "X-Service-Token: <dein-token>" \
   -d '{
     "problem_id": "test-001",
     "title": "Lack of AI governance",
@@ -123,7 +133,7 @@ Mit Honeypot-Feld (sofortiger Reject):
 ```bash
 curl -s http://localhost:8000/hooks/problem-approved \
   -H "Content-Type: application/json" \
-  -H "X-Webhook-Secret: <dein-secret>" \
+  -H "X-Service-Token: <dein-token>" \
   -d '{"problem_id": "test-001"}' | jq
 ```
 
@@ -137,25 +147,25 @@ im Hintergrund: Embedding → AI-Lösung → Clustering → WebSocket-Broadcast.
 ```bash
 curl -s http://localhost:8000/hooks/solution-approved \
   -H "Content-Type: application/json" \
-  -H "X-Webhook-Secret: <dein-secret>" \
+  -H "X-Service-Token: <dein-token>" \
   -d '{"solution_id": "sol-001", "problem_id": "test-001"}' | jq
 ```
 
 ---
 
-**Vote geändert**
+### Bulk-Reindex (alle approved Problems neu embedden)
+
+Generiert Embeddings für alle approved Problems — auch für solche, die bereits ein Embedding haben.
+Nötig nach einem Modellwechsel oder für die initiale Befüllung.
+
+> **Status:** `POST /embeddings/reindex` im AI-Service ist implementiert. Der nötige Backend-Endpoint
+> `GET /internal/problems/approved-all` (ohne Embedding-Filter) fehlt noch — daher schlägt der Aufruf
+> aktuell fehl.
 
 ```bash
-curl -s http://localhost:8000/hooks/vote-changed \
-  -H "Content-Type: application/json" \
-  -H "X-Webhook-Secret: <dein-secret>" \
-  -d '{
-    "entity_id": "test-001",
-    "entity_type": "problem"
-  }' | jq
+curl -s -X POST http://localhost:8000/embeddings/reindex \
+  -H "X-Service-Token: <dein-token>" | jq
 ```
-
-`new_score` ist optional — der AI-Service berechnet ihn aus `problems.vote_score`. Kann zum Testen mitgeschickt werden um den DB-Lookup zu überspringen.
 
 ---
 
@@ -193,8 +203,10 @@ Eingehende Events:
 ```json
 {"type": "problem.approved", "payload": {"id": "test-001", "cluster_id": null}}
 {"type": "cluster.updated", "payload": {"id": "uuid-...", "label": "AI Governance", "problem_count": 4}}
-{"type": "vote.changed", "payload": {"entity_id": "test-001", "entity_type": "problem", "new_score": 5}}
+{"type": "solution.generated", "payload": {"problem_id": "test-001", "solution_id": "sol-..."}}
 ```
+
+Vote-Events kommen über den Backend-WebSocket (`useBackendRealtime`, Port 8001) — nicht über den AI-Service-WS.
 
 [↑ Inhalt](#inhalt)
 

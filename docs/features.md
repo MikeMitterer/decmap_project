@@ -32,9 +32,13 @@ Debounce 600ms
       ↓
 Frontend schickt Text an /similarity Endpunkt
       ↓
+TranslationService.to_english() — nicht-englischer Input wird übersetzt
+(langdetect: englischer Text wird direkt durchgereicht, kein LLM-Call)
+      ↓
 KI-Service generiert temporares Embedding (kein DB-Insert)
       ↓
 pgvector Cosine-Similarity gegen alle approved problems
+(gespeicherte Embeddings basieren auf description_en — Sprachnormalisierung verhindert DE/EN-Vektor-Mismatch)
       ↓
 Treffer (Score > 0.85) → ahnliche Probleme werden angezeigt
 Kein Treffer → kein Hinweis, Submission lauft normal

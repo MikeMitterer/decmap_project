@@ -251,18 +251,18 @@ app.add_middleware(
 ```
 
 **Webhook-Security:**
-Alle Hook-Endpoints verwenden `_verify_webhook_secret()` als Dependency.
-Leeres `WEBHOOK_SECRET` = Dev-Mode (kein Check). Niemals Secrets in Code hardcoden.
+Alle Hook-Endpoints verwenden `_verify_service_token()` als Dependency.
+Leeres `SERVICE_TOKEN` = Dev-Mode (kein Check). Niemals Secrets in Code hardcoden.
 
 ```python
-async def _verify_webhook_secret(
-    x_webhook_secret: str | None = Header(None),
+async def _verify_service_token(
+    x_service_token: str | None = Header(None),
     settings: Settings = Depends(get_settings),
 ) -> None:
-    if settings.webhook_secret and x_webhook_secret != settings.webhook_secret:
+    if settings.service_token and x_service_token != settings.service_token:
         raise HTTPException(status_code=403)
 
-@router.post("/hooks/problem-submitted", dependencies=[Depends(_verify_webhook_secret)])
+@router.post("/hooks/problem-submitted", dependencies=[Depends(_verify_service_token)])
 async def on_problem_submitted(...): ...
 ```
 

@@ -57,12 +57,12 @@ ANTHROPIC_MODEL=claude-haiku-4-5-20251001
 
 # AI-Service — Konfiguration
 CLUSTERING_INTERVAL=360        # Batch-Clustering-Intervall in Minuten
-SIMILARITY_THRESHOLD=0.85      # Schwellenwert fuer Aehnlichkeitserkennung (0.0–1.0)
-DUPLICATE_THRESHOLD=0.92       # Schwellenwert fuer Duplikat-Erkennung
+SIMILARITY_THRESHOLD=0.85      # Schwellenwert fuer Aehnlichkeitserkennung (0.0–1.0); Dev mit <50 Problems: 0.55 (Prod-Werte zu streng)
+DUPLICATE_THRESHOLD=0.92       # Schwellenwert fuer Duplikat-Erkennung; Dev: 0.70
 BOT_SUBMIT_MIN_SECONDS=10      # Mindestzeit zwischen Seitenaufruf und Submit
 BOT_SESSION_MAX_HOURLY=10      # Max. Submissions pro Session pro Stunde
 BOT_IP_MAX_SESSIONS=5          # Max. verschiedene Sessions pro ip_hash
-WEBHOOK_SECRET=                # Shared Secret (X-Webhook-Secret Header); leer = Dev-Mode (kein Check)
+SERVICE_TOKEN=                 # Shared Secret (X-Service-Token Header); leer = Dev-Mode (kein Check)
 CORS_ORIGINS=["http://localhost:3000"]  # JSON-Array erlaubter Browser-Origins
 
 # apps/backend/ — FastAPI Backend (Port 8001)
@@ -185,7 +185,7 @@ Alle Endpoints erfordern `X-Service-Token: <SERVICE_TOKEN>` Header (`verify_serv
 |---|---|
 | `POST /internal/problems/{id}/embedding` | Embedding speichern |
 | `PATCH /internal/problems/{id}/status` | Status aktualisieren |
-| `GET /internal/problems/approved` | Approved-Problems + Embeddings für Clustering |
+| `GET /internal/problems/approved` | Approved-Problems **die bereits ein Embedding haben** — für Clustering (filtert Problems ohne Embedding heraus) |
 | `GET /internal/problems/{id}` | Problem by ID |
 | `POST /internal/problems/{id}/solutions` | AI-generierte Lösung anlegen |
 | `POST /internal/similarity` | pgvector Cosine-Similarity-Suche |
@@ -194,6 +194,12 @@ Alle Endpoints erfordern `X-Service-Token: <SERVICE_TOKEN>` Header (`verify_serv
 | `POST /internal/tags/upsert` | Tag upsert (API: `label` → DB: `name`) |
 | `POST /internal/tags/{id}/assign-cluster` | cluster_tag insert |
 | `GET /internal/tags/for-cluster/{id}` | Tags für Cluster |
+
+**Fehlender Backend-Endpoint — Bulk-Reindex:** `GET /internal/problems/approved` liefert nur Problems die **bereits** ein Embedding haben. Ein separater `GET /internal/problems/approved-all` (ohne Embedding-Filter) fehlt noch im Backend — nötig für `POST /embeddings/reindex` (AI-Service, bereits implementiert) bei initialer Befüllung oder Re-Embedding nach Modellwechsel.
+
+**Gotcha — asyncpg `:param::type` bricht Parameter-Substitution:** In SQLAlchemy `text()` Queries stoppt asyncpg die Substitution beim `::` direkt nach dem Parameternamen. Fix: Klammern setzen — `embedding <=> (:emb)::vector` statt `embedding <=> :emb::vector`.
+
+**Embedding-Input — Sprachnormalisierung (implementiert):** Gespeicherte Embeddings basieren nur auf `description_en` (`_embedding_text()`: `description_en` bevorzugt, `title` als Fallback). Similarity-Queries werden vor dem Embedding via `TranslationService.to_english()` ins Englische übersetzt — DE+EN-Vektor-Mismatch gegen Threshold 0.85 ist damit vermieden. `TranslationService` nutzt `langdetect>=1.0.9` zur Spracherkennung: englischer Text wird direkt durchgereicht (kein LLM-Call), nur nicht-englischer Text löst einen API-Call aus.
 
 **Gotcha — Tags: API-Feld `label` ↔ DB-Spalte `name`:** Die `tags`-Tabelle hat eine Spalte `name` (historisch — Umbenennung nicht nötig). Der AI-Service schickt/erwartet `label`. Die Internal API mappt transparent: `label` im Request-Body → `name` in der DB, `name` in der DB → `label` im Response.
 
@@ -211,7 +217,7 @@ User reicht Problem ein
         → _ip_hash(request) hasht X-Forwarded-For/client.host (SHA256)
         → Problem in DB schreiben (status: pending)
         → BackgroundTask: notify_problem_submitted → POST /hooks/problem-submitted (ai-service)
-            → _verify_webhook_secret() prueft X-Webhook-Secret
+            → _verify_service_token() prueft X-Service-Token Header
             → SpamFilter bewertet (sync, LLM-Call)
                 → Klarer Spam: status: rejected
                 → Unklar / gueltig: status: needs_review

@@ -200,6 +200,7 @@ export function useProblems() {
 - **FastAPI `EMAIL_FROM` — kein `.local`:** Ist `EMAIL_FROM` auf eine `.local`-Domain gesetzt (z.B. `noreply@decisionmap.local`), startet das Backend nicht — auch wenn `MAIL_SUPPRESS=true`. Immer eine gueltige Domain verwenden.
 - **FastAPI WebSocket-Events explizit:** FastAPI feuert keine automatischen DB-Events — nach jedem Mutations-Endpoint `ws_manager.broadcast()` aufrufen.
 - **FastAPI Background Tasks:** Brauchen eigene DB-Connection — Request-scoped Connection ist beim Task-Start geschlossen.
+- **asyncpg `:param::type` bricht Parameter-Substitution:** `embedding <=> :emb::vector` in SQLAlchemy `text()` bindet nur den ersten Parameter — asyncpg stoppt Substitution beim `::` direkt nach dem Parameternamen. Fix: Klammern setzen: `embedding <=> (:emb)::vector`. Ohne Klammern fehlt `emb` komplett in den gebundenen Parametern → PostgreSQL sieht `:` im SQL → Syntax Error.
 - **CORS:** `allow_credentials=True` + `allow_origins=["*"]` ist browser-invalid — nie zusammen.
 - **Health-Checks nur Browser-seitig:** Nitro Server-Routes erreichen Docker-Ports nicht. `fetch()` direkt im Browser, `AbortSignal.timeout(10_000)`.
 - **Let's Encrypt Symlinks (nginx-Container):** `live/fullchain.pem` ist ein Symlink auf `archive/` — beide Verzeichnisse in `docker-compose.yml` mounten, sonst schlägt TLS fehl.
@@ -210,6 +211,7 @@ export function useProblems() {
 - **WebSocket Composables brauchen explizites `connect()` in `onMounted`:** `useRealtimeUpdates` (AI-Service WS) und `useBackendRealtime` verbinden sich nicht automatisch. Fehlt der `connect()`-Call in `onMounted`, bleibt der Socket stumm — kein Fehler, kein Event.
 - **Internal API Tag-Naming:** DB-Spalte heisst `name`, die `/internal/tags` API nutzt `label` — transparente Umwandlung im Backend. ai-service immer `label` verwenden.
 - **AI-Service kein direkter DB-Zugriff:** ai-service nutzt ausschliesslich `/internal/*` Backend-Endpoints via `BackendClient` (httpx). Kein psycopg, kein SQLAlchemy im ai-service.
+- **uvicorn `--app-dir` aendert nicht das Working Directory:** python-dotenv sucht `.env` im CWD, nicht in `--app-dir`. Procfile.dev verwendet deshalb `bash -c 'cd apps/ai-service && uvicorn ...'` — sonst findet der AI-Service seine `.env` nicht und Similarity-Requests schlagen still fehl.
 
 ---
 
