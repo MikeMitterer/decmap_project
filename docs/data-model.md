@@ -21,7 +21,7 @@ description_en      text (optional)             — Englisch, automatisch uberse
 content_language    string (default "en")       — ISO 639-1, z.B. "de", "fr", "es"
 status              enum: pending | needs_review | approved | rejected
 rejection_reason    string (nullable)
-embedding           vector(1536)                — generiert aus title_en + description_en
+embedding           vector(1536)                — generiert aus description_en (nicht title_en)
 user_id             FK → users (nullable — anonyme Submissions erlaubt)
 session_id          string (nullable)
 vote_score          integer (default 0)
@@ -50,24 +50,9 @@ deleted_by          FK → users (nullable)
 created_at          timestamp
 ```
 
-**`clusters`** — KI-generierte Problemfelder. Label und Beschreibung werden automatisch aus den geclusterten Embeddings generiert. Centroid ist der Durchschnittsvektor aller zugehorigen Problems.
-```
-id                  uuid (PK)
-label               string (AI-generiert)
-description         text (AI-generiert)
-centroid            vector(1536)
-problem_count       integer (denormalisiert)
-updated_at          timestamp
-```
+~~**`clusters`**~~ *(gedroppt — Migration 005, 2026-05-22)* — HDBSCAN ist ein Batch-Algorithmus ohne inkrementelle Zuweisung; ein separater Zentroid-Store ist redundant. Clustering-Output landet direkt in `tags` (L1–L9) + `problem_tag`.
 
-**`problem_cluster`** — Junction: Problem ↔ Cluster (n:m). Ein Problem kann in mehreren Clustern vorkommen. Weight ist der Soft-Clustering-Score aus HDBSCAN.
-```
-id                  uuid (PK, uuid_generate_v4())
-problem_id          FK → problems
-cluster_id          FK → clusters
-weight              float (Soft-Clustering-Score, 0.0–1.0)
-UNIQUE (problem_id, cluster_id)
-```
+~~**`problem_cluster`**~~ *(gedroppt — Migration 005, 2026-05-22)* — Ersetzt durch `problem_tag` (L1–L9 Tags).
 
 **`tags`** — Hierarchische Themen-Tags. Level bestimmt die Ebene in der Taxonomie: L0 Root, L1-L9 KI-generierte Kategorien, L10 User-Tags. Strukturelle Tags (L0-L9) haben ein `parent_id`, User-Tags (L10) sind flach.
 ```
@@ -155,11 +140,11 @@ created_at          timestamp
 ```
 users ──< problems ──< solution_approaches
               │
-              ├──>< problem_cluster >──< clusters
-              │
               ├──>< problem_tag >──< tags (hierarchisch: L1–L10)
               │
               └──>< problem_region >──< regions
+
+[clusters + problem_cluster: gedroppt in Migration 005 (2026-05-22) — ersetzt durch problem_tag L1–L9]
 ```
 
 [↑ Inhalt](#inhalt)

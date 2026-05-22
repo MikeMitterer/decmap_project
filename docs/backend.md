@@ -114,7 +114,7 @@ alembic/                 → alle DDL: Tabellen, vector-Spalten, Constraints, In
 database/seeds/          → Seed-Daten (alphabetisch, idempotent)
 ```
 
-**Junction-Tabellen** (`problem_cluster`, `problem_tag`, `problem_region`) haben `id UUID PRIMARY KEY` + `UNIQUE(problem_id, ...)`.
+**Junction-Tabellen** (`problem_tag`, `problem_region`) haben `id UUID PRIMARY KEY` + `UNIQUE(problem_id, ...)`. (`problem_cluster` gedroppt in Migration 005, 2026-05-22)
 
 **Einzelne Schritte (bei Bedarf):**
 ```bash
@@ -190,11 +190,10 @@ Alle Endpoints erfordern `X-Service-Token: <SERVICE_TOKEN>` Header (`verify_serv
 | `GET /internal/problems/{id}` | Problem by ID |
 | `POST /internal/problems/{id}/solutions` | AI-generierte Lösung anlegen |
 | `POST /internal/similarity` | pgvector Cosine-Similarity-Suche |
-| `POST /internal/clusters/upsert` | Cluster upsert by label |
-| `POST /internal/clusters/{id}/assign-problem` | problem_cluster upsert |
 | `POST /internal/tags/upsert` | Tag upsert (API: `label` → DB: `name`) |
-| `POST /internal/tags/{id}/assign-cluster` | cluster_tag insert |
-| `GET /internal/tags/for-cluster/{id}` | Tags für Cluster |
+| `GET /internal/tags/l0-root` | L0-Root-Tag holen — Ausgangspunkt fuer L1-Cluster-Tags |
+| `DELETE /internal/tags/structural` | Alle L1–L9 Tags loeschen (Cascade auf `problem_tag`) — vor Reclustering |
+| `POST /internal/problems/{id}/structural-tag` | Problem einem L1-Cluster-Tag zuweisen (`problem_tag`) |
 
 **Bulk-Reindex:** `POST /embeddings/reindex` (AI-Service) + `GET /internal/problems/approved-all` (Backend) sind implementiert — letzterer liefert alle approved Problems ohne Embedding-Filter (für initiale Befüllung oder Re-Embedding nach Modellwechsel). Smoke-Test: `./scripts/smoke-test.sh reindex`.
 

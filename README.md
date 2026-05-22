@@ -210,7 +210,7 @@ Kein CAPTCHA — Friction-freies UX ist Designziel.
 Ein zyklischer Job analysiert alle freigegebenen Probleme:
 
 1. Embeddings aller Probleme laden
-2. HDBSCAN-Clustering → findet natürliche Gruppen (keine vorgegebene Anzahl nötig)
+2. HDBSCAN-Clustering (L2-normalisierte Embeddings, euclidean metric, adaptive `min_cluster_size = max(2, sqrt(n/4))`) → findet natürliche Gruppen (keine vorgegebene Anzahl nötig)
 3. LLM (GPT-4o) labelt jede Gruppe → erzeugt hierarchische Tags (L1–L9)
 4. Sub-Clustering innerhalb großer Gruppen → tiefere Hierarchie-Ebenen
 5. Probleme mit neuen Tags verknüpfen
@@ -250,9 +250,10 @@ Vollständige Spezifikation: [`docs/data-model.md`](docs/data-model.md)
 ```
 users ──< problems ──< solution_approaches
               │
-              ├──>< problem_cluster >──< clusters
               ├──>< problem_tag    >──< tags (L0–L10)
               └──>< problem_region >──< regions
+
+[clusters + problem_cluster: gedroppt in Migration 005 (2026-05-22)]
 ```
 
 | Tabelle | Zweck |
@@ -311,7 +312,7 @@ Beide Data-Layer (Fake + Real) sind vollständig implementiert.
 → Details: [`docs/backend.md`](docs/backend.md)
 
 **Offene Punkte:**
-- Clustering-Job implementieren (HDBSCAN + LLM-Labeling im ai-service)
+- Clustering-Pipeline Smoke-Test: Architektur-Fix implementiert (2026-05-22) — Pipeline schreibt jetzt L1-Tags via `problem_tag`; `clusters`/`problem_cluster` gedroppt (Migration 005). Smoke-Test `./scripts/smoke-test.sh cluster` noch ausstehend.
 - Bulk-Reindex: `POST /embeddings/reindex` (AI-Service) + `GET /internal/problems/approved-all` (Backend) implementiert — noch nicht via Smoke-Test verifiziert
 - DNSBL-Check aktivieren (nach Launch bei Bedarf)
 - E2E-Tests mit Playwright
@@ -324,7 +325,9 @@ Beide Data-Layer (Fake + Real) sind vollständig implementiert.
 - Embedding-Input auf `description_en` normalisiert; Similarity-Query übersetzt via `TranslationService.to_english()` (kein DE/EN-Vektor-Mismatch)
 - `WEBHOOK_SECRET` / `X-Webhook-Secret` → `SERVICE_TOKEN` / `X-Service-Token` (einheitliches Naming mit Backend)
 - Vote-Events laufen ausschließlich über Backend-WS — AI-Service `/hooks/vote-changed` entfernt
-- Dev-Thresholds: `SIMILARITY_THRESHOLD=0.55` / `DUPLICATE_THRESHOLD=0.70` bei &lt;50 Problems (Prod-Werte 0.85/0.92 zu streng)
+- Dev-Thresholds: `SIMILARITY_THRESHOLD=0.55` / `DUPLICATE_THRESHOLD=0.70` bei <50 Problems (Prod-Werte 0.85/0.92 zu streng)
+- HDBSCAN metric fix: `cosine` → `euclidean` auf L2-normalisierten Embeddings (BallTree unterstützt kein cosine direkt); `MIN_CLUSTER_SIZE` aus Config entfernt — adaptive Formel `max(2, sqrt(n/4))` skaliert automatisch; LLM-Prompt auf sub-domain-spezifische Labels umgestellt; Markdown-Fence-Strip bei JSON-Parse ergänzt
+- uvicorn `--reload` erkennt keine `.env`-Änderungen — nach `.env`-Änderung Service vollständig neu starten (Symptom: `clusters_updated: 0`)
 
 **Code-Review 2026-05-18 — alle Bugs gefixt (23 Fixes, alle Tests grün):**
 
