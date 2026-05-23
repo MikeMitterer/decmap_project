@@ -64,7 +64,7 @@ DecisionMap/                     ← Workspace-Root-Repo (Issues, Haupt-Doku)
 ├── Makefile                     ← Workspace-Orchestrierung
 ├── data/                        ← Shared Seed/Fixture-Daten (SSoT, snake_case JSON)
 ├── docs/                        ← Detaillierte Spezifikationen
-├── scripts/                     ← Workspace-Skripte (z.B. gen-fakedata.py)
+├── scripts/                     ← Workspace-Skripte (z.B. db-backup.sh, env-audit.py)
 ├── .templates/                  ← Wiederverwendbare Templates (Jenkinsfile, Makefile, docker/)
 ├── .libs/                       ← Lokale Symlinks (BashLib, BashTools, MakeLib) — per .gitignore ausgeschlossen
 ├── apps/                        ← Service-Repos (gitignored)
@@ -108,20 +108,6 @@ routeRules: {
   '/status':      { ssr: false },      // Status-Page — SPA
   '/problem/**':  { prerender: true }, // Problem-Detail — SEO
   '/cluster/**':  { prerender: true }, // Cluster-Seiten — SEO
-}
-```
-
----
-
-## Data Layer — Fake/Real Switch
-
-`USE_FAKE_DATA=true/false` in `.env` — beide Layer implementieren dasselbe Interface.
-
-```typescript
-export function useProblems() {
-  return useRuntimeConfig().public.useFakeData
-    ? useFakeProblems()
-    : useRealProblems()
 }
 ```
 
@@ -182,7 +168,7 @@ export function useProblems() {
 - **Makefile:** Jedes Sub-Repo hat ein eigenes Makefile. `make help` (Root: Workspace-Delegation), `make -C apps/backend help` (Docker, DB, Backup). Details: [`docs/backend.md`](docs/backend.md)
 - **Versionierung:** SemVer + Datum (`bumpVer`): `v<MAJOR>.<MINOR>.<PATCH>+<YYMMDD>.<HHMM>.<HASH>`, Start bei `0.1.0`. Docker-Snapshots: `gitDockerTag` → `<MAJOR>.<MINOR>.<PATCH>-<YYMMDD>.<HHMM>.<HASH>[.ahead<N>]` (z.B. `0.1.0-260412.0824.def34.ahead3`) — automatisch via Jenkins. Details: [`docs/backend.md`](docs/backend.md)
 - **Git:** Conventional Commits `<type>(<scope>): <msg>`, direkte Commits auf `master` erlaubt — Jenkins ist die einzige Schranke. Details on demand: `/git-conventions`
-- **Seed-Daten (SSoT):** `data/*.json` (snake_case, UUIDs) — nie direkt in Consumer-Repos editieren. `make fakedata-sync` verteilt an `apps/frontend/.../seeds.json` (camelCase) und `apps/ai-service/tests/fakedata/` (snake_case + embedding).
+- **Seed-Daten (SSoT):** `data/*.json` (snake_case, UUIDs) — SSoT für Backend-DB-Seeds. Nie direkt in Consumer-Repos editieren.
 - **Seeds:** `apps/backend/database/seeds/` alphabetisch, idempotent
 - **Backup:** `scripts/db-backup.sh` (einheitliches Script, `.dump`-Format). Dev: `make -C apps/backend backup|restore|backup-list`. Prod: `make -C infrastructure backup|backup-restore|backup-list|backup-pull|backup-push`. Nie einchecken. Details: [`docs/backend.md`](docs/backend.md)
 - **Backend-Architektur:** Nuxt → FastAPI (`apps/backend/`, Port 8001) → PostgreSQL. AI-Service (`apps/ai-service/`, Port 8000) kommuniziert nur ueber `/internal/*` Backend-API — kein direkter DB-Zugriff.

@@ -123,12 +123,6 @@ env-audit: ## .env gegen .env.example prüfen — Drift in allen Repos anzeigen
 loc: ## Lines of Code zählen (tokei, alle Sub-Repos + Root)
 	@tokei --hidden . apps/backend apps/frontend apps/ai-service infrastructure
 
-##@ Daten
-
-.PHONY: fakedata-sync
-fakedata-sync: ## Fake-Daten aus data/ generieren (frontend + ai-service)
-	python3 scripts/gen-fakedata.py --generate
-
 ##@ Versionierung
 
 .PHONY: tags
