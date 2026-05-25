@@ -98,6 +98,8 @@ dev-up: ## Alle Services starten — nginx-Proxy + Backend (Docker) + overmind (
 .PHONY: dev-down
 dev-down: ## Alle Services stoppen — overmind beenden + Docker runterfahren
 	-overmind quit 2>/dev/null || true
+	-pkill -f "overmind" 2>/dev/null || true
+	-rm -f $(CURDIR)/.overmind.sock
 	$(MAKE) -C apps/backend dev-down
 	docker compose -f infrastructure/docker-compose.dev.yml down
 
