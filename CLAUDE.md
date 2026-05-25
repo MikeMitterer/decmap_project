@@ -199,6 +199,7 @@ routeRules: {
 - **AI-Service kein direkter DB-Zugriff:** ai-service nutzt ausschliesslich `/internal/*` Backend-Endpoints via `BackendClient` (httpx). Kein psycopg, kein SQLAlchemy im ai-service.
 - **uvicorn `--app-dir` aendert nicht das Working Directory:** python-dotenv sucht `.env` im CWD, nicht in `--app-dir`. Procfile.dev verwendet deshalb `bash -c 'cd apps/ai-service && uvicorn ...'` — sonst findet der AI-Service seine `.env` nicht und Similarity-Requests schlagen still fehl.
 - **uvicorn `--reload` erkennt keine `.env`-Aenderungen:** `--reload` reagiert nur auf Python-File-Aenderungen. Nach jeder `.env`-Aenderung (z.B. `MIN_CLUSTER_SIZE`) braucht der AI-Service einen vollstaendigen Neustart — sonst bleiben neue Einstellungen wirkungslos (Symptom: `clusters_updated: 0` obwohl Wert korrekt gesetzt).
+- **Stales `.overmind.sock` blockiert `make dev-up`:** Bricht overmind unerwartet ab (Crash, Ctrl+C), bleibt `.overmind.sock` im Root liegen. Der naechste `make dev-up` schlaegt fehl, weil overmind das Socket noch belegt sieht. `make dev-down` raeumt das Socket automatisch auf (`rm -f .overmind.sock`). Manuell: `rm -f .overmind.sock`.
 - **Clustering schreibt in `problem_tag` (nicht `problem_cluster`):** Das Frontend liest ausschliesslich `problem_tag` fuer Cluster-Zuweisungen — die `clusters`-Tabelle ist reiner Zentroid-Metadaten-Store. Der AI-Service muss L1-Tags via `POST /internal/tags/upsert` anlegen und Probleme via `POST /internal/problems/{id}/structural-tag` zuweisen. `problem_cluster` wird vom Frontend nie abgefragt.
 
 ---

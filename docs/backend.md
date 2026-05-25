@@ -486,7 +486,6 @@ db-reset: ##D DB zurücksetzen  # Danger-Op → rot hervorgehoben
 # Workspace-Root
 make setup             # .libs/-Symlinks erstellen (einmalig, benoetigt DEV_LOCAL)
 make status            # Git-Status aller Workspace-Repos (dirty + ahead/behind Remote)
-make fakedata-sync     # Fake-Daten aus data/ generieren und an Consumer-Repos verteilen
 make dev-up            # Docker-Services + overmind (Frontend + AI-Service via Procfile.dev)
 make dev-down          # Docker-Services stoppen
 make env-audit         # .env vs .env.example Drift-Erkennung (alle Repos; Exit-Code 1 bei Drift)
@@ -611,13 +610,6 @@ chore/<kurze-beschreibung>
 ## Seed-Daten
 
 **SSoT:** `data/*.json` im Root-Repo (snake_case, UUIDs). Nie direkt in Consumer-Repos editieren.
-
-```bash
-make fakedata-sync                           # generieren + verteilen
-python3 scripts/gen-fakedata.py -n               # --dry-run: pruefen ohne schreiben
-```
-
-`make fakedata-sync` verteilt an `apps/frontend` (camelCase) und `apps/ai-service/tests/fakedata/` (snake_case + embedding-Stub).
 
 **Backend SQL-Seeds** in `database/seeds/` — alphabetisch importiert, idempotent (`ON CONFLICT DO NOTHING`).
 Manuell anpassen wenn sich `data/*.json` aendert (kein automatisches Sync fuer SQL-Seeds).

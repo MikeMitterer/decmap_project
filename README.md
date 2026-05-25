@@ -67,7 +67,6 @@ DecisionMap/                     ← Workspace-Root (Issues, Doku, CI-Koordinati
 ├── scripts/                     ← Workspace-Skripte
 │   ├── db-backup.sh             ← Einheitliches DB-Backup/Restore (Backend + Infrastructure)
 │   ├── env-audit.py             ← .env vs .env.example Drift-Erkennung (alle Repos, CI-fähig)
-│   ├── gen-fakedata.py          ← Verteilt Seed-Daten an Consumer-Repos
 │   ├── git-push-all.sh          ← Git-Push in allen ausgecheckten Sub-Repos
 │   ├── repo-status.sh           ← Git-Status aller Sub-Repos
 │   └── smtp-test.py             ← SMTP-Relay-Verifikation (AWS SES)
@@ -105,11 +104,6 @@ make help MAKE_THEME=mono      # Schwarz/Weiß
 make help MAKE_THEME=sunset    # Rosa/Lachs
 make help MAKE_THEME=forest    # Dunkelgrün/Limette
 make help MAKE_THEME=neon      # Magenta/Neongrün
-```
-
-**Daten:**
-```bash
-make fakedata-sync # Seed-Daten aus data/ an Frontend + AI-Service verteilen
 ```
 
 **Versionierung:**
@@ -317,6 +311,13 @@ Beide Data-Layer (Fake + Real) sind vollständig implementiert.
 - DNSBL-Check aktivieren (nach Launch bei Bedarf)
 - E2E-Tests mit Playwright
 - Regionsbasierte Filterung und Ranking
+
+**AI-Service Cleanup 2026-05-25 — docker-compose bereinigt:**
+
+- `docker-compose.yml`: Postgres-Service, `POSTGRES_URL`, `depends_on` und Volume entfernt — AI-Service hat nie direkt auf DB zugegriffen (Zugriff ausschließlich via `/internal/*` Backend-Endpoints)
+- `docker-compose.yml`: `extra_hosts: host.docker.internal:host-gateway` ergänzt — auf macOS (Docker Desktop) automatisch, auf Linux nicht; nötig damit `backend_url=http://host.docker.internal:8001` im Container auflöst
+- `docker-compose.test.yml`: Gelöscht — kein Test hat je Postgres gebraucht
+- `Makefile` AI-Service: `test-integration` und `##@ Database`-Gruppe entfernt (Alembic gehört ins Backend); `.overmind.sock`-Cleanup in Root `make dev-down` ergänzt
 
 **AI-Service Inbetriebnahme 2026-05-21 — Similarity-Pipeline operational:**
 

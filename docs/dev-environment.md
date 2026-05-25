@@ -97,6 +97,11 @@ make -C apps/ai-service dev    # nur AI-Service
 einem zweiten Terminal-Tab aufrufen — oder Ctrl+C in overmind und danach
 `make -C apps/backend dev-down && docker compose -f infrastructure/docker-compose.dev.yml down`.
 
+> **Gotcha `.overmind.sock`:** Bricht overmind unerwartet ab (Crash, Ctrl+C), bleibt
+> `.overmind.sock` liegen. Der nächste `make dev-up` schlägt dann fehl, weil overmind
+> das Socket noch belegt sieht. `make dev-down` räumt das Socket automatisch auf
+> (`rm -f .overmind.sock`).
+
 [↑ Inhalt](#inhalt)
 
 ---
@@ -191,11 +196,6 @@ USE_FAKE_DATA=false  # Echter FastAPI-Backend + AI-Service
 ```
 
 Beide Layer implementieren dasselbe Interface — kein Unterschied für Komponenten.
-Seed-Daten synchron halten:
-
-```bash
-make fakedata-sync   # data/*.json → apps/frontend (camelCase) + apps/ai-service/tests/fakedata/
-```
 
 `data/*.json` (snake_case, UUIDs) sind die einzige Quelle der Wahrheit — nie direkt in
 Consumer-Repos editieren.
