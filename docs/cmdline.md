@@ -229,8 +229,7 @@ Verbindung offen halten, dann in einem zweiten Terminal einen Hook-Call abschick
 Eingehende Events:
 
 ```json
-{"type": "problem.approved", "payload": {"id": "test-001", "cluster_id": null}}
-{"type": "cluster.updated", "payload": {"id": "uuid-...", "label": "AI Governance", "problem_count": 4}}
+{"type": "problem.approved", "payload": {"id": "test-001"}}
 {"type": "solution.generated", "payload": {"problem_id": "test-001", "solution_id": "sol-..."}}
 ```
 

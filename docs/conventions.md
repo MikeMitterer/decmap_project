@@ -87,7 +87,7 @@ result = [x for x in problems if x.status == "approved"]
 ### Datenbank
 
 - Tabellen: `snake_case`, Plural fur Lookup — `problems`, `tags`, `regions`
-- Junction-Tabellen: `snake_case`, Singular — `tag`, `region`, `problem_cluster`
+- Junction-Tabellen: `snake_case`, Singular — `tag`, `region` ~~`problem_cluster`~~ *(gedroppt Migration 005)*
 - Spalten: `snake_case` — `cluster_id`, `vote_score`, `created_at`
 - Fremdschlussel: `{tabelle_singular}_id` — `problem_id`, `user_id`
 
@@ -109,7 +109,6 @@ interface Problem {
   id: string
   title: string
   status: ProblemStatus
-  clusterId: string | null
   voteScore: number
 }
 

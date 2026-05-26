@@ -172,6 +172,7 @@ Alle Flows werden jetzt vom FastAPI-Backend ausgeloest (keine Directus-Abhaengig
 |---|---|
 | `problem-submitted` | ✓ Backend Phase 5 (BackgroundTask) |
 | `problem-approved` | ✓ Backend Phase 5 (BackgroundTask) |
+| `solution-submitted` | ✓ Backend (BackgroundTask → `POST /hooks/solution-submitted` → AI-Service Spam-Filter) |
 | `solution-approved` | ✓ Backend Phase 5 (BackgroundTask) |
 | `vote-changed` | ✓ Backend Phase 8 (`POST /votes` → WS broadcast) |
 

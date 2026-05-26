@@ -173,11 +173,16 @@ make dev-down  # stop overmind + all Docker services
 - Score ≥ 0.85: hint with link to similar problem
 - Score ≥ 0.92: likely duplicate — submit requires confirmation
 
-### Multi-Layer Spam Filter
+### Spam Filter
+
+**Problems (multi-layer):**
 1. nginx rate limiting (5 req/minute per IP)
 2. Behavioral signals (too-fast submit, session flood, bot agents)
 3. Honeypot field
 4. GPT-4o-mini as final gate — no CAPTCHA
+
+**Solution Approaches (post-login, LLM-only):**
+- GPT-4o-mini evaluates content — no behavioral layer needed (auth required)
 
 ### Automatic Clustering
 1. Load embeddings → HDBSCAN (L2-norm, euclidean, adaptive `min_cluster_size`)
@@ -186,9 +191,18 @@ make dev-down  # stop overmind + all Docker services
 4. Problems linked to new tags
 
 ### Moderation Workflow
+
+**Problems:**
 ```
-submitted → pending → [AI spam filter] → needs_review → [admin] → approved / rejected
-                                       ↘ clear spam → rejected (automatic)
+submitted → [behavioral signals] ─→ needs_review ─→ [admin] → approved / rejected
+         → [LLM spam filter]    ─→ pending       ─→ [admin] → approved / rejected
+                                 ↘ spam → rejected (automatic)
+```
+
+**Solution Approaches** (post-login, no behavioral layer):
+```
+submitted → [LLM spam filter] → pending → [admin] → approved / rejected
+                              ↘ spam → rejected (automatic)
 ```
 
 ---
@@ -221,7 +235,7 @@ Full specification: [`docs/data-model.md`](docs/data-model.md)
 - [x] FastAPI backend + auth (JWT, magic link, email verification)
 - [x] pgvector similarity detection + duplicate filter
 - [x] HDBSCAN clustering + LLM labeling → hierarchical tags
-- [x] Multi-layer spam filter (rate limiting → honeypot → GPT-4o-mini)
+- [x] Spam filter: multi-layer for problems (rate limiting → honeypot → GPT-4o-mini), LLM-only for solution approaches
 - [x] WebSocket realtime updates (voting, graph changes)
 - [x] Moderation workflow (admin queue, batch operations)
 - [x] Cytoscape.js graph visualization

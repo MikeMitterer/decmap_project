@@ -218,7 +218,7 @@ CRUD uber REST. Ruckmeldungen an das UI uber zwei WebSocket-Quellen.
 | Composable | WebSocket | Verantwortlich für |
 |---|---|---|
 | `useBackendRealtime.ts` | Backend `/ws` (Port 8001) | Mutations: Vote-Scores, Problem/Solution CRUD |
-| `useRealtimeUpdates.ts` | AI-Service `/ws` | AI-Events: `problem.approved`, `cluster.updated`, `solution.generated` |
+| `useRealtimeUpdates.ts` | AI-Service `/ws` | AI-Events: `problem.approved`, `solution.generated` |
 
 Vote-Score-Updates laufen **nicht** über den AI-Service — Basis-Funktionalität darf
 nicht vom AI-Service abhängen.
@@ -247,13 +247,14 @@ Sofort-Feedback für den votenden User: `ProblemPanel.vue` aktualisiert den Scor
 
 ```typescript
 type WebSocketEvent =
-  | { type: 'problem.approved';  payload: { id: string; clusterId: string } }
+  | { type: 'problem.approved';  payload: { id: string } }
   | { type: 'problem.rejected';  payload: { id: string } }
   | { type: 'problem.deleted';   payload: { id: string } }
-  | { type: 'cluster.updated';   payload: { id: string; label: string; problemCount: number } }
   | { type: 'solution.approved'; payload: { id: string; problemId: string } }
   | { type: 'solution.deleted';  payload: { id: string; problemId: string } }
 ```
+
+*`cluster.updated` und `clusterId` in `problem.approved` entfernt — `clusters`-Tabelle gedroppt (Migration 005, 2026-05-22). Clustering-Output landet direkt in `problem_tag` (L1–L9 Tags).*
 
 Events auf Entity-Ebene — Frontend entscheidet ob Re-fetch oder direktes State-Update.
 

@@ -205,7 +205,9 @@ Jedes Textfeld existiert doppelt — Original + `_en`. Embeddings und Clustering
 - Score ≥ 0.85: Hinweis mit Link zum ähnlichen Problem
 - Score ≥ 0.92: Wahrscheinliches Duplikat — Submit erfordert Bestätigung
 
-### Spam-Filter (mehrstufig)
+### Spam-Filter
+
+**Probleme (mehrstufig):**
 
 1. nginx Rate Limiting (5 Req/Minute pro IP)
 2. Verhaltens-Signale (zu schneller Submit, Session-Flood, Bot-Agents)
@@ -213,6 +215,9 @@ Jedes Textfeld existiert doppelt — Original + `_en`. Embeddings und Clustering
 4. GPT-4o-mini als letzte Instanz
 
 Kein CAPTCHA — Friction-freies UX ist Designziel.
+
+**Lösungsansätze (nach Login, nur LLM):**
+- GPT-4o-mini prüft den Inhalt — kein Verhaltens-Layer nötig (Auth vorausgesetzt)
 
 ### Automatisches Clustering
 
@@ -224,14 +229,17 @@ Kein CAPTCHA — Friction-freies UX ist Designziel.
 
 ### Moderation-Workflow
 
+**Probleme:**
 ```
-eingereicht → pending
-    ↓ KI-Spam-Filter
-klarer Spam → rejected (automatisch)
-unklar/ok   → needs_review
-    ↓ Admin-Queue
-freigegeben → approved → Embedding + Clustering + KI-Lösungsansatz generiert
-abgelehnt   → rejected
+eingereicht → [Verhaltens-Signale] ─→ needs_review ─→ [Admin] → approved / rejected
+            → [LLM-Spam-Filter]   ─→ pending       ─→ [Admin] → approved / rejected
+                                   ↘ Spam → rejected (automatisch)
+```
+
+**Lösungsansätze** (nach Login, kein Verhaltens-Layer):
+```
+eingereicht → [LLM-Spam-Filter] → pending → [Admin] → approved / rejected
+                                ↘ Spam → rejected (automatisch)
 ```
 
 ---
@@ -274,7 +282,7 @@ users ──< problems ──< solution_approaches
 - [x] FastAPI Backend + Auth (fastapi-users, JWT, Magic Link, E-Mail-Verifizierung)
 - [x] pgvector Ähnlichkeitserkennung + Duplikat-Filter
 - [x] HDBSCAN-Clustering + LLM-Labeling → hierarchische Tags
-- [x] Mehrstufiger Spam-Filter (Rate Limiting → Honeypot → GPT-4o-mini)
+- [x] Spam-Filter: mehrstufig für Probleme (Rate Limiting → Honeypot → GPT-4o-mini), LLM-only für Lösungsansätze
 - [x] WebSocket Echtzeit-Updates (Voting, Graph-Änderungen)
 - [x] Moderations-Workflow (Admin-Queue, Batch-Operationen)
 - [x] Cytoscape.js Graph-Visualisierung

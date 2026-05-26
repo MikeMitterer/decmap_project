@@ -212,7 +212,7 @@ Beide Layer implementieren dasselbe Interface — kein Unterschied für Komponen
 | Composable | WebSocket-Quelle | Verantwortlich für |
 |---|---|---|
 | `useBackendRealtime.ts` | Backend WS `ws://localhost:8001/ws` | Mutations: Vote-Scores, Problem/Solution CRUD |
-| `useRealtimeUpdates.ts` | AI-Service WS (`/ws`) | AI-Events: `problem.approved`, `cluster.updated`, `solution.generated` |
+| `useRealtimeUpdates.ts` | AI-Service WS (`/ws`) | AI-Events: `problem.approved`, `solution.generated` |
 
 ### Vote-Score-Flow
 

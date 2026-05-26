@@ -155,8 +155,8 @@ routeRules: {
 → **Ausfuehrliche Spezifikationen:** [`docs/features.md`](docs/features.md)
 
 - **Aehnlichkeitserkennung:** Debounced pgvector Cosine-Similarity, Schwellenwert 0.85/0.92
-- **Bot-Erkennung:** nginx Rate Limiting → DNSBL → Verhaltens-Signale + Honeypot → GPT Spam-Filter. Verifikationskriterien (SSoT): [`docs/moderation-criteria.md`](docs/moderation-criteria.md)
-- **Echtzeit-Updates:** Zwei WebSocket-Quellen: AI-Service WS (`useRealtimeUpdates.ts`) fuer AI-Events (problem.approved, cluster.updated, solution.generated); Backend WS (`useBackendRealtime.ts`) fuer Mutations (problem.updated/created/deleted, solution.updated, Vote-Scores). Voting: `POST /votes` → Backend gibt `vote_score` direkt zurueck, feuert WS-Event. `ProblemGraph.vue` watcht `props.problems` deep — rendert automatisch neu bei Vote-Score-Aenderungen.
+- **Bot-Erkennung:** Probleme: nginx Rate Limiting → DNSBL → Verhaltens-Signale + Honeypot → GPT Spam-Filter. Lösungsansätze: nur LLM-Spam-Filter (kein Verhaltens-Layer — Auth vorausgesetzt). Verifikationskriterien (SSoT): [`docs/moderation-criteria.md`](docs/moderation-criteria.md)
+- **Echtzeit-Updates:** Zwei WebSocket-Quellen: AI-Service WS (`useRealtimeUpdates.ts`) fuer AI-Events (problem.approved, solution.generated); Backend WS (`useBackendRealtime.ts`) fuer Mutations (problem.updated/created/deleted, solution.updated, Vote-Scores). Voting: `POST /votes` → Backend gibt `vote_score` direkt zurueck, feuert WS-Event. `ProblemGraph.vue` watcht `props.problems` deep — rendert automatisch neu bei Vote-Score-Aenderungen.
 - **i18n:** Nuxt i18n, alle Texte ueber `t()`, MVP nur Englisch
 - **Markdown:** markdown-it + DOMPurify (nur Links + Fettschrift)
 - **Uebersetzung:** Aktiv beim Einreichen — `looksLikeEnglish`-Heuristik → bei Nicht-Englisch „Translate to English"-Button → KI-Service `TranslationService` via konfiguriertem LLM-Provider (`openai_llm_model`/`anthropic_model` in `.env`). Kein DeepL, kein lokales Modell.
