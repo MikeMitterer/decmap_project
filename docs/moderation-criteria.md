@@ -66,7 +66,7 @@ Kein signals/honeypot-Layer — Lösungsansätze werden direkt per LLM evaluiert
 | Meinungsäußerung ohne Handlungsansatz | „KI ist gefährlich", „Das wird nie funktionieren" |
 | Eindeutiges Duplikat der KI-generierten Lösung | Wortgleiche oder nahezu identische Übernahme |
 
-### Zur manuellen Prüfung (`is_spam: false`, Status → `needs_review`)
+### Grenzfälle (`is_spam: false`, Status → `pending`)
 
 Der LLM-Check für Lösungsansätze liefert nur `is_spam: true/false` — keine `needs_review`-Stufe.
 Grenzfälle landen als `pending` in der Admin-Queue:
