@@ -4,351 +4,258 @@
 
 # DecisionMap
 
-Eine kollektive Wissensplattform für KI-bezogene Probleme in Unternehmen.
+**The Collective AI Problem Map for Mid-Market Companies.**
 
-Unternehmen stehen bei der Einführung von KI vor ähnlichen Herausforderungen — aber jedes löst sie isoliert.
-DecisionMap macht dieses verteilte Wissen sichtbar: User erfassen reale Probleme, andere liefern
-Lösungsansätze, ein KI-Service clustert die Eingaben und visualisiert sie als interaktive Mindmap.
+Somewhere in another company, someone is struggling with the exact same AI problem as you.
+You'll never meet. DecisionMap changes that.
 
-**Zielgruppe:** IT-Entscheider, CDOs, KI-Projektverantwortliche in KMU  
-**Domain:** `decisionmap.ai` (Fallback: `frictionmap.ai`)
+Users submit real AI challenges from their day-to-day business — shadow AI, model selection,
+compliance, data privacy with AI tools. Others contribute practical solutions from experience.
+An AI backend clusters the submissions automatically and visualizes them as an interactive problem map.
 
----
+**Not a consulting tool. Not a discussion forum. A structured, AI-supported knowledge base
+with community validation through voting.**
 
-## Wie es funktioniert
+**Target audience:** IT decision-makers, CDOs, AI project leads in mid-market companies  
+**Domain:** [decisionmap.ai](https://decisionmap.ai)
 
-1. **Problem erfassen** — kurze Beschreibung eines realen KI-Problems aus dem Unternehmensalltag
-   (z.B. Shadow AI, Modellauswahl, Compliance, Datenschutz bei KI-Tools)
-2. **Lösungsansätze beisteuern** — keine fertigen Rezepte, sondern Erfahrungen aus der Praxis
-3. **KI clustert automatisch** — ähnliche Probleme werden gruppiert und in eine Tag-Hierarchie eingeordnet
-4. **Visualisierung** — ein interaktiver Graph zeigt die Problemlandschaft, mit Drill-down zu Details
-
-Kein Beratungstool. Keine Diskussionsplattform. Eine strukturierte, KI-unterstützte Wissensbasis
-mit Community-Validierung durch Voting.
+[Deutsche Version](README.de.md)
 
 ---
 
-## Technischer Stack
+## Status
 
-| Schicht | Technologie | Zweck |
+> **Pre-Beta** — The platform is technically ready but not yet publicly promoted.
+> Looking for 10–15 companies for the beta test. Interested? → [Open an issue](https://github.com/MikeMitterer/decmap_project/issues/new) or reach out directly.
+
+- Frontend: 180 tests passing
+- Backend: 14 tests passing
+- AI Service: 37 tests passing
+- Infrastructure: Hetzner + Docker + nginx + TLS running
+- SMTP: AWS SES (domain verification complete)
+
+---
+
+## How It Works
+
+1. **Submit a problem** — brief description of a real AI challenge from daily business life
+2. **Contribute solutions** — not polished recipes, but practical experience from the field
+3. **AI clusters automatically** — similar problems are grouped into a tag hierarchy
+4. **Visualization** — an interactive graph shows the problem landscape with drill-down to details
+
+---
+
+## Development Approach
+
+This project is an experiment in **vibe-coding** — AI-assisted development where architecture
+decisions, debugging and implementation emerge through close collaboration with AI assistants.
+At the same time it's a real product with real users as the goal.
+
+What that means in practice:
+- All architecture decisions are documented (CLAUDE.md, docs/)
+- Decision processes and learnings are shared publicly
+- The stack was chosen deliberately for AI engineering depth — pgvector, HDBSCAN, LLM integration — not because it was the simplest option
+
+The interesting part is happening right now. Follow progress and learnings on
+[LinkedIn](https://www.linkedin.com/in/mangolila/).
+
+---
+
+## Tech Stack
+
+| Layer | Technology | Purpose |
 |---|---|---|
-| Frontend | Nuxt.js 3 + TypeScript | SPA/SSR-Hybrid, Auto-Imports, SEO-ready |
-| CSS | Tailwind CSS | Utility-Klassen, Theme-System per CSS Custom Properties |
-| Visualisierung | Cytoscape.js | Interaktive Graph-Darstellung |
-| Backend | FastAPI + fastapi-users + SQLAlchemy (asyncio) | Auth, REST API, WebSocket, Admin-Endpoints |
-| Datenbank | PostgreSQL + pgvector | Relationale Daten + Embeddings in einer DB |
-| KI-Service | FastAPI (Python 3.11+) | Embeddings, Clustering, Spam-Filter, Übersetzung |
-| DB-Migrationen | Alembic | Python-nativ, rollbackfähig |
-| Echtzeit | WebSocket (FastAPI) | Live-Updates im Multi-User-Betrieb |
-| Testing | Vitest / pytest | Unit- und Contract-Tests |
-| Hosting | Hetzner + Docker + nginx | Europäisch (DSGVO), Docker Compose |
-| CI/CD | Jenkins → SSH → Hetzner | Lokale Jenkins-Instanz |
+| Frontend | Nuxt.js 3 + TypeScript | SPA/SSR hybrid, auto-imports, SEO-ready |
+| CSS | Tailwind CSS | Utility classes, theme system via CSS custom properties |
+| Visualization | Cytoscape.js | Interactive graph rendering |
+| Backend | FastAPI + fastapi-users + SQLAlchemy (asyncio) | Auth, REST API, WebSocket, admin endpoints |
+| Database | PostgreSQL + pgvector | Relational data + embeddings in one DB |
+| AI Service | FastAPI (Python 3.11+) | Embeddings, clustering, spam filter, translation |
+| DB Migrations | Alembic | Python-native, rollback-capable |
+| Realtime | WebSocket (FastAPI) | Live updates in multi-user operation |
+| Testing | Vitest / pytest | Unit and contract tests |
+| Hosting | Hetzner + Docker + nginx | European (GDPR), Docker Compose |
+| CI/CD | Jenkins → SSH → Hetzner | Local Jenkins instance |
 
 ---
 
-## Repository-Struktur
+## Repository Structure
 
-Multi-Repo — fünf Repositories mit eigenem Release-Zyklus:
+Multi-repo — five repositories with independent release cycles:
 
 ```
-DecisionMap/                     ← Workspace-Root (Issues, Doku, CI-Koordination)
-├── CLAUDE.md                    ← Technische Haupt-Referenz für alle Repos
-├── README.md                    ← Dieses File
-├── Makefile                     ← Workspace-Orchestrierung
-├── data/                        ← Gemeinsame Seed-Daten (SSoT, snake_case JSON)
-├── docs/                        ← Detaillierte Spezifikationen
-│   ├── backend.md               ← Infrastruktur, Deploy, Versionierung
-│   ├── conventions.md           ← Code-Konventionen mit Beispielen
-│   ├── data-model.md            ← Vollständiges Datenbankschema
-│   ├── features.md              ← Feature-Spezifikationen
-│   ├── dev-environment.md       ← Lokale Entwicklungsumgebung (Ports, Fake-Daten, venv)
-│   ├── cmdline.md               ← curl-Beispiele für alle API-Endpunkte
-│   └── ses-setup.md             ← AWS SES: Domain-Verifizierung → SMTP → Production Access
-├── scripts/                     ← Workspace-Skripte
-│   ├── db-backup.sh             ← Einheitliches DB-Backup/Restore (Backend + Infrastructure)
-│   ├── env-audit.py             ← .env vs .env.example Drift-Erkennung (alle Repos, CI-fähig)
-│   ├── git-push-all.sh          ← Git-Push in allen ausgecheckten Sub-Repos
-│   ├── repo-status.sh           ← Git-Status aller Sub-Repos
-│   └── smtp-test.py             ← SMTP-Relay-Verifikation (AWS SES)
-├── .templates/                  ← Wiederverwendbare Templates (Jenkinsfile, Makefile, Docker)
-├── .libs/                       ← Lokale Symlinks (BashLib, MakeLib) — gitignored
-├── apps/                        ← Service-Repos (gitignored, eigene Repos)
-│   ├── backend/                 ← FastAPI Backend + Alembic (Schema-Owner)
-│   ├── frontend/                ← Nuxt.js App
-│   └── ai-service/              ← FastAPI KI-Service (kein direkter DB-Zugriff)
-└── infrastructure/              ← docker-compose, nginx (eigenes Repo)
+DecisionMap/                     ← Workspace root (issues, docs, CI coordination)
+├── CLAUDE.md                    ← Main technical reference for all repos
+├── README.md                    ← This file (English)
+├── README.de.md                 ← German version
+├── Makefile                     ← Workspace orchestration
+├── docs/                        ← Detailed specifications
+│   ├── backend.md               ← Infrastructure, deploy, versioning
+│   ├── conventions.md           ← Code conventions with examples
+│   ├── data-model.md            ← Full database schema
+│   ├── features.md              ← Feature specifications
+│   ├── dev-environment.md       ← Local dev setup (ports, fake data, venv)
+│   ├── cmdline.md               ← curl examples for all API endpoints
+│   └── ses-setup.md             ← AWS SES: domain verification → SMTP → production
+├── scripts/                     ← Workspace scripts
+├── .templates/                  ← Reusable templates (Jenkinsfile, Makefile, Docker)
+├── .libs/                       ← Local symlinks (BashLib, MakeLib) — gitignored
+├── apps/                        ← Service repos (gitignored, own repos)
+│   ├── backend/                 ← FastAPI backend + Alembic (schema owner)
+│   ├── frontend/                ← Nuxt.js app
+│   └── ai-service/              ← FastAPI AI service (no direct DB access)
+└── infrastructure/              ← docker-compose, nginx (own repo)
 ```
-
-`apps/backend/`, `apps/frontend/`, `apps/ai-service/` und `infrastructure/` haben eigene Git-Repos
-und sind per `.gitignore` aus dem Root ausgeschlossen.
 
 ---
 
-## Makefile — Wichtigste Targets
+## Makefile — Key Targets
 
 ```bash
-make help          # Alle verfügbaren Befehle anzeigen
-make hints         # Lokale URLs (via Dev-Proxy + direkt) und nützliche Links
-make info          # Workspace-Umgebungsvariablen
-make setup         # .libs/-Symlinks erstellen (einmalig nach dem Klonen)
-make status        # Git-Status aller Sub-Repos (dirty + ahead/behind Remote)
+make help          # Show all available commands
+make hints         # Local URLs (via dev proxy + direct) and useful links
+make setup         # Create .libs/ symlinks (once after cloning)
+make status        # Git status for all sub-repos (dirty + ahead/behind remote)
 ```
 
-`make help` unterstützt Farbthemen via `MAKE_THEME` (in `.env` oder als Umgebungsvariable):
+**Cross-repo:**
 ```bash
-make help                      # classic (Standard, Gelb/Blau/Grün)
-make help MAKE_THEME=ocean     # Cyan/Türkis
-make help MAKE_THEME=earth     # Warme Brauntöne
-make help MAKE_THEME=night     # Violett/Lavendel
-make help MAKE_THEME=mono      # Schwarz/Weiß
-make help MAKE_THEME=sunset    # Rosa/Lachs
-make help MAKE_THEME=forest    # Dunkelgrün/Limette
-make help MAKE_THEME=neon      # Magenta/Neongrün
+make git-push-all  # Git push across all checked-out sub-repos
+make build-all     # Build Docker images (backend + frontend + ai-service)
+make test-all      # Run all tests
+make deploy        # Full-stack deploy via infrastructure/
+make version       # Show current versions of all sub-repos
 ```
 
-**Versionierung:**
+Sub-repo makefiles:
 ```bash
-make version       # Aktuelle Versionen aller Sub-Repos anzeigen
-make tags          # Letzte 10 Git-Tags mit Datum
-```
-
-**Cross-Repo:**
-```bash
-make git-push-all  # Git-Push in allen ausgecheckten Sub-Repos
-make build-all     # Docker-Images bauen (backend + frontend + ai-service)
-make push-all      # Images nach ghcr.io pushen
-make test-all      # Alle Tests ausführen
-make deploy        # Full-Stack Deploy via infrastructure/
-```
-
-Sub-Repo-Makefiles:
-```bash
-make -C apps/backend help      # FastAPI Backend, DB, Backup
+make -C apps/backend help      # FastAPI backend, DB, backup
 make -C apps/frontend help     # dev, lint, test, build
 make -C apps/ai-service help   # FastAPI dev, test, build
-make -C infrastructure help    # Server-Orchestrierung
+make -C infrastructure help    # Server orchestration
 ```
 
 ---
 
-## Lokale Entwicklung
+## Local Development
 
 ```bash
-make dev-up    # nginx-Proxy + Docker (Postgres + Backend-API :8001) + overmind (Frontend :3000 + AI-Service :8000)
-make dev-down  # overmind beenden + alle Docker-Services stoppen
+make dev-up    # nginx proxy + Docker (Postgres + backend :8001) + overmind (frontend :3000 + AI service :8000)
+make dev-down  # stop overmind + all Docker services
 ```
 
-**Via Dev-Proxy** (`make dev-nginx-up`):
-
-| URL | Dienst |
-|---|---|
-| http://int.decisionmap.ai | App (Frontend) |
-| http://backend.int.decisionmap.ai | Backend API (FastAPI) |
-| http://int.decisionmap.ai/api/docs | AI-Service (Swagger) |
-
-**Direkt** (ohne Proxy):
-
-| URL | Dienst |
+| URL | Service |
 |---|---|
 | http://localhost:3000 | Frontend |
-| http://localhost:8001 | Backend API (FastAPI) |
 | http://localhost:8001/docs | Backend Swagger |
-| http://localhost:8000 | AI-Service |
-| http://localhost:8000/docs | AI-Service Swagger |
-| http://localhost:8025 | Mailpit (SMTP-Sink) |
-| http://localhost:8080 | Adminer (DB-UI, Server: `postgres`) |
+| http://localhost:8000/docs | AI service Swagger |
+| http://localhost:8025 | Mailpit (SMTP sink) |
+| http://localhost:8080 | Adminer (DB UI, server: `postgres`) |
 
-Voraussetzung: `overmind` installiert (`brew install overmind`).
-
-→ **Vollständige Anleitung (Ersteinrichtung, Ports, Fake-Daten, venv-Gotchas):** [`docs/dev-environment.md`](docs/dev-environment.md)
+→ **Full setup guide:** [`docs/dev-environment.md`](docs/dev-environment.md)
 
 ---
 
-## Architektur-Prinzipien
+## Architecture Principles
 
-**Trennung von UI und Logik:**
-- Frontend: Komponenten = Darstellung, Composables = Logik + API-Kommunikation
-- Backend: Router = HTTP, Services = Fachlogik (Services kennen kein HTTP)
-
-**Validierung auf drei Schichten:**
-Zod (Frontend) → Pydantic (Backend) → PostgreSQL Constraints
-
-**Kein Hard Delete:**
-Alle Entitäten werden per `deleted_at`/`deleted_by` weich gelöscht.
-
-**Mehrsprachigkeit im Datenmodell:**
-Jedes Textfeld existiert doppelt — Original + `_en`. Embeddings und Clustering laufen nur auf `_en`-Feldern.
+- **Frontend:** components = presentation, composables = logic + API communication
+- **Backend:** router = HTTP, services = business logic (no HTTP knowledge in services)
+- **Validation:** Zod (frontend) → Pydantic (backend) → PostgreSQL constraints
+- **No hard deletes:** soft-delete via `deleted_at`/`deleted_by`
+- **Multilingual:** every text field exists twice — original + `_en`; embeddings use `_en` only
 
 ---
 
-## KI-Features
+## AI Features
 
-### Ähnlichkeitserkennung
+### Similarity Detection
+- Debounced check (600ms) via pgvector cosine similarity
+- Score ≥ 0.85: hint with link to similar problem
+- Score ≥ 0.92: likely duplicate — submit requires confirmation
 
-Verhindert Duplikate bereits während der Eingabe:
-- Debounced-Prüfung (600ms) via pgvector Cosine-Similarity
-- Score ≥ 0.85: Hinweis mit Link zum ähnlichen Problem
-- Score ≥ 0.92: Wahrscheinliches Duplikat — Submit erfordert Bestätigung
+### Multi-Layer Spam Filter
+1. nginx rate limiting (5 req/minute per IP)
+2. Behavioral signals (too-fast submit, session flood, bot agents)
+3. Honeypot field
+4. GPT-4o-mini as final gate — no CAPTCHA
 
-### Spam-Filter (mehrstufig)
+### Automatic Clustering
+1. Load embeddings → HDBSCAN (L2-norm, euclidean, adaptive `min_cluster_size`)
+2. LLM labels each cluster → hierarchical tags L1–L9
+3. Sub-clustering for deeper hierarchies
+4. Problems linked to new tags
 
-1. nginx Rate Limiting (5 Req/Minute pro IP)
-2. Verhaltens-Signale (zu schneller Submit, Session-Flood, Bot-Agents)
-3. Honeypot-Feld (verstecktes HTML-Feld)
-4. GPT-4o-mini als letzte Instanz
-
-Kein CAPTCHA — Friction-freies UX ist Designziel.
-
-### Automatisches Clustering
-
-Ein zyklischer Job analysiert alle freigegebenen Probleme:
-
-1. Embeddings aller Probleme laden
-2. HDBSCAN-Clustering (L2-normalisierte Embeddings, euclidean metric, adaptive `min_cluster_size = max(2, sqrt(n/4))`) → findet natürliche Gruppen (keine vorgegebene Anzahl nötig)
-3. LLM (GPT-4o) labelt jede Gruppe → erzeugt hierarchische Tags (L1–L9)
-4. Sub-Clustering innerhalb großer Gruppen → tiefere Hierarchie-Ebenen
-5. Probleme mit neuen Tags verknüpfen
-
-### Moderation-Workflow
-
+### Moderation Workflow
 ```
-eingereicht → pending
-    ↓ KI-Spam-Filter
-klarer Spam → rejected (automatisch)
-unklar/ok   → needs_review
-    ↓ Admin-Queue
-freigegeben → approved → Embedding + Clustering + KI-Lösungsansatz generiert
-abgelehnt   → rejected
+submitted → pending → [AI spam filter] → needs_review → [admin] → approved / rejected
+                                       ↘ clear spam → rejected (automatic)
 ```
 
 ---
 
-## Tag-Hierarchie
+## Tag Hierarchy
 
-Das Ordnungsprinzip für den Graph:
-
-| Level | Erstellt von | Beschreibung |
+| Level | Created by | Description |
 |---|---|---|
-| L0 | System | Wurzelknoten der Plattform |
-| L1–L9 | KI (automatisch) | Hierarchische Kategorien aus Problemanalyse |
-| L10 | User | Freie Tags (z.B. „shadow-ai", „compliance") |
-
-L0 und L10 bleiben beim Clustering immer erhalten — nur L1–L9 werden neu generiert.
+| L0 | System | Platform root node |
+| L1–L9 | AI (automatic) | Hierarchical categories from problem analysis |
+| L10 | User | Free tags (e.g. "shadow-ai", "compliance") |
 
 ---
 
-## Datenmodell (Übersicht)
-
-Vollständige Spezifikation: [`docs/data-model.md`](docs/data-model.md)
+## Data Model (Overview)
 
 ```
 users ──< problems ──< solution_approaches
-              │
               ├──>< problem_tag    >──< tags (L0–L10)
               └──>< problem_region >──< regions
-
-[clusters + problem_cluster: gedroppt in Migration 005 (2026-05-22)]
 ```
 
-| Tabelle | Zweck |
+Full specification: [`docs/data-model.md`](docs/data-model.md)
+
+---
+
+## Roadmap
+
+**Done:**
+- [x] FastAPI backend + auth (JWT, magic link, email verification)
+- [x] pgvector similarity detection + duplicate filter
+- [x] HDBSCAN clustering + LLM labeling → hierarchical tags
+- [x] Multi-layer spam filter (rate limiting → honeypot → GPT-4o-mini)
+- [x] WebSocket realtime updates (voting, graph changes)
+- [x] Moderation workflow (admin queue, batch operations)
+- [x] Cytoscape.js graph visualization
+- [x] Theme system (6 presets + custom)
+- [x] Hetzner infrastructure + TLS + AWS SES
+
+**Up next:**
+- [ ] Clustering smoke test
+- [ ] Beta access for first companies
+- [ ] Stripe integration (SaaS pricing)
+- [ ] E2E tests with Playwright
+- [ ] Region-based filtering and ranking
+
+---
+
+## Documentation
+
+| Document | Content |
 |---|---|
-| `problems` | KI-Probleme mit Status-Workflow, Embedding, Original + EN |
-| `solution_approaches` | Lösungsansätze pro Problem (Markdown) |
-| `tags` | Hierarchische Tags (L0 Root → L1–L9 KI → L10 User) |
-| `clusters` | KI-generierte Problemfelder mit Centroid-Vektor |
-| `votes` | Up-/Downvotes, DSGVO-konform über `ip_hash` |
-| `edit_history` | Änderungsverfolgung (nur Moderatoren) |
-| `moderation_log` | Audit-Trail aller Entscheidungen |
+| [`CLAUDE.md`](CLAUDE.md) | Main technical reference, gotchas, conventions |
+| [`docs/backend.md`](docs/backend.md) | Infrastructure, deploy, versioning |
+| [`docs/data-model.md`](docs/data-model.md) | Full database schema |
+| [`docs/features.md`](docs/features.md) | Feature specifications |
+| [`docs/moderation-criteria.md`](docs/moderation-criteria.md) | AI spam filter acceptance/rejection criteria (SSoT) |
+| [`docs/dev-environment.md`](docs/dev-environment.md) | Local development setup |
+| [`docs/cmdline.md`](docs/cmdline.md) | curl examples for all API endpoints |
 
 ---
 
-## Versionierung
+## Get Involved
 
-Zwei Mechanismen — Details: [`docs/backend.md`](docs/backend.md)
+**Beta access:** Leading AI projects in your company and want to test the platform?
+→ [Get in touch via issue](https://github.com/MikeMitterer/decmap_project/issues/new)
 
-- **Release-Tags:** SemVer + Datum via `bumpVer` → `v0.1.0+260411.1430`
-- **Docker-Snapshots:** `gitDockerTag` → `0.1.0-260412.0824.def34` — automatisch via Jenkins
+**Feedback & bugs:** [Issues](https://github.com/MikeMitterer/decmap_project/issues)
 
-Version pro Sub-Repo ablesen:
-```bash
-make version
-```
-
----
-
-## Dokumentation
-
-| Dokument | Inhalt |
-|---|---|
-| [`CLAUDE.md`](CLAUDE.md) | Technische Haupt-Referenz, Gotchas, Konventionen (kompakt) |
-| [`docs/backend.md`](docs/backend.md) | Infrastruktur, Deploy, Makefile, Versionierung |
-| [`docs/conventions.md`](docs/conventions.md) | Code-Konventionen mit Beispielen |
-| [`docs/data-model.md`](docs/data-model.md) | Vollständiges Datenbankschema |
-| [`docs/features.md`](docs/features.md) | Feature-Spezifikationen im Detail |
-| [`docs/dev-environment.md`](docs/dev-environment.md) | Lokale Entwicklungsumgebung (Ports, Fake-Daten, WebSocket, venv) |
-| [`docs/ses-setup.md`](docs/ses-setup.md) | AWS SES: Domain-Verifizierung → SMTP → Production Access |
-| [`docs/cmdline.md`](docs/cmdline.md) | curl-Beispiele für alle API-Endpunkte |
-
----
-
-## Aktueller Stand
-
-Beide Data-Layer (Fake + Real) sind vollständig implementiert.
-
-- **Frontend:** 180 Tests in 15 Dateien grün — Composables, Contract-Tests (Fake & Real)
-- **Backend:** 14 Unit-Tests grün
-- **AI-Service:** 37 Unit-Tests grün
-
-**Hetzner-Infrastruktur (in Betrieb):** nginx + TLS + Docker Compose laufen. SMTP: AWS SES (Domain-Verifizierung abgeschlossen, Sandbox-Modus). Tracking: MikeMitterer/decmap_project#1. AI-Service-Image (`decisionmap-ai-service`) auf ghcr.io, deploy via `make -C infrastructure deploy-service SVC=ai-service`.
-
-**Backend-Migration (Phase 8 abgeschlossen):** Directus vollständig entfernt. Stack: FastAPI (`apps/backend/`, Port 8001) + fastapi-users + SQLAlchemy asyncio. Phase 7: AI-Service nutzt `BackendClient` (httpx) statt direktem DB-Zugriff — `app/repositories/` gelöscht, `psycopg[binary]` entfernt. Phase 8: Directus aus docker-compose, nginx, env vars, CLAUDE.md entfernt — `cms.decisionmap.ai` → `api.decisionmap.ai` (Port 8001), `useDirectusRealtime.ts` → `useBackendRealtime.ts`.
-
-→ Details: [`docs/backend.md`](docs/backend.md)
-
-**Offene Punkte:**
-- Clustering-Pipeline Smoke-Test: Architektur-Fix implementiert (2026-05-22) — Pipeline schreibt jetzt L1-Tags via `problem_tag`; `clusters`/`problem_cluster` gedroppt (Migration 005). Smoke-Test `./scripts/smoke-test.sh cluster` noch ausstehend.
-- Bulk-Reindex: `POST /embeddings/reindex` (AI-Service) + `GET /internal/problems/approved-all` (Backend) implementiert — noch nicht via Smoke-Test verifiziert
-- DNSBL-Check aktivieren (nach Launch bei Bedarf)
-- E2E-Tests mit Playwright
-- Regionsbasierte Filterung und Ranking
-
-**AI-Service Cleanup 2026-05-25 — docker-compose bereinigt:**
-
-- `docker-compose.yml`: Postgres-Service, `POSTGRES_URL`, `depends_on` und Volume entfernt — AI-Service hat nie direkt auf DB zugegriffen (Zugriff ausschließlich via `/internal/*` Backend-Endpoints)
-- `docker-compose.yml`: `extra_hosts: host.docker.internal:host-gateway` ergänzt — auf macOS (Docker Desktop) automatisch, auf Linux nicht; nötig damit `backend_url=http://host.docker.internal:8001` im Container auflöst
-- `docker-compose.test.yml`: Gelöscht — kein Test hat je Postgres gebraucht
-- `Makefile` AI-Service: `test-integration` und `##@ Database`-Gruppe entfernt (Alembic gehört ins Backend); `.overmind.sock`-Cleanup in Root `make dev-down` ergänzt
-
-**AI-Service Inbetriebnahme 2026-05-21 — Similarity-Pipeline operational:**
-
-- Procfile.dev: `uvicorn --app-dir` → `bash -c 'cd apps/ai-service && uvicorn ...'` (python-dotenv lädt `.env` aus CWD, nicht aus `--app-dir`)
-- asyncpg Cast-Fix: `embedding <=> :emb::vector` → `embedding <=> (:emb)::vector` (Klammern nötig, sonst stoppt Parametersubstitution)
-- Embedding-Input auf `description_en` normalisiert; Similarity-Query übersetzt via `TranslationService.to_english()` (kein DE/EN-Vektor-Mismatch)
-- `WEBHOOK_SECRET` / `X-Webhook-Secret` → `SERVICE_TOKEN` / `X-Service-Token` (einheitliches Naming mit Backend)
-- Vote-Events laufen ausschließlich über Backend-WS — AI-Service `/hooks/vote-changed` entfernt
-- Dev-Thresholds: `SIMILARITY_THRESHOLD=0.55` / `DUPLICATE_THRESHOLD=0.70` bei <50 Problems (Prod-Werte 0.85/0.92 zu streng)
-- HDBSCAN metric fix: `cosine` → `euclidean` auf L2-normalisierten Embeddings (BallTree unterstützt kein cosine direkt); `MIN_CLUSTER_SIZE` aus Config entfernt — adaptive Formel `max(2, sqrt(n/4))` skaliert automatisch; LLM-Prompt auf sub-domain-spezifische Labels umgestellt; Markdown-Fence-Strip bei JSON-Parse ergänzt
-- uvicorn `--reload` erkennt keine `.env`-Änderungen — nach `.env`-Änderung Service vollständig neu starten (Symptom: `clusters_updated: 0`)
-
-**Code-Review 2026-05-18 — alle Bugs gefixt (23 Fixes, alle Tests grün):**
-
-Backend:
-- B1: `PATCH`/`DELETE /problems` — Ownership-Check + Superuser-Gate ergänzt
-- B2: Startup-Warnung bei Default-Werten für `SECRET_KEY`, `SERVICE_TOKEN`, Wildcard-CORS
-- B3: `store_embedding` + `update_status` in `internal.py` filtern jetzt `deleted_at IS NULL`
-- B4: `pages/auth/magic-verify.vue` angelegt — Frontend-Landingpage für Magic-Link-Token
-- B5: WS-Broadcasts nach `create_ai_solution` + `upsert_cluster` in `internal.py` ergänzt
-
-AI-Service:
-- A1–A4: `test_security.py`, `database/`-Dir, `mock_db_conn`-Fixture, tote Config-Felder entfernt
-- A6: `generate_embedding`-Closure ruft `get_embedding_provider()` intern auf (kein Request-Scope-Leak)
-- A7: Veralteter Directus-Kommentar in `main.py` ersetzt
-
-Frontend:
-- F1: `isTextFieldActive()` in `table.vue:255` korrekt deklariert
-- F2: Vote-Buttons in `/problem/[id].vue` zeigen aktiven State nach Vote (kein Permanent-Disable)
-- F3: Admin-Middleware leitet eingeloggten Non-Admin auf `/` statt `/login`
-- F4: `problemTags` in `realTags.ts` als `computed` ref (reaktiv, kein staler Snapshot)
-- F5: External-Update-Banner-Strings nach i18n verschoben
-- F6: Toter `mockDirectusUser`-Alias + 11 Directus-Testdateien aus `apps/backend/tests/` entfernt
-- F7: Ping-Intervall startet in `socket.onopen`, stoppt in `onclose`/`disconnect()`
+**Contact:** [office@mikemitterer.at](mailto:office@mikemitterer.at)

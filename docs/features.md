@@ -189,6 +189,14 @@ direkt daraus ab — Änderungen an den Kriterien erfordern synchrones Update be
 Zusammenhang mit Issue #19: `rejection_reason` wird erst sinnvoll befüllt,
 wenn der Prompt konkrete Ablehnungsgründe kennt.
 
+### Lösungsansätze (Solution Approaches)
+
+Lösungsansätze werden **direkt per LLM evaluiert** — kein nginx/Middleware/Honeypot-Layer,
+da der Einreichungsflow nach Login erfolgt. Prompt: `SOLUTION_SPAM_SYSTEM` in `prompts.py`.
+
+Kriterien: [`docs/moderation-criteria.md → Solution Approaches`](moderation-criteria.md)  
+Hook: `POST /hooks/solution-submitted` (vom Backend als BackgroundTask aufgerufen)
+
 ### Bewusst weggelassen
 
 - CAPTCHA, Browser-Fingerprinting, ML-basierte Bot-Detection

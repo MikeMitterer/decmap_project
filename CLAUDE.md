@@ -62,7 +62,6 @@ infrastructure      → deploy compose + nginx + Orchestrierung
 DecisionMap/                     ← Workspace-Root-Repo (Issues, Haupt-Doku)
 ├── CLAUDE.md                    ← Haupt-Referenz (dieses File)
 ├── Makefile                     ← Workspace-Orchestrierung
-├── data/                        ← Shared Seed/Fixture-Daten (SSoT, snake_case JSON)
 ├── docs/                        ← Detaillierte Spezifikationen
 ├── scripts/                     ← Workspace-Skripte (z.B. db-backup.sh, env-audit.py)
 ├── .templates/                  ← Wiederverwendbare Templates (Jenkinsfile, Makefile, docker/)
@@ -86,12 +85,23 @@ Jedes Sub-Repo enthaelt eine schlanke CLAUDE.md mit:
 
 ---
 
+## README-Strategie
+
+- `README.md` — **Englisch** (Primary, GitHub-Default, internationales Publikum, Show HN)
+- `README.de.md` — **Deutsch** (DACH-Zielgruppe, Beta-User)
+- Beide Files verlinken gegenseitig am Anfang
+- **Kein Changelog im README** — `git log` + GitHub Releases sind die Changelog-Quellen
+- Status-Section wird **ersetzt**, nicht ergänzt — kein Verlaufs-Rauschen
+- Interne Dev-Notizen (Bugfixes, Migrations-Details) gehoeren in den Commit-Body, nicht ins README
+
+---
+
 ## Datenmodell
 
 → Details on demand: `/data-model` | Vollstaendige Spezifikation: [`docs/data-model.md`](docs/data-model.md)
 
-Kerntabellen: `problems`, `solution_approaches`, `clusters`, `tags`, `regions`, `votes`  
-Junction: `problem_cluster` (n:m mit Weight), `problem_tag`, `problem_region` | Audit: `edit_history`, `moderation_log`  
+Kerntabellen: `problems`, `solution_approaches`, `tags`, `regions`, `votes`  
+Junction: `problem_tag`, `problem_region` | Audit: `edit_history`, `moderation_log`  
 Tags: L0=Root (System), L1–L9=KI, L10=User | Validierung: Zod → Pydantic → PostgreSQL Constraints
 
 ---
@@ -168,7 +178,6 @@ routeRules: {
 - **Makefile:** Jedes Sub-Repo hat ein eigenes Makefile. `make help` (Root: Workspace-Delegation), `make -C apps/backend help` (Docker, DB, Backup). Details: [`docs/backend.md`](docs/backend.md)
 - **Versionierung:** SemVer + Datum (`bumpVer`): `v<MAJOR>.<MINOR>.<PATCH>+<YYMMDD>.<HHMM>.<HASH>`, Start bei `0.1.0`. Docker-Snapshots: `gitDockerTag` → `<MAJOR>.<MINOR>.<PATCH>-<YYMMDD>.<HHMM>.<HASH>[.ahead<N>]` (z.B. `0.1.0-260412.0824.def34.ahead3`) — automatisch via Jenkins. Details: [`docs/backend.md`](docs/backend.md)
 - **Git:** Conventional Commits `<type>(<scope>): <msg>`, direkte Commits auf `master` erlaubt — Jenkins ist die einzige Schranke. Details on demand: `/git-conventions`
-- **Seed-Daten (SSoT):** `data/*.json` (snake_case, UUIDs) — SSoT für Backend-DB-Seeds. Nie direkt in Consumer-Repos editieren.
 - **Seeds:** `apps/backend/database/seeds/` alphabetisch, idempotent
 - **Backup:** `scripts/db-backup.sh` (einheitliches Script, `.dump`-Format). Dev: `make -C apps/backend backup|restore|backup-list`. Prod: `make -C infrastructure backup|backup-restore|backup-list|backup-pull|backup-push`. Nie einchecken. Details: [`docs/backend.md`](docs/backend.md)
 - **Backend-Architektur:** Nuxt → FastAPI (`apps/backend/`, Port 8001) → PostgreSQL. AI-Service (`apps/ai-service/`, Port 8000) kommuniziert nur ueber `/internal/*` Backend-API — kein direkter DB-Zugriff.
@@ -179,7 +188,7 @@ routeRules: {
 
 → Vollstaendige Liste on demand: `/gotchas`
 
-- **Seeds L0/L1:** `seeds.json` hat noch L1=root — DB-Schema/TS-Types verwenden L0=root.
+- **Seeds L0/L1:** `apps/backend/database/seeds/` SQL-Seeds haben noch L1=root — DB-Schema/TS-Types verwenden L0=root. Vor Production-Launch korrigieren.
 - **FastAPI Soft-Delete-Filter:** `deleted_at IS NULL` wird NICHT automatisch gefiltert — jede Query braucht diesen Filter explizit. Gilt auch fuer `/internal/*`-Endpoints (`store_embedding`, `update_status`) — nicht nur in den oeffentlichen Routes.
 - **FastAPI Ownership-Check:** `current_user` authentifiziert — aber PATCH/DELETE auf user-eigene Ressourcen brauchen explizite Ownership-Pruefung: `if resource.author_id != current_user.id: raise HTTPException(403)`. Fehlt der Check, kann jeder eingeloggte User fremde Eintraege manipulieren.
 - **FastAPI Secret-Defaults:** `SECRET_KEY` und `SERVICE_TOKEN` nie mit funktionsfaehigen Prod-Werten defaulten. Leer lassen oder `None` erzwingen — ein vergessenes `.env` in Produktion faellt sonst nicht auf.
@@ -200,7 +209,7 @@ routeRules: {
 - **uvicorn `--app-dir` aendert nicht das Working Directory:** python-dotenv sucht `.env` im CWD, nicht in `--app-dir`. Procfile.dev verwendet deshalb `bash -c 'cd apps/ai-service && uvicorn ...'` — sonst findet der AI-Service seine `.env` nicht und Similarity-Requests schlagen still fehl.
 - **uvicorn `--reload` erkennt keine `.env`-Aenderungen:** `--reload` reagiert nur auf Python-File-Aenderungen. Nach jeder `.env`-Aenderung (z.B. `MIN_CLUSTER_SIZE`) braucht der AI-Service einen vollstaendigen Neustart — sonst bleiben neue Einstellungen wirkungslos (Symptom: `clusters_updated: 0` obwohl Wert korrekt gesetzt).
 - **Stales `.overmind.sock` blockiert `make dev-up`:** Bricht overmind unerwartet ab (Crash, Ctrl+C), bleibt `.overmind.sock` im Root liegen. Der naechste `make dev-up` schlaegt fehl, weil overmind das Socket noch belegt sieht. `make dev-down` raeumt das Socket automatisch auf (`rm -f .overmind.sock`). Manuell: `rm -f .overmind.sock`.
-- **Clustering schreibt in `problem_tag` (nicht `problem_cluster`):** Das Frontend liest ausschliesslich `problem_tag` fuer Cluster-Zuweisungen — die `clusters`-Tabelle ist reiner Zentroid-Metadaten-Store. Der AI-Service muss L1-Tags via `POST /internal/tags/upsert` anlegen und Probleme via `POST /internal/problems/{id}/structural-tag` zuweisen. `problem_cluster` wird vom Frontend nie abgefragt.
+- **Clustering schreibt in `problem_tag`:** `clusters` und `problem_cluster` sind gedroppt (Migration 005, 2026-05-22). Der AI-Service legt L1-Tags via `POST /internal/tags/upsert` an und verknuepft Probleme via `POST /internal/problems/{id}/structural-tag`. Das Frontend liest ausschliesslich `problem_tag` — keine separate Cluster-Tabelle.
 
 ---
 

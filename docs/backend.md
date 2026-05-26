@@ -609,10 +609,7 @@ chore/<kurze-beschreibung>
 
 ## Seed-Daten
 
-**SSoT:** `data/*.json` im Root-Repo (snake_case, UUIDs). Nie direkt in Consumer-Repos editieren.
-
 **Backend SQL-Seeds** in `database/seeds/` — alphabetisch importiert, idempotent (`ON CONFLICT DO NOTHING`).
-Manuell anpassen wenn sich `data/*.json` aendert (kein automatisches Sync fuer SQL-Seeds).
 
 ```
 database/seeds/

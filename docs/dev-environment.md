@@ -197,9 +197,6 @@ USE_FAKE_DATA=false  # Echter FastAPI-Backend + AI-Service
 
 Beide Layer implementieren dasselbe Interface — kein Unterschied für Komponenten.
 
-`data/*.json` (snake_case, UUIDs) sind die einzige Quelle der Wahrheit — nie direkt in
-Consumer-Repos editieren.
-
 [↑ Inhalt](#inhalt)
 
 ---
