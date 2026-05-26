@@ -30,6 +30,9 @@ database/backups/
 # Referenz-PDFs (lokal, nicht im Repo)
 *.pdf
 
+# Strategie-Dokumente (privat, nicht öffentlich)
+.strategy/
+
 # Build-Logs (generiert von .templates/docker/build.sh)
 .templates/docker/logs/
 apps/frontend/
