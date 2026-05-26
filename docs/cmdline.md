@@ -142,6 +142,35 @@ im Hintergrund: Embedding → AI-Lösung → Clustering → WebSocket-Broadcast.
 
 ---
 
+**Lösung eingereicht** (Spam-Filter-Pipeline — analoger Flow zu problem-submitted)
+
+```bash
+curl -s http://localhost:8000/hooks/solution-submitted \
+  -H "Content-Type: application/json" \
+  -H "X-Service-Token: <dein-token>" \
+  -d '{
+    "solution_id": "sol-001",
+    "problem_id": "test-001",
+    "content": "Implement a quarterly AI governance review board with cross-department representatives.",
+    "submitted_at": null
+  }' | jq
+```
+
+```json
+{"status": "pending"}
+```
+
+Spam-Beispiel (→ `rejected`):
+```bash
+-d '{"solution_id": "sol-002", "problem_id": "test-001", "content": "I agree. See above.", "submitted_at": null}'
+```
+
+```json
+{"status": "rejected", "reason": "placeholder content with no actionable substance"}
+```
+
+---
+
 **Lösung freigegeben**
 
 ```bash
