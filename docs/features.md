@@ -179,6 +179,16 @@ if payload.honeypot:
 
 Honeypot-Feld wird nie in der DB gespeichert — nur gepruft.
 
+### Verifikationskriterien (LLM-Prompt)
+
+Die konkreten Akzeptanz- und Ablehnungskriterien des KI-Spam-Filters sind in
+[`docs/moderation-criteria.md`](moderation-criteria.md) definiert (SSoT).
+Der `_SPAM_SYSTEM`-Prompt in `openai_provider.py` / `anthropic_provider.py` leitet sich
+direkt daraus ab — Änderungen an den Kriterien erfordern synchrones Update beider Provider.
+
+Zusammenhang mit Issue #19: `rejection_reason` wird erst sinnvoll befüllt,
+wenn der Prompt konkrete Ablehnungsgründe kennt.
+
 ### Bewusst weggelassen
 
 - CAPTCHA, Browser-Fingerprinting, ML-basierte Bot-Detection
