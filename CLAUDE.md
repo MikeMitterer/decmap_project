@@ -28,7 +28,7 @@ visualisiert sie als interaktiven Graph. Zielgruppe: IT-Entscheider, CDOs, KI-Pr
 | DB-Zugriff | SQLAlchemy ORM (asyncio) + Alembic |
 | DB-Migrationen | Alembic (in `apps/backend/alembic/`) |
 | Echtzeit | WebSocket (FastAPI native) |
-| Testing | Vitest (Frontend) / pytest (Backend) |
+| Testing | Vitest (Frontend) / pytest (Backend) / Playwright (E2E) |
 | CI/CD | Jenkins → SSH → Hetzner |
 
 ---
@@ -93,6 +93,7 @@ Jedes Sub-Repo enthaelt eine schlanke CLAUDE.md mit:
 - **Kein Changelog im README** — `git log` + GitHub Releases sind die Changelog-Quellen
 - Status-Section wird **ersetzt**, nicht ergänzt — kein Verlaufs-Rauschen
 - Interne Dev-Notizen (Bugfixes, Migrations-Details) gehoeren in den Commit-Body, nicht ins README
+- Session-Ende: `git diff HEAD` im Root zeigt nur Root-Aenderungen (CLAUDE.md, docs/, README) — Sub-Repo-Code-Aenderungen via `make status` sichtbar
 
 ---
 
@@ -136,7 +137,7 @@ routeRules: {
 
 - Modals erlaubt, Primaer-Flows bleiben im Panel
 - Mobile: Panel als Drawer
-- `+` Button → Eingabeformular, Klick auf Node/Zeile → Detail
+- `+` Button → immer sichtbar; eingeloggt → Eingabeformular, nicht eingeloggt → Redirect `/login`; Klick auf Node/Zeile → Detail
 
 ---
 
@@ -154,15 +155,15 @@ routeRules: {
 
 → **Ausfuehrliche Spezifikationen:** [`docs/features.md`](docs/features.md)
 
-- **Aehnlichkeitserkennung:** Debounced pgvector Cosine-Similarity, Schwellenwert 0.85/0.92
+- **Aehnlichkeitserkennung:** Debounced pgvector Cosine-Similarity, Schwellenwert 0.85/0.92. Einreichen trotz Warnung: `signals: ['duplicate_confirmed']` → `needs_review` + `rejection_reason="possible_duplicate"` (kein Auto-Reject).
 - **Bot-Erkennung:** Probleme: nginx Rate Limiting → DNSBL → Verhaltens-Signale + Honeypot → GPT Spam-Filter. Lösungsansätze: nur LLM-Spam-Filter (kein Verhaltens-Layer — Auth vorausgesetzt). Verifikationskriterien (SSoT): [`docs/moderation-criteria.md`](docs/moderation-criteria.md)
 - **Echtzeit-Updates:** Zwei WebSocket-Quellen: AI-Service WS (`useRealtimeUpdates.ts`) fuer AI-Events (problem.approved, solution.generated); Backend WS (`useBackendRealtime.ts`) fuer Mutations (problem.updated/created/deleted, solution.updated, Vote-Scores). Voting: `POST /votes` → Backend gibt `vote_score` direkt zurueck, feuert WS-Event. `ProblemGraph.vue` watcht `props.problems` deep — rendert automatisch neu bei Vote-Score-Aenderungen.
 - **i18n:** Nuxt i18n, alle Texte ueber `t()`, MVP nur Englisch
-- **Markdown:** markdown-it + DOMPurify (nur Links + Fettschrift)
-- **Uebersetzung:** Aktiv beim Einreichen — `looksLikeEnglish`-Heuristik → bei Nicht-Englisch „Translate to English"-Button → KI-Service `TranslationService` via konfiguriertem LLM-Provider (`openai_llm_model`/`anthropic_model` in `.env`). Kein DeepL, kein lokales Modell.
+- **Markdown:** markdown-it + DOMPurify in Loesungsansaetzen — erlaubt: Links, Fettschrift, h2/h3, Listen, Blockquotes; verboten: Bilder, Code-Blocke, HTML. Styling via Tailwind-Variant-Selektoren (`.solution-content h2` etc.) — kein `@tailwindcss/typography prose`. DOMPurify-Hook erzwingt `target="_blank" rel="noopener noreferrer"` auf **allen** Links — nicht nur explizit gesetzten.
+- **Uebersetzung:** Aktiv beim Einreichen — `looksLikeEnglish`-Heuristik → bei Nicht-Englisch „Translate to English"-Button → KI-Service `TranslationService` via konfiguriertem LLM-Provider (`openai_llm_model`/`anthropic_model` in `.env`). Submit triggert Auto-Translate wenn noch nicht uebersetzt. EN-Felder sind kein Submit-Blocker. Kein DeepL, kein lokales Modell. Backend speichert Original-Text in `original_translations` (Admin-sichtbar). Cache-Key: `sha256` pro Feld (Titel/Beschreibung separat).
 - **Tagging:** Tags (inhaltlich) + Regionen (geografisch) — getrennte Konzepte
-- **Editieren:** Nur eigene Eintraege, setzt Status zurueck, Edit-History fuer Moderatoren
-- **KI-Loesungen:** Automatisch bei Approval, visuell getrennt, separates Ranking
+- **Editieren:** Nur eigene Eintraege, setzt Status zurueck, Edit-History fuer Moderatoren. Superuser-Edit eines approved Problems: Status bleibt `approved`, triggert `POST /hooks/problem-reindex` (Re-Embedding + Re-Clustering, keine neue KI-Loesung).
+- **KI-Loesungen:** Kein Auto-Generieren — alle Solution-Inhalte kommen von Usern. KI = Moderation (LLM-Spam-Filter, identisch zu Problems). `is_ai_generated: true` kennzeichnet Admin-erstellte Eintraege. Visuell getrennt, separates Ranking.
 - **Auth:** E-Mail-Verifizierung nach Registrierung (`registrationSent`-Flag, kein Auto-Login). Passwort-Staerke-Checklist live im Register-Tab (✓/○ pro Regel, Submit gesperrt bis alle gruen). `/verify-email.vue` → Redirect auf `/login?verified=true`. Dev: Mailpit als SMTP-Sink.
 - **Status-Page:** `/status` zeigt Live-Status von Backend (FastAPI) und AI-Service. Browser-seitige Health-Checks via `fetch` direkt gegen die Services (kein Server-Route-Proxy). Polling alle 30s, `useServiceStatus` Composable mit Shared State (Modul-Level Refs). StatusBar zeigt Farbindikator: gruen (alle ok), orange (nur Backend degraded), rot (Backend down). Backend: `GET /health` (gibt `status`, `version`, `database` zurueck). AI-Service: `GET /health`, via nginx `GET /api/health`.
 
@@ -191,6 +192,7 @@ routeRules: {
 - **Seeds L0/L1:** `apps/backend/database/seeds/` SQL-Seeds haben noch L1=root — DB-Schema/TS-Types verwenden L0=root. Vor Production-Launch korrigieren.
 - **FastAPI Soft-Delete-Filter:** `deleted_at IS NULL` wird NICHT automatisch gefiltert — jede Query braucht diesen Filter explizit. Gilt auch fuer `/internal/*`-Endpoints (`store_embedding`, `update_status`) — nicht nur in den oeffentlichen Routes.
 - **FastAPI Ownership-Check:** `current_user` authentifiziert — aber PATCH/DELETE auf user-eigene Ressourcen brauchen explizite Ownership-Pruefung: `if resource.author_id != current_user.id: raise HTTPException(403)`. Fehlt der Check, kann jeder eingeloggte User fremde Eintraege manipulieren.
+- **FastAPI Solutions-Filter Auth:** `GET /solutions?status_filter=rejected` (und alle Nicht-`approved`-Werte) erfordert Superuser-Auth — normaler User bekommt 403. Nur `status_filter=approved` ist ohne erhöhte Rechte zugänglich. Nicht aus der Route-Signatur erkennbar.
 - **FastAPI Secret-Defaults:** `SECRET_KEY` und `SERVICE_TOKEN` nie mit funktionsfaehigen Prod-Werten defaulten. Leer lassen oder `None` erzwingen — ein vergessenes `.env` in Produktion faellt sonst nicht auf.
 - **FastAPI `EMAIL_FROM` — kein `.local`:** Ist `EMAIL_FROM` auf eine `.local`-Domain gesetzt (z.B. `noreply@decisionmap.local`), startet das Backend nicht — auch wenn `MAIL_SUPPRESS=true`. Immer eine gueltige Domain verwenden.
 - **FastAPI WebSocket-Events explizit:** FastAPI feuert keine automatischen DB-Events — nach jedem Mutations-Endpoint `ws_manager.broadcast()` aufrufen.
@@ -209,7 +211,15 @@ routeRules: {
 - **uvicorn `--app-dir` aendert nicht das Working Directory:** python-dotenv sucht `.env` im CWD, nicht in `--app-dir`. Procfile.dev verwendet deshalb `bash -c 'cd apps/ai-service && uvicorn ...'` — sonst findet der AI-Service seine `.env` nicht und Similarity-Requests schlagen still fehl.
 - **uvicorn `--reload` erkennt keine `.env`-Aenderungen:** `--reload` reagiert nur auf Python-File-Aenderungen. Nach jeder `.env`-Aenderung (z.B. `MIN_CLUSTER_SIZE`) braucht der AI-Service einen vollstaendigen Neustart — sonst bleiben neue Einstellungen wirkungslos (Symptom: `clusters_updated: 0` obwohl Wert korrekt gesetzt).
 - **Stales `.overmind.sock` blockiert `make dev-up`:** Bricht overmind unerwartet ab (Crash, Ctrl+C), bleibt `.overmind.sock` im Root liegen. Der naechste `make dev-up` schlaegt fehl, weil overmind das Socket noch belegt sieht. `make dev-down` raeumt das Socket automatisch auf (`rm -f .overmind.sock`). Manuell: `rm -f .overmind.sock`.
+- **Procfile.dev `backend` = Log-Follower:** `docker logs -f decisionmap-backend-api` — kein Container-Start. `overmind restart backend` startet nur den `docker logs`-Prozess neu, nicht den Container. Container-Lifecycle: `make -C apps/backend dev-up/dev-down`.
+- **Nuxt Layout `localStorage` braucht `import.meta.client`-Guard:** `default.vue` wird als Layout auch fuer SSR-Routen (`/problem/**`, `/cluster/**`) gerendert. `localStorage`-Zugriff ausserhalb von `onMounted` → `ReferenceError: localStorage is not defined`. Guard: `if (import.meta.client) { ... localStorage ... }`. `onMounted` ist implizit client-seitig — kein Guard noetig.
+- **`PENDING_OPEN_PROBLEM_FORM`-Flag muss unconditional geloescht werden:** `default.vue` `onMounted` loescht das Flag **immer** — auch wenn der User nicht eingeloggt ist. Fehlt das unconditional Clear, oeffnet sich das Formular beim naechsten Login unerwartet (Ghost-Open nach abgebrochenem Login).
+- **Nuxt Buttons ohne `type` submitten als Form-Submit:** HTML-Default ist `type="submit"`. Buttons in Layouts, Panels und Komponenten immer explizit `type="button"` setzen — ausser bei echten Submit-Buttons in Formularen. Betrifft z.B. Dark-Mode-Toggle, Logout, Panel-Close, Breadcrumb-Segmente.
 - **Clustering schreibt in `problem_tag`:** `clusters` und `problem_cluster` sind gedroppt (Migration 005, 2026-05-22). Der AI-Service legt L1-Tags via `POST /internal/tags/upsert` an und verknuepft Probleme via `POST /internal/problems/{id}/structural-tag`. Das Frontend liest ausschliesslich `problem_tag` — keine separate Cluster-Tabelle.
+- **Cytoscape.js Badge-Position:** Badge-Mittelpunkt liegt an der Node-Ecke (halbe Badge inside/outside) — gewolltes Design, kein Bug. `positionSolutionBadge` und `positionSearchBadges` nutzen `parent.width()/height()` fuer dynamische Offsets.
+- **`navigator.geolocation` PERMISSION_DENIED auf HTTP-Origins:** Browser blockiert `navigator.geolocation` automatisch auf nicht-sicheren Origins (HTTP ohne HTTPS) — `error.code === 1` (`PERMISSION_DENIED`), auch ohne User-Ablehnung. Betrifft `int.decisionmap.ai` (HTTP-Staging). `useRegionDetection` faengt diesen Fall und schaltet auf Backend-Proxy (`GET /regions/geo`) um. Backend ruft `ip-api.com` server-seitig auf (vermeidet CORS auf HTTP; `ipapi.co` hat zu strenge Rate Limits). `country_code + region_code` → Region-Match (z.B. `AT-9`).
+- **Playwright `waitForLoadState('networkidle')` haengt in Nuxt:** Nuxt oeffnet WebSockets fuer alle User (auch anon) in `onMounted`. `networkidle` wartet auf Netzwerkruhe — bei offenen WS-Verbindungen tritt diese nie ein. Fix: `'domcontentloaded'` oder `'load'` verwenden, nicht `'networkidle'`. Gilt fuer alle Specs die anon-Routen testen.
+- **Playwright `baseURL` in `playwright.config.ts` und `global-setup.ts` muessen uebereinstimmen:** Beide muessen `E2E_BASE_URL` als Quelle nutzen (Default: `http://localhost:3000`). Unterschiedliche Defaults fuehren zu Cookie-Domain-Mismatch: Auth-Cookie wird fuer Host A gesetzt, Spec laeuft gegen Host B → `authenticated`-Tests schlagen still fehl.
 
 ---
 
@@ -221,5 +231,7 @@ routeRules: {
 - Kein Markdown ohne DOMPurify-Sanitizing
 - Keine hardcodierten UI-Strings — i18n (`t()`)
 - `.env` nie einchecken — nur `.env.example`
+- `.env`-Values nie ausgeben (`cat`/`grep` auf `.env` verboten) — nur Keys via `env-audit.py` oder `cut -d= -f1`
 - `make db-reset` nie auf dem Server
+- `git status` nie im Root — immer `make status` (Sub-Repos sind gitignored und fuer Root unsichtbar)
 - Keine `TODO`-Kommentare ohne zugehoeriges Issue
