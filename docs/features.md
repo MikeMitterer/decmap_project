@@ -243,6 +243,8 @@ useBackendRealtime.ts → applyProblemUpdate(update) → UI aktualisiert
 
 Sofort-Feedback für den votenden User: `ProblemPanel.vue` aktualisiert den Score direkt aus dem Response-Body — zeigt echten DB-Wert ohne auf WS-Event zu warten.
 
+**vote_score Floor (implementiert):** `vote_score = max(0, current_score - 1)` — kein negativer Score. Downvote auf Score 0 → bleibt 0, kein Vote-Row wird angelegt. Flip up→down bei Score 1 → fällt auf 0, nicht -1.
+
 ### AI-Service — Event-Typen
 
 ```typescript
@@ -271,6 +273,10 @@ kommen nicht im Event-Payload. `applyProblemUpdate` unterscheidet daher zwei Fä
 Der Scalar-Merge verhindert Flackern; der REST-Nachlade bringt die vollständigen Relationen.
 `ProblemGraph.vue` watcht `props.problems` deep — Graph rendert automatisch neu sobald
 der State updated wird.
+
+**Cytoscape.js Badge-Positionierung:** Badge-Mittelpunkt liegt an der Node-Ecke (halbe Badge
+inside/outside) — das ist gewolltes Design, kein Bug. `positionSolutionBadge` und
+`positionSearchBadges` nutzen `parent.width()/height()` für dynamische Offsets.
 
 ### Echtzeit-Edit-Konflikt-Erkennung
 
@@ -339,21 +345,23 @@ Sprachdateien: `frontend/i18n/locales/en.json` — MVP nur Englisch, Struktur vo
 
 Erlaubt in `solution_approaches.content` — bewusst eingeschrankt.
 
-**Erlaubt:** Links, Fettschrift | **Nicht erlaubt:** Uberschriften, Bilder, Code-Blocke, HTML
+**Erlaubt:** Links, Fettschrift, Ueberschriften (h2/h3), Listen, Blockquotes | **Nicht erlaubt:** Bilder, Code-Blocke, inline HTML
 
 ```typescript
 const md = new MarkdownIt({ html: false, linkify: true })
-  .disable(['image', 'heading', 'code', 'fence', 'blockquote'])
+  .disable(['image', 'code', 'fence'])
 
-function renderComment(content: string): string {
+function renderSolution(content: string): string {
   return DOMPurify.sanitize(md.render(content), {
-    ALLOWED_TAGS: ['p', 'strong', 'em', 'a', 'br'],
+    ALLOWED_TAGS: ['p', 'strong', 'em', 'a', 'br', 'h2', 'h3', 'ul', 'ol', 'li', 'blockquote'],
     ALLOWED_ATTR: ['href', 'target', 'rel'],
   })
 }
 ```
 
-Links offnen immer in `target="_blank"` mit `rel="noopener noreferrer"`.
+Links offnen immer in `target="_blank"` mit `rel="noopener noreferrer"` — per DOMPurify-Hook auf allen Links erzwungen, nicht nur auf explizit gesetzten.
+
+Styling: Tailwind-Variant-Selektoren (`.solution-content h2`, `.solution-content ul` etc.) statt `@tailwindcss/typography` `prose`-Klasse.
 
 [↑ Inhalt](#inhalt)
 
@@ -369,12 +377,14 @@ Aktive Ubersetzung beim Einreichen — nicht passiv via DeepL-Link:
 4. Bei Nicht-Englisch: „Translate to English"-Button erscheint
 5. Klick uebersetzt beide Felder (Titel + Beschreibung) parallel
 6. User kann die englische Version vor dem Submit anpassen
-7. Submit erst moeglich wenn `_en`-Felder befuellt und valide sind
+7. Submit triggert Auto-Translate wenn Nicht-Englisch erkannt und noch nicht uebersetzt (`hasNonEnglishContent && !translationDone → handleTranslateAll()`) — EN-Felder sind kein Submit-Blocker
 
 Im Fake-Modus: 700ms simulierter Delay.
 Im Real-Modus: KI-Service (TranslationService via konfiguriertem LLM-Provider — OpenAI `gpt-4o-mini` oder Anthropic `claude-haiku-4-5`, je nach `llm_provider` in `.env`).
 
-`_en`-Felder sind nur sichtbar wenn Nicht-Englisch erkannt wird — kein visueller Overhead fuer englischsprachige User.
+`_en`-Felder sind nur sichtbar wenn Nicht-Englisch erkannt oder Uebersetzung abgeschlossen — kein visueller Overhead fuer englischsprachige User.
+
+**originalTranslations:** Backend speichert den originalen (nicht-englischen) Text in `original_translations` — fuer Admins sichtbar. Translation-Cache-Key basiert auf `sha256` des jeweiligen Feld-Inhalts (Titel/Beschreibung separat, nicht pauschal `sha256(title)`).
 
 [↑ Inhalt](#inhalt)
 
@@ -393,6 +403,18 @@ Probleme ohne Region gelten als global relevant.
 Regionen beeinflussen das Ranking (EU-Probleme hoher fur EU-User).
 Filterung moglich aber nicht erzwungen.
 
+**useRegions-Facade:** Komponenten importieren ausschliesslich `useRegions.ts` (`useRegionsFetch()`) — kein Direktimport von `realRegions`. Facade-Pattern ermoeglicht den `USE_FAKE_DATA`-Switch ohne Komponenten-Aenderungen. `_inflight`-Promise-Cache verhindert doppelte Requests wenn mehrere Komponenten gleichzeitig mounten.
+
+**Geo-Detection:** `useRegionDetection` ermittelt die Region des Users und setzt die Default-Auswahl im Formular.
+
+Erkennungs-Kaskade:
+1. **Browser-Geolocation** → Nominatim Reverse-Geocoding → ISO 3166-2 Subdivision-Code (z.B. `DE-BY`) → Region-Match
+2. **Backend-Proxy** (`GET /regions/geo`) — greift wenn Geolocation nicht verfügbar ist (HTTP-Kontext) oder verweigert wird. Backend ruft `ip-api.com` server-seitig auf (vermeidet CORS auf HTTP; `ipapi.co` hat zu strenge Rate Limits). `country_code` + `region_code` → `AT-9` → Region-Match; Fallback auf Country-Code wenn Subdivision nicht matched.
+
+HTTP-Kontext (z.B. `int.decisionmap.ai`): Browser blockiert `navigator.geolocation` automatisch auf nicht-sicheren Origins (HTTP) — `error.code === 1` (`PERMISSION_DENIED`), kein User-Popup. Backend-Proxy läuft automatisch als Fallback. Kein Contract-Test — `navigator.geolocation`-Mocking in Vitest ist nicht-trivial, als bekannte Lücke dokumentiert.
+
+**Dev-Limitation:** In LAN-Entwicklungsumgebungen (`int.decisionmap.ai` → LAN-IP in `X-Forwarded-For`) liefert auch der Backend-Proxy `null` — `ip-api.com` geolocated keine privaten RFC-1918-Adressen. Region-Vorauswahl via Geo-Detection ist ein **Production-only Feature**; im lokalen Dev muss die Region manuell im Dropdown gewählt werden.
+
 [↑ Inhalt](#inhalt)
 
 ---
@@ -405,6 +427,15 @@ Filterung moglich aber nicht erzwungen.
 - `edited_at` wird im UI angezeigt
 - KI-generierte Eintrage (`is_ai_generated: true`) nur vom Admin editierbar
 
+### Superuser-Edit auf approved Problems
+
+Superuser-Edits an `title` oder `description` eines bereits `approved` Problems folgen einem anderen Flow:
+
+- Status bleibt `approved` — kein Rückfall auf `needs_review`
+- Backend löst `POST /hooks/problem-reindex` als BackgroundTask aus
+- Pipeline: Re-Embedding → Re-Clustering → WebSocket-Broadcast
+- Bereits vorhandene KI-Lösung bleibt unverändert (kein neuer AI-Solution-Lauf)
+
 [↑ Inhalt](#inhalt)
 
 ---
@@ -415,8 +446,12 @@ Filterung moglich aber nicht erzwungen.
 
 - Eigenes Label "AI-generated" / Badge
 - Ranking separat von menschlichen Beitragen
-- Automatisch generiert bei `approved`-Status
-- Keine menschliche Moderation, aber als KI-Inhalt gekennzeichnet
+- **Kein Auto-Generieren:** KI erstellt keine Inhalte automatisch bei Problem-Approval — alle Solution-Inhalte kommen von Usern
+- KI-Rolle = ausschliesslich Moderation (LLM-Spam-Filter kann `approved` vergeben, identisch zum Problem-Flow)
+- `is_ai_generated: true` kennzeichnet Admin-erstellte oder historisch generierte Eintraege
+- Admin schaut nur bei Grenzfaellen rein — kein eigener Moderations-Layer fuer Solutions
+
+**Begruendung (Issue #26):** Core Value Prop ist kollektive Intelligenz echter User. Rein KI-generierte Ansaetze (auch admin-abgesegnet) verwassern das.
 
 [↑ Inhalt](#inhalt)
 
@@ -537,6 +572,17 @@ Backend antwortet mit JWT → Frontend speichert Token, leitet auf / weiter
 - Token wird synchron im `setup()`-Block geladen (`loadPersistedTokens()` vor `onMounted`) — kein Race mit ersten API-Calls
 - `restoreSession()` (API-Aufruf zur Session-Validierung) in `onMounted`
 
+### „+" Button — Login-Redirect-Flow
+
+Der `+`-Button ist immer sichtbar (Graph/Table-View), unabhängig vom Auth-Status:
+
+- **Eingeloggt:** Öffnet das Eingabeformular direkt im Panel
+- **Nicht eingeloggt:** Setzt localStorage-Flag `PENDING_OPEN_PROBLEM_FORM` + navigiert zu `/login`; auf `sm:`-Breakpoints zeigt der Button ein Lock-Icon (`opacity-70`) als subtilen Hinweis auf Login-Anforderung
+- **Nach Login:** `default.vue` prüft in `onMounted` (nach `restoreSession()`) das Flag — ist es gesetzt, wird das Formular geöffnet und das Flag gelöscht
+- **Ghost-Open Schutz:** Das Flag wird in `onMounted` von `default.vue` **immer** gelöscht — egal ob der User eingeloggt ist oder nicht. Bricht der User den Login ab und loggt sich später normal ein, öffnet sich das Formular nicht ungewollt nochmals.
+
+Der Flow funktioniert für beide Auth-Methoden: Password-Login (`/login` → `router.push('/')`) und Magic Link (`/auth/magic-verify` → `router.replace('/')`). In beiden Fällen mountet `default.vue` neu und der Flag-Check greift.
+
 ### Dev-Umgebung
 
 Mailpit als SMTP-Sink — alle Mails landen auf `http://localhost:8025`, kein echter Mailversand.
@@ -562,6 +608,18 @@ Details: [`backend.md`](backend.md)
 Filter- und Sortierlogik ist in `useModerationFilter.ts` gekapselt (nicht inline in der Komponente) — 13 Unit-Tests in `useModerationFilter.spec.ts`.
 
 i18n-Keys: `admin.searchPlaceholder`, `admin.sortNewest`, `admin.sortOldest`
+
+### Loesungsansaetze in der Queue
+
+Pending + Rejected Solutions werden als **kombinierte, nach Datum sortierte Liste** angezeigt — keine separate Sektion. Frontend laed beide via `Promise.allSettled` (resilient: ein Fehler blockiert nicht die andere Liste).
+
+Backend: `GET /solutions?status_filter=rejected` erfordert Superuser-Auth fuer alle Nicht-`approved`-Filterwerte.
+
+### duplicate_confirmed Flow
+
+Reicht ein User ein Problem trotz Duplikat-Warnung ein, erhaelt das Problem den Status `needs_review` (statt automatisch `rejected`). Der `rejection_reason="possible_duplicate"` wird in der Admin-Queue als amber Systemhinweis angezeigt (`admin.systemNote` i18n-Key).
+
+Signal-Weg: `ProblemForm.vue` → `signals: ['duplicate_confirmed']` → Backend → AI-Service `hooks.py` → `needs_review` statt `rejected`.
 
 [↑ Inhalt](#inhalt)
 

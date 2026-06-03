@@ -35,7 +35,7 @@ created_at          timestamp
 **`solution_approaches`** — Losungsansatz zu einem Problem. Markdown (eingeschrankt) erlaubt. Durchlauft denselben Moderations-Workflow wie Problems. Kann von der KI oder von Usern stammen. Enthalt ebenfalls automatische Ubersetzung ins Englische.
 ```
 id                  uuid (PK)
-content             text (required, Markdown erlaubt — nur Links und Fettschrift)  — Originalsprache
+content             text (required, Markdown erlaubt — Links, Fettschrift, h2/h3, Listen, Blockquotes)  — Originalsprache
 content_en          text (required)             — Englisch, automatisch ubersetzt, anpassbar
 content_language    string (default "en")       — ISO 639-1
 status              enum: pending | needs_review | approved | rejected
@@ -82,11 +82,11 @@ weight              float (0.0–1.0, default 1.0)
 UNIQUE (problem_id, tag_id)
 ```
 
-**`regions`** — Lookup: geografische Regionen. Probleme ohne Region gelten als global.
+**`regions`** — Lookup: geografische Regionen. Probleme ohne Region gelten als global. Migration 008 (2026-06-03) ersetzt Makro-Regionen (EU/US/APAC) durch ISO 3166-2 Subdivision-Codes; Seed: DACH Bundesländer und Kantone (AT/DE/CH).
 ```
 id                  uuid (PK)
-code                string (unique) — z.B. EU, US, APAC, GLOBAL
-name                string           — z.B. "European Union", "United States"
+code                string (unique) — ISO 3166-2 Subdivision-Code oder Land-Code: z.B. AT-9, DE-BY, CH-ZH, AT, DE, CH
+name                string           — z.B. "Wien", "Bayern", "Zürich"
 ```
 
 **`problem_region`** — Junction: Problem ↔ Region (n:m). Beeinflusst Ranking und optionale Filterung im Graph.

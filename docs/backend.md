@@ -175,8 +175,9 @@ Alle Flows werden jetzt vom FastAPI-Backend ausgeloest (keine Directus-Abhaengig
 | `solution-submitted` | ✓ Backend (BackgroundTask → `POST /hooks/solution-submitted` → AI-Service Spam-Filter) |
 | `solution-approved` | ✓ Backend Phase 5 (BackgroundTask) |
 | `vote-changed` | ✓ Backend Phase 8 (`POST /votes` → WS broadcast) |
+| `problem-reindex` | ✓ Backend (BackgroundTask → `POST /hooks/problem-reindex` → AI-Service Re-Embedding + Re-Clustering, keine neue KI-Lösung) |
 
-**Vote-Toggle-Semantik (`POST /votes`):** Gleiche Richtung → Vote wird zurückgezogen (delta = -1). Entgegengesetzte Richtung → Flip (delta = ±2). Neues Vote → delta = ±1. Backend gibt `vote_score` direkt im Response zurück — kein Re-Fetch nötig. `fakeVoting.ts` implementiert dieselbe Logik (Contract-Test in `useVoting.contract.spec.ts` verifiziert den Vertrag).
+**Vote-Toggle-Semantik (`POST /votes`):** Gleiche Richtung → Vote wird zurückgezogen (delta = -1). Entgegengesetzte Richtung → Flip (delta = ±2). Neues Vote → delta = ±1. Backend gibt `vote_score` direkt im Response zurück — kein Re-Fetch nötig. Floor: `vote_score = max(0, current_score - 1)` — kein negativer Score; Downvote auf 0 legt keinen Vote-Row an. `fakeVoting.ts` implementiert dieselbe Logik (Contract-Test in `useVoting.contract.spec.ts` verifiziert den Vertrag).
 
 **Internal API `/internal/*` (Phase 6 — Phase 7 abgeschlossen, AI-Service nutzt ausschließlich diese API):**
 
@@ -487,7 +488,7 @@ db-reset: ##D DB zurücksetzen  # Danger-Op → rot hervorgehoben
 # Workspace-Root
 make setup             # .libs/-Symlinks erstellen (einmalig, benoetigt DEV_LOCAL)
 make status            # Git-Status aller Workspace-Repos (dirty + ahead/behind Remote)
-make dev-up            # Docker-Services + overmind (Frontend + AI-Service via Procfile.dev)
+make dev-up            # Docker-Services + overmind (Frontend, AI-Service, Backend-Logs via Procfile.dev)
 make dev-down          # Docker-Services stoppen
 make env-audit         # .env vs .env.example Drift-Erkennung (alle Repos; Exit-Code 1 bei Drift)
 make lint              # → delegiert an apps/frontend/ und apps/ai-service/

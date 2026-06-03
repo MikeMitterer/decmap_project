@@ -29,8 +29,9 @@ with community validation through voting.**
 > Looking for 10–15 companies for the beta test. Interested? → [Open an issue](https://github.com/MikeMitterer/decmap_project/issues/new) or reach out directly.
 
 - Frontend: 180 tests passing
-- Backend: 14 tests passing
-- AI Service: 37 tests passing
+- Backend: 101 tests passing
+- AI Service: 124 tests passing
+- E2E: 9 tests passing (Playwright)
 - Infrastructure: Hetzner + Docker + nginx + TLS running
 - SMTP: AWS SES (domain verification complete)
 
@@ -73,7 +74,7 @@ The interesting part is happening right now. Follow progress and learnings on
 | AI Service | FastAPI (Python 3.11+) | Embeddings, clustering, spam filter, translation |
 | DB Migrations | Alembic | Python-native, rollback-capable |
 | Realtime | WebSocket (FastAPI) | Live updates in multi-user operation |
-| Testing | Vitest / pytest | Unit and contract tests |
+| Testing | Vitest / pytest / Playwright | Unit, contract and E2E tests |
 | Hosting | Hetzner + Docker + nginx | European (GDPR), Docker Compose |
 | CI/CD | Jenkins → SSH → Hetzner | Local Jenkins instance |
 
@@ -140,7 +141,7 @@ make -C infrastructure help    # Server orchestration
 ## Local Development
 
 ```bash
-make dev-up    # nginx proxy + Docker (Postgres + backend :8001) + overmind (frontend :3000 + AI service :8000)
+make dev-up    # nginx proxy + Docker (Postgres + backend :8001) + overmind (frontend :3000 + AI service :8000 + backend logs)
 make dev-down  # stop overmind + all Docker services
 ```
 
@@ -171,7 +172,7 @@ make dev-down  # stop overmind + all Docker services
 ### Similarity Detection
 - Debounced check (600ms) via pgvector cosine similarity
 - Score ≥ 0.85: hint with link to similar problem
-- Score ≥ 0.92: likely duplicate — submit requires confirmation
+- Score ≥ 0.92: likely duplicate — submit requires confirmation → routed to review queue (not auto-rejected)
 
 ### Spam Filter
 
@@ -246,7 +247,6 @@ Full specification: [`docs/data-model.md`](docs/data-model.md)
 - [ ] Clustering smoke test
 - [ ] Beta access for first companies
 - [ ] Stripe integration (SaaS pricing)
-- [ ] E2E tests with Playwright
 - [ ] Region-based filtering and ranking
 
 ---
@@ -262,6 +262,7 @@ Full specification: [`docs/data-model.md`](docs/data-model.md)
 | [`docs/moderation-criteria.md`](docs/moderation-criteria.md) | AI spam filter acceptance/rejection criteria (SSoT) |
 | [`docs/dev-environment.md`](docs/dev-environment.md) | Local development setup |
 | [`docs/cmdline.md`](docs/cmdline.md) | curl examples for all API endpoints |
+| [`docs/ui-test-data.md`](docs/ui-test-data.md) | Realistic test data (KMU/DACH context) and spam scenarios for manual UI testing |
 
 ---
 

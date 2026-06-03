@@ -506,8 +506,10 @@ describe.each([
 
 Ziel: Wenn `USE_FAKE_DATA=false` gesetzt wird, fallen keine neuen Tests noetig — die Contract-Tests greifen.
 
-**Implementiert fuer:** `useAuth`, `useProblems`, `useVoting`, `useSimilarity`, `useSolutions`, `useTags`, `useClusters`
+**Implementiert fuer:** `useAuth`, `useProblems`, `useVoting`, `useSimilarity`, `useSolutions`, `useTags`, `useClusters`, `useRegions`
 (`tests/composables/*.contract.spec.ts` — je mit `describe.each` gegen Fake und Real)
+
+Hinweis: `useRegionDetection` (Browser Geolocation API) hat noch keinen Contract-Test — `navigator.geolocation`-Mocking in Vitest ist nicht-trivial. Als bekannte Luecke dokumentiert, kein Blocker.
 
 **Vitest-Konfiguration:** `vitest.config.ts` schliesst nur `backendClient.ts` aus Coverage aus —
 der gesamte Real-Layer (auth, problems, voting, similarity, tags, solutions, clusters) wird gemessen.
@@ -549,6 +551,26 @@ Backend-API gibt Tags mit Feld `label` zurueck (nicht `name` wie in DB-Spalte). 
 
 **Konkreter Fund 7:** `useServiceStatus.ts` — URL-Detection-Logik und `fetchJson`.
 Composable unterscheidet Backend (:8001) von AI-Service (/api/health) per URL-String-Pattern. `fetchJson()` prueft `res.ok` vor dem Parsen — Mock ohne `ok: true` gibt `null` zurueck (kein Parse-Fehler). Contract-Test deckte auf: Mocks benoetigen `ok: true, status: 200`.
+
+**Konkreter Fund 8:** `default.vue` Layout — `localStorage`-Zugriff auf SSR-Routen.
+`default.vue` ist das gemeinsame Layout fuer SPA- und SSR-Routen (`/problem/**`, `/cluster/**`).
+`localStorage`-Zugriff ausserhalb von `onMounted` → `ReferenceError: localStorage is not defined` beim serverseitigen Rendering.
+Fix: `if (import.meta.client) { ... localStorage ... }` als Guard; `onMounted` ist implizit client-seitig — dort kein Guard noetig.
+Betrifft alle Nuxt-Layouts die als Wrapper fuer Hybrid-Routen (SPA + prerender) dienen.
+
+**Konkreter Fund 9:** Buttons ohne `type`-Attribut submitten als Form-Submit.
+HTML-Default fuer `<button>` ist `type="submit"`. Buttons in Layouts, Panels und Komponenten ohne explizites `type="button"` loesen versehentlich Form-Submits aus.
+Fix: Alle UI-Buttons explizit `type="button"` setzen — ausser bei echten Submit-Buttons in Formularen.
+Betroffen waren z.B. Dark-Mode-Toggle, Logout-Button, Panel-Close, Breadcrumb-Segmente.
+
+**Konkreter Fund 10:** `useVoting.contract.spec.ts` — `test_vote_flip_direction`. Contract-Test assertierte `vote_score = -1` fuer Flip-down bei Score 1 (altes Verhalten ohne Floor). Mit dem implementierten Floor (`CASE WHEN score > 0 THEN score - 1 ELSE 0`) ist der korrekte Wert `0` — kein negativer Score, kein Vote-Row bei Downvote auf 0. Race-Condition-Analyse (PostgreSQL READ COMMITTED): SQL-CASE-WHEN-Floor ist atomar und sicher. Contract-Test verhindert Silent Regression bei zukuenftigem Umbau der Vote-Logik — falsche Assertion wurde vom Reviewer gefunden, bevor der Code in `master` landete.
+
+**Konkreter Fund 11:** `useRegions.ts` — Facade + `_inflight`-Race-Condition-Fix.
+Direkter Import von `realRegions` in Komponenten verhinderte den `USE_FAKE_DATA`-Switch.
+Fix: `useRegions.ts`-Facade (`useRegionsFetch()`) als einziger Einstiegspunkt — Komponenten importieren nur die Facade.
+Zusaetzlich: `_inflight`-Promise-Cache verhindert parallele Requests wenn mehrere Komponenten gleichzeitig mounten.
+Pattern: `if (_inflight) return _inflight; _inflight = fetch(...).finally(() => { _inflight = null })`.
+Hardcodierte Gruppen-Labels (`DACH/World`) durch `t('form.regionsGroupDE/AT/CH/World')` ersetzt (i18n-Keys in `en.json`).
 
 Diese Faelle bestaetigen: Contract-Tests und Implementierungsdetails finden echte Bugs, nicht nur strukturelle Abweichungen.
 

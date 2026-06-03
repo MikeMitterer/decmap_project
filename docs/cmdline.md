@@ -9,6 +9,7 @@ Der Service muss laufen: `make dev` (lokal) oder `make docker-up` (Container).
 
 - [Voraussetzungen](#voraussetzungen)
 - [Endpunkte](#endpunkte)
+- [Backend-Endpunkte](#backend-endpunkte)
 - [API-Dokumentation (Browser)](#api-dokumentation-browser)
 
 > **Schneller Einstieg:** `apps/ai-service/scripts/smoke-test.sh` testet alle Endpunkte ohne curl-Tipparbeit.
@@ -89,6 +90,8 @@ curl -s http://localhost:8000/similarity \
 Diese Endpunkte werden vom FastAPI-Backend als BackgroundTasks aufgerufen. Für manuelle Tests
 simulieren sie den Backend-Trigger.
 
+> Realistische Testdaten (KMU-Kontext, DACH) und Spam-Szenarien: [`docs/ui-test-data.md`](ui-test-data.md)
+
 **Problem eingereicht**
 
 ```bash
@@ -139,6 +142,26 @@ curl -s http://localhost:8000/hooks/problem-approved \
 
 Antwort ist sofortig (`{"status": "processing"}`), die Pipeline läuft asynchron
 im Hintergrund: Embedding → AI-Lösung → Clustering → WebSocket-Broadcast.
+
+---
+
+**Problem neu indexieren** (Admin-Edit eines approved Problems → Re-Embedding + Re-Clustering)
+
+```bash
+curl -s http://localhost:8000/hooks/problem-reindex \
+  -H "Content-Type: application/json" \
+  -H "X-Service-Token: <dein-token>" \
+  -d '{"problem_id": "test-001"}' | jq
+```
+
+```json
+{"status": "processing"}
+```
+
+Wird vom Backend als BackgroundTask ausgelöst, wenn ein Superuser Titel oder
+Beschreibung eines bereits approved Problems editiert. Läuft asynchron:
+Re-Embedding → Re-Clustering → WebSocket-Broadcast.
+Generiert **keine** neue KI-Lösung (die bereits vorhandene bleibt).
 
 ---
 
@@ -239,14 +262,36 @@ Vote-Events kommen über den Backend-WebSocket (`useBackendRealtime`, Port 8001)
 
 ---
 
+## Backend-Endpunkte
+
+Endpunkte des FastAPI-Backends (Port 8001).
+
+### Geo-Detection
+
+Ermittelt Land + Region des Clients server-seitig via `ip-api.com` — vermeidet CORS-Restriktionen auf HTTP-Origins (`ipapi.co` hat zu strenge Rate Limits). Nutzt `X-Forwarded-For` Header (gesetzt von nginx).
+
+```bash
+curl -s http://localhost:8001/regions/geo | jq
+```
+
+```json
+{"country_code": null, "region_code": null}
+```
+
+`null` ist erwartetes Verhalten beim lokalen curl-Aufruf — Backend überspringt die Geo-Lookup für Loopback-Adressen (`127.0.0.1`, `::1`). Auch private LAN-IPs (RFC-1918: `192.168.x.x`, `10.x.x.x`) werden von `ip-api.com` nicht geolocated → ebenfalls `null`. Region-Vorauswahl via Geo-Detection ist daher ein **Production-only Feature**. Im Browser via nginx mit echter Public-IP liefert der Endpoint die Client-Region.
+
+[↑ Inhalt](#inhalt)
+
+---
+
 ## API-Dokumentation (Browser)
 
 FastAPI stellt automatisch eine interaktive OpenAPI-UI bereit:
 
 ```
-http://localhost:8000/docs       # Swagger UI — alle Endpunkte testbar
-http://localhost:8000/redoc      # ReDoc — Read-only Dokumentation
-http://localhost:8000/openapi.json  # Raw OpenAPI-Schema
+http://localhost:8000/docs       # Swagger UI — AI-Service, alle Endpunkte testbar
+http://localhost:8001/docs       # Swagger UI — Backend, alle Endpunkte testbar
+http://localhost:8000/openapi.json  # Raw OpenAPI-Schema (AI-Service)
 ```
 
 Alle Request-Body-Schemas, Validierungsregeln und Response-Typen sind dort
@@ -255,4 +300,5 @@ vollständig dokumentiert.
 ```bash
 # Alle Endpunkte als Liste
 curl -s http://localhost:8000/openapi.json | jq '.paths | keys'
+curl -s http://localhost:8001/openapi.json | jq '.paths | keys'
 ```

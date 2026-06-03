@@ -33,6 +33,9 @@ database/backups/
 # Strategie-Dokumente (privat, nicht öffentlich)
 .strategy/
 
+# Implementierungspläne (temporär, nicht öffentlich)
+docs/superpowers/
+
 # Build-Logs (generiert von .templates/docker/build.sh)
 .templates/docker/logs/
 apps/frontend/

@@ -29,8 +29,9 @@ mit Community-Validierung durch Voting.**
 > Ich suche 10–15 Unternehmen für den Beta-Test. Interesse? → [Issue öffnen](https://github.com/MikeMitterer/decmap_project/issues/new) oder direkt melden.
 
 - Frontend: 180 Tests grün
-- Backend: 14 Tests grün
-- AI-Service: 37 Tests grün
+- Backend: 101 Tests grün
+- AI-Service: 124 Tests grün
+- E2E: 9 Tests grün (Playwright)
 - Infrastruktur: Hetzner + Docker + nginx + TLS in Betrieb
 - SMTP: AWS SES (Domain-Verifizierung abgeschlossen)
 
@@ -73,7 +74,7 @@ Der interessante Teil passiert gerade jetzt. Fortschritt und Erkenntnisse gibt e
 | KI-Service | FastAPI (Python 3.11+) | Embeddings, Clustering, Spam-Filter, Übersetzung |
 | DB-Migrationen | Alembic | Python-nativ, rollbackfähig |
 | Echtzeit | WebSocket (FastAPI) | Live-Updates im Multi-User-Betrieb |
-| Testing | Vitest / pytest | Unit- und Contract-Tests |
+| Testing | Vitest / pytest / Playwright | Unit-, Contract- und E2E-Tests |
 | Hosting | Hetzner + Docker + nginx | Europäisch (DSGVO), Docker Compose |
 | CI/CD | Jenkins → SSH → Hetzner | Lokale Jenkins-Instanz |
 
@@ -150,7 +151,7 @@ make -C infrastructure help    # Server-Orchestrierung
 ## Lokale Entwicklung
 
 ```bash
-make dev-up    # nginx-Proxy + Docker (Postgres + Backend-API :8001) + overmind (Frontend :3000 + AI-Service :8000)
+make dev-up    # nginx-Proxy + Docker (Postgres + Backend-API :8001) + overmind (Frontend :3000 + AI-Service :8000 + Backend-Logs)
 make dev-down  # overmind beenden + alle Docker-Services stoppen
 ```
 
@@ -203,7 +204,7 @@ Jedes Textfeld existiert doppelt — Original + `_en`. Embeddings und Clustering
 
 - Debounced-Prüfung (600ms) via pgvector Cosine-Similarity
 - Score ≥ 0.85: Hinweis mit Link zum ähnlichen Problem
-- Score ≥ 0.92: Wahrscheinliches Duplikat — Submit erfordert Bestätigung
+- Score ≥ 0.92: Wahrscheinliches Duplikat — Submit erfordert Bestätigung → landet in Review-Queue (kein Auto-Reject)
 
 ### Spam-Filter
 
@@ -293,7 +294,6 @@ users ──< problems ──< solution_approaches
 - [ ] Clustering Smoke-Test verifizieren
 - [ ] Beta-Zugang für erste Unternehmen
 - [ ] Stripe-Integration (SaaS-Pricing)
-- [ ] E2E-Tests mit Playwright
 - [ ] Regionsbasierte Filterung und Ranking
 - [ ] DNSBL-Check aktivieren (post-Launch)
 
@@ -312,6 +312,7 @@ users ──< problems ──< solution_approaches
 | [`docs/dev-environment.md`](docs/dev-environment.md) | Lokale Entwicklungsumgebung |
 | [`docs/ses-setup.md`](docs/ses-setup.md) | AWS SES: Domain-Verifizierung → SMTP → Production Access |
 | [`docs/cmdline.md`](docs/cmdline.md) | curl-Beispiele für alle API-Endpunkte |
+| [`docs/ui-test-data.md`](docs/ui-test-data.md) | Realistische Testdaten (KMU/DACH) und Spam-Szenarien für manuelles UI-Testing |
 
 ---
 

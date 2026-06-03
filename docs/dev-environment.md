@@ -10,6 +10,7 @@
 - [Echtzeit-Updates — Grundanforderung](#echtzeit-updates-grundanforderung)
 - [AI-Service venv-Gotcha](#ai-service-venv-gotcha)
 - [Procfile.dev](#procfiledev)
+- [E2E-Tests (Playwright)](#e2e-tests-playwright)
 
 ---
 
@@ -45,7 +46,8 @@ make dev-up
     │
     └── overmind start -f Procfile.dev
             ├── frontend   → npm --prefix apps/frontend run dev    :3000
-            └── aiservice  → uvicorn main:app --reload             :8000
+            ├── aiservice  → uvicorn main:app --reload             :8000
+            └── backend    → docker logs -f decisionmap-backend-api
 ```
 
 Mailpit und Adminer laufen im Backend-Docker-Compose — Teil von `make -C apps/backend dev-up`.
@@ -309,7 +311,12 @@ python3.11 -m venv .venv
 ```
 frontend:  PORT=3000 npm --prefix apps/frontend run dev
 aiservice: bash -c 'cd apps/ai-service && .venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 --reload'
+backend:   docker logs -f decisionmap-backend-api
 ```
+
+`backend` ist ein reiner Log-Follower — er startet den Container **nicht**.
+Der Backend-Lifecycle wird weiterhin über Docker gesteuert (`make -C apps/backend dev-up`).
+`overmind restart backend` startet nur den `docker logs`-Prozess neu, nicht den Container.
 
 Alle Pfade relativ zum Workspace-Root (`DecisionMap/`). overmind muss aus dem
 Workspace-Root gestartet werden (das tut `make dev-up` automatisch).
@@ -323,3 +330,38 @@ Workspace-Root gestartet werden (das tut `make dev-up` automatisch).
 **Port 3000 (nicht 5000):** Auf macOS belegt AirPlay Receiver `0.0.0.0:5000` — Nuxt würde
 auf 5000 starten, der Port ist aber bereits belegt. `PORT=3000` explizit setzen vermeidet
 den Konflikt und stellt sicher, dass nginx via `host.docker.internal:3000` erreichbar ist.
+
+[↑ Inhalt](#inhalt)
+
+---
+
+## E2E-Tests (Playwright)
+
+E2E-Tests laufen standardmäßig gegen `http://localhost:3000` (Frontend direkt).
+Voraussetzung: `make dev-up` läuft. `E2E_BASE_URL=https://int.decisionmap.ai` nutzt den dev nginx-Proxy.
+
+```bash
+# In apps/frontend/
+cp .env.e2e.example .env.e2e.local   # E2E_USER_EMAIL + E2E_USER_PASSWORD eintragen
+npm run test:e2e                      # Alle Specs
+npm run test:e2e:ui                   # Interaktiver Modus
+```
+
+`global-setup.ts` loggt sich beim Start ein und speichert Auth-State in `.auth/user.json`
+(gitignored). Fehlen Credentials, laufen nur Smoke-Tests; `authenticated`-Tests schlagen fehl.
+
+Specs: `smoke.spec.ts` (Homepage, Table, Status-Page), `login.spec.ts`, `plus-button.spec.ts`
+(+Button Redirect-Flow inkl. PENDING_OPEN_PROBLEM_FORM), `problem-submit.spec.ts`.
+
+`data-testid`-Attribute auf Komponenten sind der Kontrakt zwischen Specs und UI:
+`add-problem-btn`, `problem-form`, `problem-submit-btn`.
+
+**Gotcha — `npm run test` laeuft NICHT fuer E2E:** Vitest (`npm run test`) laedt alle Dateien unter `tests/` — inklusive `tests/e2e/*.spec.ts`. Diese importieren `@playwright/test` und scheitern sofort mit `Playwright Test did not expect test.describe() to be called here`. Unit-Tests und E2E-Tests immer getrennt ausfuehren: `npm run test` (Vitest, 180 Tests) und `npm run test:e2e` (Playwright, 9 E2E-Specs).
+
+**Gotcha — `networkidle` haengt:** Nuxt oeffnet WebSockets fuer alle User (auch anon) in `onMounted`.
+`page.waitForLoadState('networkidle')` wartet auf Netzwerkruhe — bei offenen WS-Verbindungen tritt diese nie ein.
+Fix: `'domcontentloaded'` oder `'load'` verwenden.
+
+**Gotcha — `baseURL`-Konsistenz:** `playwright.config.ts` und `global-setup.ts` muessen denselben Default fuer
+`E2E_BASE_URL` verwenden (z.B. `http://localhost:3000`). Abweichende Defaults verursachen Cookie-Domain-Mismatch —
+Auth-State wird gespeichert, greift aber nicht, weil Spec gegen eine andere Origin laeuft.

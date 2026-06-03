@@ -103,6 +103,12 @@ und ist für Moderatoren in der Admin-Queue sichtbar.
 
 Wenn `is_spam: false`, ist `reason` ein leerer String.
 
+**System-generierte Werte (nicht vom LLM):**
+
+| Wert | Quelle | Bedeutung |
+|---|---|---|
+| `possible_duplicate` | Backend Duplicate-Detection | User hat trotz Duplikat-Warnung eingereicht (`signals: ['duplicate_confirmed']`). Status → `needs_review`. Admin-Queue zeigt amber Systemhinweis (`admin.systemNote` i18n-Key). |
+
 ### Prompt-Synchronisierung
 
 Änderungen an den Kriterien in diesem Dokument müssen synchron in `prompts.py` nachgezogen werden:
