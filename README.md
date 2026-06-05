@@ -28,7 +28,7 @@ with community validation through voting.**
 > **Pre-Beta** — The platform is technically ready but not yet publicly promoted.
 > Looking for 10–15 companies for the beta test. Interested? → [Open an issue](https://github.com/MikeMitterer/decmap_project/issues/new) or reach out directly.
 
-- Frontend: 180 tests passing
+- Frontend: 72 tests passing
 - Backend: 101 tests passing
 - AI Service: 124 tests passing
 - E2E: 9 tests passing (Playwright)
@@ -242,12 +242,13 @@ Full specification: [`docs/data-model.md`](docs/data-model.md)
 - [x] Cytoscape.js graph visualization
 - [x] Theme system (6 presets + custom)
 - [x] Hetzner infrastructure + TLS + AWS SES
+- [x] Region system: 121 DACH regions (ISO 3166-2) + geo-detection for problem submission
 
 **Up next:**
 - [ ] Clustering smoke test
 - [ ] Beta access for first companies
 - [ ] Stripe integration (SaaS pricing)
-- [ ] Region-based filtering and ranking
+- [ ] Region-based filtering and ranking in graph view
 
 ---
 

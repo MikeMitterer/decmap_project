@@ -119,7 +119,10 @@ database/seeds/          → Seed-Daten (alphabetisch, idempotent)
 **Einzelne Schritte (bei Bedarf):**
 ```bash
 make db-migrate          # Alembic upgrade head
-make db-seed             # Seed-Daten einspielen
+make db-seed             # System-Seeds einspielen (Regions + Tags)
+make db-seed-demo        # System-Seeds + Demo-Daten einspielen
+make db-reset            # down -v → up → migrate → db-seed (System-Seeds)
+make db-reset-demo       # down -v → up → migrate → db-seed-demo (+ Demo-Daten)
 make api-dev             # FastAPI-Dev-Server (Port 8001, --reload)
 ```
 
@@ -497,9 +500,11 @@ make test              # → delegiert an apps/frontend/ und apps/ai-service/
 # Backend (aus apps/backend/ oder via make -C apps/backend ...)
 make up / down / logs                                 # Alle Services
 make dev-up / dev-down / dev-logs                     # Dev-Umgebung (Postgres + Backend-API + Mailpit)
-make db-reset                                         # DB zurücksetzen (down -v → up → migrate → seed)
+make db-reset                                         # DB zurücksetzen + System-Seeds (nur lokal!)
+make db-reset-demo                                    # DB zurücksetzen + System-Seeds + Demo-Daten
 make db-migrate / db-rollback / db-migrate-status     # Alembic-Migrationen
-make db-seed                                          # ↳ Seed-Daten einspielen
+make db-seed                                          # ↳ System-Seeds einspielen (Regions + Tags)
+make db-seed-demo                                     # ↳ System-Seeds + Demo-Daten einspielen
 make backup / backup-schema / backup-restore          # Backup
 make build / deploy                                   # Build & Deploy
 make precheck / version / tags                        # Versioning
@@ -615,18 +620,22 @@ chore/<kurze-beschreibung>
 
 ```
 database/seeds/
-├── 001_regions.sql      ← EU, US, APAC, GLOBAL
-├── 002_tags.sql         ← governance, open-source, ...
-└── 003_problems.sql     ← 40–50 Seed-Probleme mit Embeddings
+├── 001_regions.sql          ← 121 DACH Regions (ISO 3166-2), deterministisches uuid5
+├── 002_tags.sql             ← System Tags (L0–L9)
+└── demo/
+    ├── 000_tags_user.sql    ← User Tags (L10)
+    ├── 001_problems.sql     ← Demo-Probleme
+    ├── 002_solutions.sql    ← Demo-Lösungsansätze
+    ├── 003_problem_tags.sql ← Tag-Verknüpfungen
+    └── 004_problem_regions.sql ← Regions-Verknüpfungen
 ```
 
 ```bash
-make db-seed             # alle importieren
-make db-seed FILE=003    # einzelnes File
-make db-reset            # DB zurucksetzen + Migrationen + Seed (nur lokal!)
+make db-seed             # System-Seeds einspielen (Regions + Tags)
+make db-seed-demo        # System-Seeds + Demo-Daten einspielen
+make db-reset            # DB zurücksetzen + Migrationen + System-Seeds (nur lokal!)
+make db-reset-demo       # DB zurücksetzen + Migrationen + System-Seeds + Demo-Daten
 ```
-
-Dieselben Files in `docker-compose.test.yml` — kein separater Test-Datensatz.
 
 [↑ Inhalt](#inhalt)
 

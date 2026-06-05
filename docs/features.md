@@ -142,9 +142,14 @@ Request kommt rein
 
 ```nginx
 limit_req_zone $binary_remote_addr zone=submissions:10m rate=5r/m;
+limit_req_zone $binary_remote_addr zone=translate:10m   rate=5r/m;
 
 location /api/problems {
     limit_req zone=submissions burst=3 nodelay;
+}
+
+location /api/translate {
+    limit_req zone=translate burst=2 nodelay;
 }
 ```
 
@@ -249,14 +254,16 @@ Sofort-Feedback für den votenden User: `ProblemPanel.vue` aktualisiert den Scor
 
 ```typescript
 type WebSocketEvent =
-  | { type: 'problem.approved';  payload: { id: string } }
-  | { type: 'problem.rejected';  payload: { id: string } }
-  | { type: 'problem.deleted';   payload: { id: string } }
-  | { type: 'solution.approved'; payload: { id: string; problemId: string } }
-  | { type: 'solution.deleted';  payload: { id: string; problemId: string } }
+  | { type: 'problem.approved';     payload: { id: string; clusterId?: string | null } }
+  | { type: 'problem.rejected';     payload: { id: string } }
+  | { type: 'problem.deleted';      payload: { id: string } }
+  | { type: 'clustering.started';   payload: { triggeredBy: string } }
+  | { type: 'clustering.completed'; payload: { triggeredBy: string; clustersUpdated: number; assignedCount: number } }
+  | { type: 'solution.approved';    payload: { id: string; problemId: string } }
+  | { type: 'solution.deleted';     payload: { id: string; problemId: string } }
 ```
 
-*`cluster.updated` und `clusterId` in `problem.approved` entfernt — `clusters`-Tabelle gedroppt (Migration 005, 2026-05-22). Clustering-Output landet direkt in `problem_tag` (L1–L9 Tags).*
+*`cluster.updated` entfernt — `clusters`-Tabelle gedroppt (Migration 005, 2026-05-22). `clustering.started`/`clustering.completed` ersetzen es: Frontend (`useClusteringStatus`) zeigt Spinner während Clustering läuft und re-fetcht Problems+Tags nach Completion. `clusterId` in `problem.approved` ist optional — Clustering-Output landet in `problem_tag` (L1–L9 Tags), nicht im Event-Payload.*
 
 Events auf Entity-Ebene — Frontend entscheidet ob Re-fetch oder direktes State-Update.
 
@@ -382,7 +389,7 @@ Aktive Ubersetzung beim Einreichen — nicht passiv via DeepL-Link:
 Im Fake-Modus: 700ms simulierter Delay.
 Im Real-Modus: KI-Service (TranslationService via konfiguriertem LLM-Provider — OpenAI `gpt-4o-mini` oder Anthropic `claude-haiku-4-5`, je nach `llm_provider` in `.env`).
 
-`_en`-Felder sind nur sichtbar wenn Nicht-Englisch erkannt oder Uebersetzung abgeschlossen — kein visueller Overhead fuer englischsprachige User.
+**`EnglishTranslationSection.vue` — Collapsible UX:** EN-Felder erscheinen als Collapsible-Sektion sobald Nicht-Englisch erkannt wird. Header-Zeile zeigt Chevron-Icon + Titel-Preview im kollabierten Zustand. Auto-Expand nach Uebersetzung: zwei Trigger — `watch(showFields, { immediate: true })` (auch beim Mount wenn showFields bereits true) und `watch(isTranslating)` (Re-Translation wenn Section kollabiert war — showFields aendert sich nicht, der isTranslating-Uebergang true→false triggert Expand). Translate-Button und Info-Button bleiben immer in der Header-Zeile sichtbar — Info-Button nutzt `.stop` um den Collapse-Toggle nicht auszuloesen. Kein visueller Overhead fuer englischsprachige User.
 
 **originalTranslations:** Backend speichert den originalen (nicht-englischen) Text in `original_translations` — fuer Admins sichtbar. Translation-Cache-Key basiert auf `sha256` des jeweiligen Feld-Inhalts (Titel/Beschreibung separat, nicht pauschal `sha256(title)`).
 
@@ -395,12 +402,12 @@ Im Real-Modus: KI-Service (TranslationService via konfiguriertem LLM-Provider �
 Zwei getrennte Konzepte:
 
 - **Tags** (`tags` + `tag`) — inhaltliche Kategorisierung: "governance", "open-source", "shadow-ai"
-- **Regionen** (`regions` + `region`) — geografische Einschrankung: EU, US, APAC, GLOBAL
+- **Regionen** (`regions` + `region`) — geografische Einschrankung: 121 DACH-Regionen nach ISO 3166-2 (AT, CH, DE + Bundeslaender/Kantone/Bundeslaender)
 
 Ein Problem kann mehrere Tags und mehrere Regionen haben.
 Probleme ohne Region gelten als global relevant.
 
-Regionen beeinflussen das Ranking (EU-Probleme hoher fur EU-User).
+Regionen beeinflussen das Ranking (lokale Regionen priorisiert fur regionalen User).
 Filterung moglich aber nicht erzwungen.
 
 **useRegions-Facade:** Komponenten importieren ausschliesslich `useRegions.ts` (`useRegionsFetch()`) — kein Direktimport von `realRegions`. Facade-Pattern ermoeglicht den `USE_FAKE_DATA`-Switch ohne Komponenten-Aenderungen. `_inflight`-Promise-Cache verhindert doppelte Requests wenn mehrere Komponenten gleichzeitig mounten.

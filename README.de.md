@@ -28,7 +28,7 @@ mit Community-Validierung durch Voting.**
 > **Pre-Beta** — Die Plattform ist technisch fertig, wird aber noch nicht öffentlich beworben.
 > Ich suche 10–15 Unternehmen für den Beta-Test. Interesse? → [Issue öffnen](https://github.com/MikeMitterer/decmap_project/issues/new) oder direkt melden.
 
-- Frontend: 180 Tests grün
+- Frontend: 72 Tests grün
 - Backend: 101 Tests grün
 - AI-Service: 124 Tests grün
 - E2E: 9 Tests grün (Playwright)
@@ -289,12 +289,13 @@ users ──< problems ──< solution_approaches
 - [x] Cytoscape.js Graph-Visualisierung
 - [x] Theme-System (6 Presets + Custom)
 - [x] Hetzner-Infrastruktur + TLS + AWS SES
+- [x] Regions-System: 121 DACH-Regionen (ISO 3166-2) + Geo-Detection für Problemeingabe
 
 **Nächste Schritte:**
 - [ ] Clustering Smoke-Test verifizieren
 - [ ] Beta-Zugang für erste Unternehmen
 - [ ] Stripe-Integration (SaaS-Pricing)
-- [ ] Regionsbasierte Filterung und Ranking
+- [ ] Regionsbasierte Filterung und Ranking im Graph-View
 - [ ] DNSBL-Check aktivieren (post-Launch)
 
 ---
