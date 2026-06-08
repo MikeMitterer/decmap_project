@@ -28,9 +28,9 @@ with community validation through voting.**
 > **Pre-Beta** — The platform is technically ready but not yet publicly promoted.
 > Looking for 10–15 companies for the beta test. Interested? → [Open an issue](https://github.com/MikeMitterer/decmap_project/issues/new) or reach out directly.
 
-- Frontend: 72 tests passing
-- Backend: 101 tests passing
-- AI Service: 124 tests passing
+- Frontend: 82 tests passing
+- Backend: 107 tests passing
+- AI Service: 114 tests passing
 - E2E: 9 tests passing (Playwright)
 - Infrastructure: Hetzner + Docker + nginx + TLS running
 - SMTP: AWS SES (domain verification complete)
@@ -243,6 +243,8 @@ Full specification: [`docs/data-model.md`](docs/data-model.md)
 - [x] Theme system (6 presets + custom)
 - [x] Hetzner infrastructure + TLS + AWS SES
 - [x] Region system: 121 DACH regions (ISO 3166-2) + geo-detection for problem submission
+- [x] AI Draft for solution approaches (user-triggered, no auto-generate)
+- [x] Solution Form: translation collapsible for solution content field
 
 **Up next:**
 - [ ] Clustering smoke test

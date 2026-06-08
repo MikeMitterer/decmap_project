@@ -223,7 +223,7 @@ CRUD uber REST. Ruckmeldungen an das UI uber zwei WebSocket-Quellen.
 | Composable | WebSocket | Verantwortlich für |
 |---|---|---|
 | `useBackendRealtime.ts` | Backend `/ws` (Port 8001) | Mutations: Vote-Scores, Problem/Solution CRUD |
-| `useRealtimeUpdates.ts` | AI-Service `/ws` | AI-Events: `problem.approved`, `solution.generated` |
+| `useRealtimeUpdates.ts` | AI-Service `/ws` | AI-Events: `problem.approved`, `clustering.started`, `clustering.completed` |
 
 Vote-Score-Updates laufen **nicht** über den AI-Service — Basis-Funktionalität darf
 nicht vom AI-Service abhängen.
@@ -370,6 +370,10 @@ Links offnen immer in `target="_blank"` mit `rel="noopener noreferrer"` — per 
 
 Styling: Tailwind-Variant-Selektoren (`.solution-content h2`, `.solution-content ul` etc.) statt `@tailwindcss/typography` `prose`-Klasse.
 
+**`renderSolutionMarkdown`** ist die gemeinsame Render-Funktion: `SolutionDetail.vue` (Anzeige), `SolutionForm.vue` (Preview-Tab) und die Admin-Moderations-Queue nutzen alle dieselbe Funktion — garantiert konsistentes Rendering.
+
+**SolutionForm Markdown-Preview:** Zwei Tabs „Schreiben | Vorschau" ueber dem Textarea. Vorschau-Tab disabled wenn Feld leer.
+
 [↑ Inhalt](#inhalt)
 
 ---
@@ -389,9 +393,15 @@ Aktive Ubersetzung beim Einreichen — nicht passiv via DeepL-Link:
 Im Fake-Modus: 700ms simulierter Delay.
 Im Real-Modus: KI-Service (TranslationService via konfiguriertem LLM-Provider — OpenAI `gpt-4o-mini` oder Anthropic `claude-haiku-4-5`, je nach `llm_provider` in `.env`).
 
-**`EnglishTranslationSection.vue` — Collapsible UX:** EN-Felder erscheinen als Collapsible-Sektion sobald Nicht-Englisch erkannt wird. Header-Zeile zeigt Chevron-Icon + Titel-Preview im kollabierten Zustand. Auto-Expand nach Uebersetzung: zwei Trigger — `watch(showFields, { immediate: true })` (auch beim Mount wenn showFields bereits true) und `watch(isTranslating)` (Re-Translation wenn Section kollabiert war — showFields aendert sich nicht, der isTranslating-Uebergang true→false triggert Expand). Translate-Button und Info-Button bleiben immer in der Header-Zeile sichtbar — Info-Button nutzt `.stop` um den Collapse-Toggle nicht auszuloesen. Kein visueller Overhead fuer englischsprachige User.
+**`EnglishTranslationSection.vue` — Collapsible UX (Problem Form):** EN-Felder erscheinen als Collapsible-Sektion sobald Nicht-Englisch erkannt wird. Header-Zeile zeigt Chevron-Icon + Titel-Preview im kollabierten Zustand. Auto-Expand nach Uebersetzung: zwei Trigger — `watch(showFields, { immediate: true })` (auch beim Mount wenn showFields bereits true) und `watch(isTranslating)` (Re-Translation wenn Section kollabiert war — showFields aendert sich nicht, der isTranslating-Uebergang true→false triggert Expand). Translate-Button und Info-Button bleiben immer in der Header-Zeile sichtbar — Info-Button nutzt `.stop` um den Collapse-Toggle nicht auszuloesen. Kein visueller Overhead fuer englischsprachige User. **`startCollapsed`-Prop:** Wenn `true`, bleibt die Sektion beim `showFields false→true`-Übergang initial eingeklappt — der Caller kontrolliert den Startzustand (z.B. Edit-Modus mit bestehender Übersetzung). 4 Tests in `EnglishTranslationSection.spec.ts` sichern dieses Verhalten ab.
+
+**`ProblemForm.vue` — Textarea Auto-Resize:** Das Beschreibungsfeld wächst beim Tippen automatisch mit dem Inhalt (`@input="autoResize"`). Kein fixer `rows`-Wert — Höhe wird per JavaScript gesetzt.
+
+**`SolutionForm.vue` — Translation Collapsible (inline):** Solutions haben nur ein Content-Feld (kein Titel); `EnglishTranslationSection` ist fuer Titel+Beschreibungs-Paare gebaut. SolutionForm implementiert das Collapsible direkt inline — gleiche visuelle Optik (Chevron, Card-Style, Colour-Tint), gleiche UX (Auto-Expand nach Uebersetzung). Kein `mode`-Flag an `EnglishTranslationSection` — vermeidet unnoetige Komplexi­taet. Spec: [`docs/specs/2026-06-07-solution-form-design.md`](specs/2026-06-07-solution-form-design.md)
 
 **originalTranslations:** Backend speichert den originalen (nicht-englischen) Text in `original_translations` — fuer Admins sichtbar. Translation-Cache-Key basiert auf `sha256` des jeweiligen Feld-Inhalts (Titel/Beschreibung separat, nicht pauschal `sha256(title)`).
+
+**`translateForDisplay` — Display-seitige Lokalisierung:** `useTranslation` bietet `translateForDisplay(content, lang)` fuer read-only UI-Stellen. `SolutionList.vue` nutzt dies um Headlines in der Liste zu lokalisieren: `watch([locale, solutions])` → `translateForDisplay` fuer alle Solutions → `localizedHeadlines`-Map. Bei `lang === 'en'` wird die Map geleert (EN-Content ist Original). Lokale `_displayCache` verhindert redundante API-Calls.
 
 [↑ Inhalt](#inhalt)
 
@@ -434,6 +444,37 @@ HTTP-Kontext (z.B. `int.decisionmap.ai`): Browser blockiert `navigator.geolocati
 - `edited_at` wird im UI angezeigt
 - KI-generierte Eintrage (`is_ai_generated: true`) nur vom Admin editierbar
 
+### Edit-Lokalisierung (ProblemPanel)
+
+Beim Öffnen des Edit-Modus lädt `ProblemPanel.vue` lokalisierte Inhalte in die Edit-Felder:
+
+- **Locale = DE:** `loadLocalizedEditFields()` ruft `translateForDisplay` aus dem Translation-Cache ab — User sieht und bearbeitet seinen deutschen Text. `editTitleEn`/`editDescriptionEn` werden mit dem gespeicherten EN Canonical-Text befüllt.
+- **Locale = EN:** Kein Cache-Lookup — englischer Canonical-Text aus `props.problem` (bisheriges Verhalten)
+- **Snapshot** wird auf denselben lokalisierten Wert gesetzt → `isDirty` startet als `false`
+- **Textarea Auto-Resize:** `watch(editDescriptionOrig)` feuert wenn `loadLocalizedEditFields` den lokalisierten Text setzt — Textarea expandiert sofort beim Öffnen des Edit-Modus. `@input="autoResize"` hält die Höhe beim Tippen aktuell.
+
+**EN-Felder Sichtbarkeit im Edit-Modus:**
+- EN-Sektion startet **eingeklappt** — auch wenn `editTitleEn` bereits einen Wert hat. Header zeigt den ersten Satz der vorhandenen Übersetzung als Indikator. Klick auf Header expandiert zur vollen Bearbeitungs-Textarea.
+- `hasExistingEnTranslation`-Ref bleibt `true` solange ein nicht-englisches Problem bearbeitet wird — unabhängig davon ob `watch(title)` `editTitleEn` löscht
+- Ändert der User den deutschen Text: `watch(title)` löscht `editTitleEn` → EN-Felder bleiben sichtbar (aber geleert) → Übersetzen-Button weiterhin zugänglich
+- Neue Übersetzung (Übersetzen-Button): Section expandiert nach Fertigstellung (Auto-Expand)
+
+**`handleSave`:**
+- **`isDirty` Guard:** Keine Änderung → API-Call wird übersprungen. Speichern-Button visuell deaktiviert (`disabled:opacity-60`) solange `isDirty=false`
+- **Auto-Translate:** Editiert der User auf Deutsch ohne manuell zu übersetzen, übersetzt das System automatisch vor dem Speichern — gleicher Flow wie beim Einreichungs-Formular; Backend speichert korrekten englischen Canonical-Text
+
+### Edit-Lokalisierung (SolutionDetail)
+
+`SolutionDetail.vue` — Owner und Superuser sehen einen `✎ Bearbeiten` Button. Edit-Verhalten analog zu `ProblemPanel`:
+
+- **Content-Feld:** User sieht und bearbeitet Inhalt in seiner eingestellten Sprache (DE: Translation-Cache via `translateForDisplay`)
+- **Textarea Auto-Resize:** `autoResize()` wird in `nextTick` nach `enterEditMode` ausgeführt — Textarea expandiert sofort auf den vollen Inhalt. `watch(editContent)` + `@input="autoResize"` halten die Höhe live aktuell.
+- **EN-Sektion:** Startet **eingeklappt** via `startCollapsed`-Prop — zeigt ersten Satz der vorhandenen Übersetzung als Indikator; `hasExistingEnTranslation` bleibt `true` solange das Feld nicht leer ist
+- Ändert der User den Inhalt: EN-Feld leert sich → Übersetzen-Button erscheint → EN-Felder bleiben sichtbar (aber geleert)
+- **`handleSave`:** `isDirty` Guard + Auto-Translate falls kein EN-Text vorhanden — gleicher Flow wie beim Problem-Edit. Speichern-Button deaktiviert (`disabled:opacity-60`) wenn `editContent.length < 20` oder `isSaving=true`
+- **Status:** Owner-Edit wechselt zurück auf `needs_review` (Standard-Flow)
+- DeepL-Link entfernt — built-in Translation ersetzt ihn vollständig
+
 ### Superuser-Edit auf approved Problems
 
 Superuser-Edits an `title` oder `description` eines bereits `approved` Problems folgen einem anderen Flow:
@@ -441,7 +482,6 @@ Superuser-Edits an `title` oder `description` eines bereits `approved` Problems 
 - Status bleibt `approved` — kein Rückfall auf `needs_review`
 - Backend löst `POST /hooks/problem-reindex` als BackgroundTask aus
 - Pipeline: Re-Embedding → Re-Clustering → WebSocket-Broadcast
-- Bereits vorhandene KI-Lösung bleibt unverändert (kein neuer AI-Solution-Lauf)
 
 [↑ Inhalt](#inhalt)
 
@@ -459,6 +499,24 @@ Superuser-Edits an `title` oder `description` eines bereits `approved` Problems 
 - Admin schaut nur bei Grenzfaellen rein — kein eigener Moderations-Layer fuer Solutions
 
 **Begruendung (Issue #26):** Core Value Prop ist kollektive Intelligenz echter User. Rein KI-generierte Ansaetze (auch admin-abgesegnet) verwassern das.
+
+### KI-Entwurf (User-Triggered Draft)
+
+User kann per Button einen KI-generierten Entwurf anfordern — kein Auto-Generieren, User entscheidet und bearbeitet:
+
+```
+User klickt "✦ AI Draft"
+  → POST /api/generate-solution { problem_id, lang? }   (AI-Service, kein SERVICE_TOKEN)
+  → Draft-Text erscheint in Textarea (auto-grow)
+  → User bearbeitet → Uebersetzung → Submit
+```
+
+- **`useAiDraft(problemId)`** — neues Composable: `{ draft, loading, error, generate }`; übergibt `locale.value` als `lang`-Parameter → AI-Service generiert Draft in Benutzersprache
+- Draft wird nur zurueckgegeben — kein Storage, kein `is_ai_generated`-Flag (User submitted separat via `POST /solutions`)
+- Draft wird auf 2000 Zeichen gekuerzt (`.slice(0, 2000)`) — entspricht dem `maxlength` des Content-Feldes
+- nginx Rate Limit: 5r/min per IP, Burst=1 (enger als `/translate` wegen LLM-Kosten)
+- `USE_FAKE_DATA=true`: Hardcoded Markdown-String nach 800ms Delay
+- Spec: [`docs/specs/2026-06-07-solution-form-design.md`](specs/2026-06-07-solution-form-design.md)
 
 [↑ Inhalt](#inhalt)
 
@@ -621,6 +679,8 @@ i18n-Keys: `admin.searchPlaceholder`, `admin.sortNewest`, `admin.sortOldest`
 Pending + Rejected Solutions werden als **kombinierte, nach Datum sortierte Liste** angezeigt — keine separate Sektion. Frontend laed beide via `Promise.allSettled` (resilient: ein Fehler blockiert nicht die andere Liste).
 
 Backend: `GET /solutions?status_filter=rejected` erfordert Superuser-Auth fuer alle Nicht-`approved`-Filterwerte.
+
+**Admin-Edit Solutions:** Superuser kann Solution-Inhalte direkt aus der Moderations-Queue heraus bearbeiten — `PATCH /solutions/:id` (Backend). UI: Edit-Formular inline in der Queue-Ansicht, Markdown-Preview-Tab inklusive. Kein Status-Reset — Status bleibt unveraendert (z.B. `needs_review` bleibt `needs_review`). `SolutionUpdate.content`: `Field(min_length=20, max_length=2000)` — gleiche Constraints wie das Submit-Formular.
 
 ### duplicate_confirmed Flow
 

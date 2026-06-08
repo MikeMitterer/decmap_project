@@ -239,6 +239,32 @@ curl -s -X POST http://localhost:8000/clustering/run | jq
 
 ---
 
+### KI-Entwurf generieren
+
+Generiert einen Markdown-Draft für einen Lösungsansatz. User-triggered, kein Auto-Generieren.
+Kein Auth erforderlich (wie Similarity-Check). nginx Rate Limit: 5r/min per IP, Burst=1.
+
+```bash
+# Auth-Token aus dem Browser-DevTools kopieren (Network → /api/generate-solution)
+AUTH_TOKEN="<jwt-token>"
+
+curl -s -X POST http://localhost:8000/generate-solution \
+  -H "Content-Type: application/json" \
+  -d '{"problem_id": "test-001", "lang": "de"}' | jq
+```
+
+```json
+{
+  "draft": "## Lösungsansatz\n\n**Empfehlung:**...",
+  "truncated": false
+}
+```
+
+Draft wird auf 2000 Zeichen gekürzt (`truncated: true` wenn abgeschnitten).
+Via nginx: `POST /api/generate-solution` (Port 80/443).
+
+---
+
 ### WebSocket
 
 Empfängt Live-Events die der AI-Service nach jeder Hook-Verarbeitung sendet.
@@ -253,7 +279,8 @@ Eingehende Events:
 
 ```json
 {"type": "problem.approved", "payload": {"id": "test-001"}}
-{"type": "solution.generated", "payload": {"problem_id": "test-001", "solution_id": "sol-..."}}
+{"type": "clustering.started", "payload": {}}
+{"type": "clustering.completed", "payload": {"clusters_updated": 5}}
 ```
 
 Vote-Events kommen über den Backend-WebSocket (`useBackendRealtime`, Port 8001) — nicht über den AI-Service-WS.
@@ -279,6 +306,23 @@ curl -s http://localhost:8001/regions/geo | jq
 ```
 
 `null` ist erwartetes Verhalten beim lokalen curl-Aufruf — Backend überspringt die Geo-Lookup für Loopback-Adressen (`127.0.0.1`, `::1`). Auch private LAN-IPs (RFC-1918: `192.168.x.x`, `10.x.x.x`) werden von `ip-api.com` nicht geolocated → ebenfalls `null`. Region-Vorauswahl via Geo-Detection ist daher ein **Production-only Feature**. Im Browser via nginx mit echter Public-IP liefert der Endpoint die Client-Region.
+
+---
+
+### Solution bearbeiten (Owner + Superuser)
+
+`PATCH /solutions/:id` — erlaubt Inhalt-Edit für den Owner (→ `needs_review`) oder Superuser (Status bleibt unverändert).
+
+```bash
+AUTH_TOKEN="<jwt-token>"
+
+curl -s -X PATCH http://localhost:8001/solutions/<uuid> \
+  -H "Authorization: Bearer $AUTH_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Überarbeiteter Inhalt — mindestens 20 Zeichen."}' | jq
+```
+
+Constraints: `content` min 20, max 2000 Zeichen. Fehlende oder zu kurze Inhalte → `422 Unprocessable Entity`.
 
 [↑ Inhalt](#inhalt)
 

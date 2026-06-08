@@ -28,9 +28,9 @@ mit Community-Validierung durch Voting.**
 > **Pre-Beta** — Die Plattform ist technisch fertig, wird aber noch nicht öffentlich beworben.
 > Ich suche 10–15 Unternehmen für den Beta-Test. Interesse? → [Issue öffnen](https://github.com/MikeMitterer/decmap_project/issues/new) oder direkt melden.
 
-- Frontend: 72 Tests grün
-- Backend: 101 Tests grün
-- AI-Service: 124 Tests grün
+- Frontend: 82 Tests grün
+- Backend: 107 Tests grün
+- AI-Service: 114 Tests grün
 - E2E: 9 Tests grün (Playwright)
 - Infrastruktur: Hetzner + Docker + nginx + TLS in Betrieb
 - SMTP: AWS SES (Domain-Verifizierung abgeschlossen)
@@ -290,6 +290,8 @@ users ──< problems ──< solution_approaches
 - [x] Theme-System (6 Presets + Custom)
 - [x] Hetzner-Infrastruktur + TLS + AWS SES
 - [x] Regions-System: 121 DACH-Regionen (ISO 3166-2) + Geo-Detection für Problemeingabe
+- [x] KI-Entwurf für Lösungsansätze (User-triggered, kein Auto-Generieren)
+- [x] Solution Form: Translation-Collapsible für Inhaltsfeld
 
 **Nächste Schritte:**
 - [ ] Clustering Smoke-Test verifizieren
