@@ -245,6 +245,8 @@ Full specification: [`docs/data-model.md`](docs/data-model.md)
 - [x] Region system: 121 DACH regions (ISO 3166-2) + geo-detection for problem submission
 - [x] AI Draft for solution approaches (user-triggered, no auto-generate)
 - [x] Solution Form: translation collapsible for solution content field
+- [x] Solution editing for owners (PATCH /solutions/:id, localized fields, auto-resize)
+- [x] Problem editing in user locale (edit fields via translateForDisplay, auto-resize)
 
 **Up next:**
 - [ ] Clustering smoke test

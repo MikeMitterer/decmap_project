@@ -292,6 +292,8 @@ users ──< problems ──< solution_approaches
 - [x] Regions-System: 121 DACH-Regionen (ISO 3166-2) + Geo-Detection für Problemeingabe
 - [x] KI-Entwurf für Lösungsansätze (User-triggered, kein Auto-Generieren)
 - [x] Solution Form: Translation-Collapsible für Inhaltsfeld
+- [x] Lösungsansätze editieren für Owner (PATCH /solutions/:id, lokalisierte Edit-Felder, Auto-Resize)
+- [x] Problem-Editierung in User-Sprache (Edit-Felder via translateForDisplay, Auto-Resize)
 
 **Nächste Schritte:**
 - [ ] Clustering Smoke-Test verifizieren
