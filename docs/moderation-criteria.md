@@ -56,7 +56,20 @@ Prompt: `SOLUTION_SPAM_SYSTEM` in `app/providers/llm/prompts.py`
 Kein signals/honeypot-Layer — Lösungsansätze werden direkt per LLM evaluiert
 (kein Browser-seitiges Bot-Detection, da der Einreichungsflow nach Login erfolgt).
 
-### Ablehnen (`is_spam: true`)
+**Die KI ist das Moderations-Gate** (keine menschliche Freigabe für saubere Lösungen):
+
+| LLM-Verdikt | Status | `rejection_reason` |
+|---|---|---|
+| `is_spam: false` (sauber) **und** kein Duplikat | `approved` (auto, sofort sichtbar) | — |
+| `is_spam: true` (bemängelt) | `needs_review` (Admin-Queue) | LLM-Grund (z. B. `promotional_content`) |
+| Globales Duplikat (pgvector) ohne `duplicate_confirmed` | `needs_review` | `possible_duplicate` |
+| LLM-Fehler (Provider down) | `needs_review` | `moderation_error` |
+
+Nichts wird **automatisch hart abgelehnt** — bemängelte Lösungen landen mit Begründung in der
+Admin-Queue, der Admin entscheidet final. Pipeline: `solution-submitted`-Hook → LLM-Spam-Filter →
+(falls sauber) globaler Duplicate-Check über alle approved Solutions → Approval + Embedding speichern.
+
+### Bemängeln (`is_spam: true` → `needs_review`)
 
 | Kriterium | Beispiele |
 |---|---|
@@ -64,18 +77,8 @@ Kein signals/honeypot-Layer — Lösungsansätze werden direkt per LLM evaluiert
 | Werbung für Produkte oder Dienstleistungen | „Nutzen Sie Tool XY — jetzt 20% Rabatt" |
 | Kein Bezug zum verlinkten Problem | Vollständig anderes Thema, Off-Topic |
 | Meinungsäußerung ohne Handlungsansatz | „KI ist gefährlich", „Das wird nie funktionieren" |
-| Eindeutiges Duplikat der KI-generierten Lösung | Wortgleiche oder nahezu identische Übernahme |
 
-### Grenzfälle (`is_spam: false`, Status → `pending`)
-
-Der LLM-Check für Lösungsansätze liefert nur `is_spam: true/false` — keine `needs_review`-Stufe.
-Grenzfälle landen als `pending` in der Admin-Queue:
-
-- Sehr kurze Antworten (< 30 Wörter) mit potenziell sinnvollem Kern
-- Grenzfall zwischen persönlicher Meinung und konkretem Lösungsvorschlag
-- Lösung thematisch passend aber ohne nachvollziehbaren Handlungsschritt
-
-### Akzeptieren (`is_spam: false`, Status → `pending` → Admin-Freigabe)
+### Akzeptieren (`is_spam: false`, kein Duplikat → Status `approved`)
 
 Zielgruppe: IT-Entscheider, CDOs, KI-Projektverantwortliche in KMU.
 
@@ -101,13 +104,15 @@ Wenn `is_spam: true`, muss `reason` einen konkreten, menschenlesbaren Ablehnungs
 auf Englisch enthalten (max. 100 Zeichen). Dieser wird als `rejection_reason` in der DB gespeichert
 und ist für Moderatoren in der Admin-Queue sichtbar.
 
-Wenn `is_spam: false`, ist `reason` ein leerer String.
+Wenn `is_spam: false`, ist `reason` leer — außer ein System-Wert (z. B. `possible_duplicate`) greift.
 
 **System-generierte Werte (nicht vom LLM):**
 
 | Wert | Quelle | Bedeutung |
 |---|---|---|
-| `possible_duplicate` | Backend Duplicate-Detection | User hat trotz Duplikat-Warnung eingereicht (`signals: ['duplicate_confirmed']`). Status → `needs_review`. Admin-Queue zeigt amber Systemhinweis (`admin.systemNote` i18n-Key). |
+| `possible_duplicate` (Problem) | Backend Duplicate-Detection | User hat trotz Duplikat-Warnung eingereicht (`signals: ['duplicate_confirmed']`). Status → `needs_review`. Admin-Queue zeigt amber Systemhinweis (`admin.systemNote` i18n-Key). |
+| `possible_duplicate` (Solution) | AI-Service globaler pgvector-Check im `solution-submitted`-Hook | Spam-saubere Lösung gleicht einer bestehenden approved Solution (Score > `duplicate_threshold`) **ohne** `duplicate_confirmed`-Signal → Status `needs_review`. Mit `duplicate_confirmed` (authentifizierter User bestätigt „ist anders") → `approved`. |
+| `moderation_error` (Solution) | LLM-Provider-Fehler im Spam-Filter | Spam-Check konnte nicht laufen → fail-safe `needs_review` statt Auto-Approve/Reject. |
 
 ### Prompt-Synchronisierung
 
