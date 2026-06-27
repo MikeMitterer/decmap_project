@@ -54,7 +54,7 @@ Die Backend-**Unit-Tests** laufen aktuell gegen eine In-Memory-**SQLite**-DB (`t
 
 ### 5. Auth-Fixtures (SQLite-Hacks raus)
 - Die `current_active_user`/`current_optional_user`-Overrides bleiben als Mechanismus.
-- **Aber:** ein **echter** Test-User-Row (id = `_TEST_USER_ID`) wird in die DB geseedet, damit authored Ressourcen gültige FKs haben (auf Postgres mit erzwungenen FKs nötig; vorher via `user_id=None` umgangen). Damit testen wir den realen authored-Pfad statt eines anonymen Sonderfalls.
+- **Aber:** ein **echter** Test-User-Row (id = `_TEST_USER_ID`) wird **als Teil der Session-Baseline** (nach den System-Seeds, committet) angelegt, damit authored Ressourcen gültige FKs haben (auf Postgres mit erzwungenen FKs nötig; vorher via `user_id=None` umgangen) und der Row in jedem Test sichtbar ist. Damit testen wir den realen authored-Pfad statt eines anonymen Sonderfalls.
 - Die irreführenden „SQLite-UUID-Inkompatibilität"-Kommentare entfernen.
 
 ### 6. pgvector-Tests reaktivieren
