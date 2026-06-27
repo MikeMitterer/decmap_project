@@ -12,154 +12,154 @@ Die Keyword-Suche (`GET /problems?q=`) übersetzt die Anfrage heute via ai-servi
 
 **Problem:** ILIKE ist ein literaler Substring-Match — er kennt keine Morphologie. `fehlend` matcht `fehlende`/`fehlenden` (zufällig, weil Substring), aber **nicht** `fehlt`; und die EN→DE-Übersetzung `missing`→`fehlend` verfehlt flektierte deutsche Formen. Befund: `missing`→4 Treffer vs. `fehlend`→6 Treffer — **asymmetrisch**. Außerdem gibt es **kein Relevanz-Ranking**: Treffer werden nur nach `created`/`votes`/… sortiert, nicht nach Übereinstimmungsgüte (#37).
 
-**Ziel:** Symmetrischer, morphologie-bewusster Recall via Postgres-Volltextsuche (Stemming pro Sprache) **und** ein opt-in Relevanz-Ranking (`ts_rank`). EN- und DE-Suche liefern dieselbe Treffermenge; eine explizite Anfrage kann nach Relevanz sortiert werden.
+**Ziel:** Symmetrischer, morphologie-bewusster Recall via Postgres-Volltextsuche (Stemming pro Sprache) **und** ein opt-in Relevanz-Ranking (`ts_rank`). EN- und DE-Suche liefern dieselbe Treffermenge; eine explizite Anfrage kann nach Relevanz sortiert werden. **Die Sprachunterstützung muss erweiterbar sein** — eine weitere Sprache darf nur einen Registry-Eintrag + eine templated Index-Migration + Translation-Support kosten (kein Model-/Frontend-Edit).
 
 ## Non-Goals
 
-- **Keine Präfix-/Substring-Suche** (`gov` → `governance`). FTS arbeitet wort-/lexem-basiert. Präfix-Suche (`to_tsquery('gov:*')`) ist ein optionales späteres Add-on, kein Teil von F2 — aktuell von keinem Test/Feature gefordert.
+- **Keine Präfix-/Substring-Suche** (`gov` → `governance`). FTS arbeitet wort-/lexem-basiert. Präfix-Suche (`to_tsquery('gov:*')`) ist ein optionales späteres Add-on, kein Teil von F2.
 - **Keine Änderung an der semantischen Suche** (`?semantic=`, pgvector). Bleibt unverändert; `q` und `semantic` bleiben mutually exclusive.
-- **Keine zusätzlichen Sprachen** außer EN/DE (MVP-Sprachumfang).
-- **Keine Änderung der Übersetzungs-Pipeline** (`translate_query`, Cursor-Caching, „≤2× pro Such-Session"-Invariante bleiben).
-- **Keine weiteren Sprach-Konfigs für `original_translations`** außer `de` (EN-Original liegt bereits im Canonical `title`/`description`).
+- **Keine neue Übersetzungs-*Infrastruktur*.** `translate_query` + Cursor-Caching + „≤1× pro Sprache pro Such-Session"-Invariante bleiben; sie werden nur über die Sprach-Registry **geloopt** statt en/de hartzukodieren.
+
+> **Bewusst KEIN Non-Goal mehr:** zusätzliche Sprachen. Das Design ist registry-getrieben; EN/DE ist nur die Initial-Registry (MVP-Datenbestand). Weitere Sprachen sind per Design „relativ einfach" erweiterbar (s. Komponente 1).
 
 ## Kern-Prinzip
 
-**Reines FTS ersetzt ILIKE** (Ansatz A — gewählt). Statt Substring-Match werden gestemmte `tsvector`-Spalten pro Sprache gegen `plainto_tsquery` gematcht. Die LLM-Übersetzung bleibt (sie liefert die cross-linguale Brücke); FTS ergänzt die **innersprachliche** Morphologie (Stemming). Beides zusammen = symmetrischer Recall.
+**Reines, registry-getriebenes FTS ersetzt ILIKE** (Ansatz A — gewählt). Statt Substring-Match werden gestemmte `to_tsvector`-Ausdrücke pro Sprache gegen `plainto_tsquery` gematcht; die unterstützten Sprachen stehen in **einer** zentralen Registry, über die Schema-Indizes, WHERE-Klausel, Ranking und Übersetzung alle iterieren. Die LLM-Übersetzung bleibt (cross-linguale Brücke); FTS ergänzt die innersprachliche Morphologie (Stemming). Beides zusammen = symmetrischer Recall.
 
-Verworfen: Additiv FTS + ILIKE (Ansatz B) — doppelte WHERE-Logik, ILIKE bringt Asymmetrie-Rauschen zurück, Ranking-Signal nur aus dem FTS-Teil (inkonsistent).
+Verworfen: Additiv FTS + ILIKE (doppelte Logik, Asymmetrie-Rauschen) sowie generierte tsvector-Spalten (erzwingen pro Sprache eine ORM-`Computed`-Spalte + Drift-Guard-Spiegelung → Extensibility-Reibung).
 
 ## Architektur / Komponenten
 
-### 1. Schema — Migration 010 (`apps/backend`)
+### 1. Sprach-Registry + funktionale GIN-Indizes (Extensibility-Kern)
 
-Zwei `STORED GENERATED` tsvector-Spalten auf `problems` + GIN-Indizes:
-
-```sql
-ALTER TABLE problems ADD COLUMN search_en tsvector
-  GENERATED ALWAYS AS (
-    to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, ''))
-  ) STORED;
-
-ALTER TABLE problems ADD COLUMN search_de tsvector
-  GENERATED ALWAYS AS (
-    to_tsvector('german',
-      coalesce(title, '') || ' ' || coalesce(description, '') || ' ' ||
-      coalesce(original_translations -> 'de' ->> 'title', '') || ' ' ||
-      coalesce(original_translations -> 'de' ->> 'description', ''))
-  ) STORED;
-
-CREATE INDEX ix_problems_search_en ON problems USING gin (search_en);
-CREATE INDEX ix_problems_search_de ON problems USING gin (search_de);
-```
-
-- **Warum `search_de` auch `title`/`description` einschließt:** Die EN-Übersetzung ist optional/asynchron („EN-Felder sind kein Submit-Blocker") — eine deutsche Einreichung bleibt bis zur Übersetzung **deutsch im Canonical** `title`/`description`. `search_de` muss diese Felder daher mit-stemmen (sonst verfehlt eine DE-Suche untranslatierte deutsche Probleme; genau dieser Fall steckt in `test_keyword_search_symmetric_en_finds_de_only`). `search_en` bleibt auf den (englischen) Canonical beschränkt; `original_translations -> 'de'` ist reines Deutsch und gehört nur in `search_de`.
-- **IMMUTABLE-Anforderung erfüllt:** `->`/`->>` (jsonb), `||`, `coalesce`, `to_tsvector(regconfig, text)` mit **konstanter** Config sind alle immutable → generierte Spalten zulässig.
-- **Backfill:** Generierte Spalten berechnen sich automatisch für alle bestehenden Zeilen — kein separater Backfill-Schritt nötig.
-- **Downgrade:** Indizes + Spalten droppen.
-
-### 2. ORM-Model + Drift-Guard
-
-Beide Spalten im `Problem`-Model als `Computed`-Spalten spiegeln (Typ `TSVECTOR` aus `sqlalchemy.dialects.postgresql`), sonst meldet der Drift-Guard (`test_schema_migrations_sync.py`) `remove_column`:
+**Eine zentrale Registry** (neues Modul `apps/backend/services/search_languages.py`) als Single Source of Truth:
 
 ```python
-from sqlalchemy import Computed
-from sqlalchemy.dialects.postgresql import TSVECTOR
+# (lang_code in original_translations, Postgres-Textsuche-Config)
+SEARCH_LANGUAGES: list[tuple[str, str]] = [("en", "english"), ("de", "german")]
 
-search_en: Mapped[Optional[str]] = mapped_column(
-    TSVECTOR,
-    Computed("to_tsvector('english', coalesce(title, '') || ' ' || coalesce(description, ''))",
-             persisted=True),
-    nullable=True,
-)
-# search_de analog mit der german/JSONB-Expression
+def tsvector_sql(lang: str, config: str) -> str:
+    """SQL-Ausdruck für den FTS-Vektor einer Sprache — IDENTISCH in Index + Query.
+
+    Stabiler Vertrag: Ändert sich der Output, müssen die funktionalen Indizes per
+    Reindex-Migration neu erstellt werden (sonst nutzt der Planner sie nicht mehr).
+    """
+    return (
+        f"to_tsvector('{config}', "
+        f"coalesce(title, '') || ' ' || coalesce(description, '') || ' ' || "
+        f"coalesce(original_translations -> '{lang}' ->> 'title', '') || ' ' || "
+        f"coalesce(original_translations -> '{lang}' ->> 'description', ''))"
+    )
 ```
 
-Die Spalten werden **nie** über das ORM gelesen/geschrieben — nur in raw-SQL-`text()`/Core-Ausdrücken für Match + Rank verwendet (analog `embedding`, das in `_to_read` ausgeschlossen ist). In `_to_read` ausschließen (nicht serialisieren).
+**Funktionale GIN-Indizes** (Migration 010) — einer pro Sprache, auf exakt diesem Ausdruck:
 
-**Risiko / Verify-Schritt:** Der Drift-Guard muss grün bleiben. `compare_metadata` vergleicht den Computed-`sqltext` per Default **nicht** — Anwesenheit der Spalte sollte genügen. Falls doch ein kosmetischer Computed-/Typ-Diff gemeldet wird: eng begrenzte, **dokumentierte** Ausnahme im Guard (gleiches Muster wie die tolerierten Index-/Constraint-Diffs) — kein echter Drift wird verdeckt.
+```sql
+CREATE INDEX ix_problems_fts_en ON problems USING gin (to_tsvector('english', …));
+CREATE INDEX ix_problems_fts_de ON problems USING gin (to_tsvector('german',  …));
+```
+
+Die Migration **importiert `tsvector_sql`** und erzeugt die Index-Statements daraus → Index-Ausdruck und Query-Ausdruck sind garantiert identisch, der Planner nutzt den Index für das `@@`-Match.
+
+- **Warum jede Sprach-Config auch `title`/`description` mit-stemmt (nicht nur `original_translations->lang`):** Die EN-Übersetzung ist optional/asynchron („EN-Felder sind kein Submit-Blocker") — eine Einreichung bleibt bis zur Übersetzung **in ihrer Originalsprache im Canonical** `title`/`description`. Jede Sprach-Config muss diese Felder daher mit-stemmen (sonst verfehlt eine Suche untranslatierte Probleme; genau dieser Fall steckt in `test_keyword_search_symmetric_en_finds_de_only`). Das Mit-Stemmen fremdsprachiger Canonical-Texte in einer anderen Config ist harmloses Rauschen (matcht keine fremde Query).
+- **IMMUTABLE erfüllt:** `->`/`->>`, `||`, `coalesce`, `to_tsvector(regconfig, text)` mit **konstanter** Config sind immutable → funktionaler Index zulässig.
+- **Kein Backfill, keine ORM-/Model-Spalte:** Funktionale Indizes brauchen weder eine Spalte noch Backfill; das `Problem`-Model bleibt unverändert → **kein** Drift-Guard-Risiko (Indizes leben per Konvention nur in Migrationen, der Guard toleriert das bereits).
+
+**Eine Sprache hinzufügen** = (1) Tupel in `SEARCH_LANGUAGES` ergänzen, (2) templated Index-Migration (ein `CREATE INDEX` via `tsvector_sql`), (3) `translate_query` muss die Sprache liefern. WHERE/Ranking/Übersetzung adaptieren sich automatisch (sie loopen die Registry). Kein Model-, kein Frontend-, kein Cursor-Format-Edit.
+
+### 2. Übersetzung + Cursor (N-sprachfähig)
+
+Auf Page 1 wird `q` für **jede** Registry-Sprache übersetzt (`translate_query(q, lang)`, best-effort; `None` = Sprache überspringen) und als Map gesammelt: `q_translations: dict[str, str]` (z. B. `{"en": "...", "de": "..."}`). Diese Map wird in **jedem** Cursor unter Key `"qt"` mitgeführt → Page 2+ liest sie ohne Re-Translate.
+
+`services/cursor.py` wird generalisiert: `encode_cursor(..., q_translations: dict[str,str] | None = None)` (statt fixer `q_en`/`q_de`); `decode_cursor` liefert `q_translations`; neue `peek_cursor_translations(cursor) -> dict | None`. Die bisherigen `q_en`/`q_de`-Parameter + `peek_cursor_q_en/q_de` entfallen (nichts deployed → sauberer Replace). Alle Sort-Branches in `_apply_sort_and_keyset` reichen `q_translations` durch (statt `q_en`/`q_de`).
 
 ### 3. Recall (WHERE) — ersetzt den ILIKE-Block in `list_problems`
 
-`q_en`/`q_de` werden wie heute aufgelöst (Page 1: `translate_query(q, "en"|"de")`; Page 2+: aus dem Cursor). Der ILIKE-Block wird ersetzt durch:
-
 ```
-OR(
-   search_en @@ plainto_tsquery('english', v)   für v in [q, q_en] wenn v truthy,
-   search_de @@ plainto_tsquery('german',  v)    für v in [q, q_de] wenn v truthy,
-)
+fts_clauses = []
+for lang, config in SEARCH_LANGUAGES:
+    for v in {q, q_translations.get(lang)} if truthy:
+        fts_clauses.append(
+            literal_column(tsvector_sql(lang, config)) @@ plainto_tsquery(config, v)
+        )
+base_where.append(or_(*fts_clauses))
 ```
 
-- **Raw `q` gegen beide Configs** ist der Übersetzungs-Ausfall-sichere Pfad: schlägt der ai-service fehl (`translate_query` → `None`, z. B. in Unit-Tests), matcht `q` trotzdem gegen `search_en` **und** `search_de`. Das deckt u. a. `test_q_matches_original_translations_raw` (`q=schlecht` → German-Stemmer `Schlechte`→`schlecht`) ohne Übersetzung ab.
-- Dedup identischer Varianten (z. B. `q == q_en`) ist nicht nötig — doppelte OR-Klauseln sind harmlos; optional bereinigen.
-- Operator via SQLAlchemy Core: `Problem.search_en.op("@@")(func.plainto_tsquery("english", v))`.
+- **Raw `q` gegen jede Sprach-Config** ist der Übersetzungs-Ausfall-sichere Pfad (ai-service down → `q_translations` leer; `q` matcht trotzdem gegen alle Configs). Deckt `test_q_matches_original_translations_raw` (`q=schlecht` → German-Stemmer `Schlechte`→`schlecht`) ohne Übersetzung ab.
+- `literal_column(tsvector_sql(...))` spiegelt den vorhandenen `semantic`-Stil (`literal_column(dist_sql)`) und matcht den funktionalen Index.
 
 ### 4. Relevanz — neuer `sort=relevance` (opt-in)
 
-Neuer Branch in `_apply_sort_and_keyset` (erhält `q_en`/`q_de` bereits als Parameter). Rank als Summe der Sprach-Ränge:
+Neuer Branch in `_apply_sort_and_keyset` (erhält `q_translations` + raw `q`). Rank = Summe der Sprach-Ränge über die Registry:
 
 ```
-rank = ts_rank(search_en, plainto_tsquery('english', coalesce(q_en, q)))
-     + ts_rank(search_de, plainto_tsquery('german',  coalesce(q_de, q)))
+rank = Σ_lang  ts_rank(literal_column(tsvector_sql(lang, config)),
+                       plainto_tsquery(config, q_translations.get(lang) or q))
 ```
 
-- `ORDER BY rank DESC, id ASC`; **Keyset** auf `(rank, id)` — exakt analog zum bestehenden `semantic`-Distanz-Keyset (`_list_problems_semantic`). Der Branch gibt `(Problem, rank)`-Rows zurück (wie `solutions`/`tag`-Sort) und hängt `rank` als Attribut an, damit `make_next_cursor` ihn liest.
-- **Cursor** trägt `rank` + `id` + `q_en` + `q_de` (q-Varianten sind ohnehin in jedem Cursor) → Page 2+ ohne Re-Translate, identische `plainto_tsquery`-Inputs.
-- **`sort=relevance` ohne `q`** → graceful Fallback auf `created` (kein Ranking-Signal vorhanden; kein 422).
-- **Summe vs. greatest:** `sum` gewählt — ein Treffer in beiden Sprachquellen (EN-Canonical + DE-Original) ist relevanter als in nur einer. Bei nur einer Quelle ist der andere Summand 0.
+- `ORDER BY rank DESC, id ASC`; **Keyset** auf `(rank, id)` — exakt im Muster des `semantic`-Distanz-Keysets (`(expr < last) OR (expr == last AND id < last_id)`, Float-Vergleich, Ausdruck im WHERE wiederholt, da Alias dort nicht referenzierbar). Branch gibt `(Problem, rank)`-Rows zurück (wie `tag`/`solutions`), hängt `rank` als Attribut an.
+- **Cursor** trägt `rank`+`id`+`q_translations`.
+- **`sort=relevance` ohne `q`** → graceful Fallback auf `created` (kein Ranking-Signal; kein 422).
+- **`sum` statt `greatest`:** Treffer in mehreren Sprachquellen ist relevanter; bei nur einer Quelle ist der andere Summand 0.
+- Kein `score`-Feld in `ProblemRead` für Relevanz-Treffer (`ts_rank` ist nicht 0..1 wie die semantische Cosine-Score) → der semantische Score-Badge im Frontend erscheint nicht; die Relevanz-Ordnung wird über StatusBar-Hinweis + Header-Lock angezeigt.
 
-Andere Sort-Modi (`created`/`votes`/`title`/`status`/`solutions`/`tag`) bleiben **unverändert** und profitieren nur vom verbesserten FTS-Recall in der WHERE-Klausel.
+Andere Sort-Modi (`created`/`votes`/`title`/`status`/`solutions`/`tag`) bleiben unverändert und profitieren nur vom besseren FTS-Recall in der WHERE-Klausel.
 
 ### 5. Frontend (`apps/frontend`)
 
-- **„Relevance"** als zusätzliche Sort-Option im Such-/Table-Kontext, sinnvoll nur bei aktiver Keyword-Suche (`q` gesetzt). `sort=relevance` an die `/problems`-API durchreichen.
-- Die bestehende **„Sorted by relevance"-StatusBar-Logik** (heute für `semantic`/`relevanceSortActive` in `layouts/default.vue`) wird auf den Keyword-Relevanz-Fall erweitert: Hinweis + Sort-Sperre, wenn Keyword-Suche aktiv **und** `sort=relevance`.
-- Verhalten bei Wechsel Suche↔kein-Suchbegriff: fällt `q` weg, zurück auf den vorherigen/Default-Sort (kein hängender `relevance`-Zustand ohne Query).
+Sprach-agnostisch — das Frontend kennt keine Sprach-Registry, es sendet nur `q` + `sort=relevance`.
+
+- **`SortKey`-Union** in `pages/table.vue` um `'relevance'` erweitern; `toBackendSort`/`fromBackendSort` mappen `relevance ↔ relevance`. Der API-Builder (`composables/data/real/realProblems.ts`, `buildQueryString`) serialisiert `query.sort` bereits generisch → keine Änderung nötig.
+- **Opt-in-Steuerung:** Neuer Layout-State `keywordRelevanceEnabled` (in `layouts/default.vue`, analog `aiSearchEnabled`), per `provide` an Kinder. Eine „Relevanz"-Umschaltung in `DmTopBar` ist nur sichtbar, wenn ein Keyword-Suchbegriff aktiv ist **und** AI-/Semantic-Suche **aus** ist. `pages/table.vue` injiziert `keywordRelevanceEnabled`; in `buildQuery()` → `sort='relevance'`, wenn aktiv.
+- **`relevanceSortActive`** (Layout-Computed) wird erweitert: `true` auch für den Keyword-Relevanz-Fall (`!aiSearchEnabled && query && keywordRelevanceEnabled`). Dadurch greifen die **bestehenden** Mechaniken automatisch: „Sorted by relevance"-Hinweis in `StatusBar` + Sort-Header-Lock in `table.vue` (Score-Badge erscheint nicht, da Backend keinen Score liefert).
+- **State-Reset:** `keywordRelevanceEnabled` zurücksetzen, wenn der Suchbegriff geleert oder AI-Suche eingeschaltet wird (kein hängender Relevanz-Zustand).
 
 ## Datenfluss
 
 ```
-User tippt q
-  → Frontend GET /problems?q=…&sort=relevance (oder &sort=created)
-  → Backend: q_en = translate_query(q,'en'), q_de = translate_query(q,'de')   [Page 1, gecacht im Cursor]
-  → WHERE: search_en @@ plainto_tsquery('english', {q,q_en})
-        OR search_de @@ plainto_tsquery('german',  {q,q_de})
-  → sort=relevance: ORDER BY ts_rank(en)+ts_rank(de) DESC, id ; Keyset (rank,id)
-     sonst:         bisherige Sortierung, FTS nur im WHERE
-  → ProblemPage(items, next_cursor[rank,id,q_en,q_de], total)
+User tippt q (AI-Suche aus) + aktiviert "Relevanz"
+  → Frontend GET /problems?q=…&sort=relevance
+  → Backend: q_translations = { lang: translate_query(q, lang) for lang in SEARCH_LANGUAGES }  [Page 1, im Cursor]
+  → WHERE: OR über Sprachen:  tsvector_sql(lang) @@ plainto_tsquery(config, {q, q_translations[lang]})
+  → sort=relevance: ORDER BY Σ ts_rank(...) DESC, id ; Keyset (rank,id)
+     sonst:          bisherige Sortierung, FTS nur im WHERE
+  → ProblemPage(items, next_cursor[rank,id,qt], total)
 ```
 
 ## Risiken / erwartete Arbeit
 
-- **Drift-Guard ↔ Computed-Spalten** (s. Komponente 2) — fragilster Punkt; Verifikation = Guard grün. Fallback: dokumentierte Ausnahme.
-- **German-Stemmer-Erwartungen:** Tests müssen reale Snowball-`german`-Stemming-Ergebnisse annehmen (z. B. `fehlend`/`fehlende`/`fehlt`→`fehl`), nicht idealisierte. Bei Überraschungen Erwartung an tatsächliche Lexeme anpassen (kein Verstecken).
-- **`plainto_tsquery` vs. leere Query:** `plainto_tsquery('english','')` → leere tsquery, matcht nichts (korrekt; leerer `q` geht ohnehin nicht in den q-Branch).
-- **Mixed-Language-Felder:** `to_tsvector('english', …)` auf deutschem Canonical-Text (selten — Canonical ist per Konvention EN) stemmt suboptimal, aber harmlos; DE-Original deckt den deutschen Pfad ab.
-- **Performance:** GIN-Index macht Match indexierbar; `ts_rank` ist eine Sortier-Berechnung über die Treffermenge (klein bei aktueller Daten-Größe). Akzeptabel.
-- **Bestehende Tests:** Die 7 `test_problems_search.py`-Fälle müssen unter reinem FTS grün bleiben (analysiert: gedeckt, inkl. `schlecht`→`Schlechte` via Stemmer). Bei Abweichung Ursache prüfen, nicht Test aufweichen.
+- **Funktionaler-Index-Match:** Der Query-Ausdruck muss textuell zum Index-Ausdruck passen, damit der Planner den GIN-Index nutzt. Garantiert durch die **gemeinsame** `tsvector_sql`-Quelle in Migration + Query. `tsvector_sql`-Output ist ein stabiler Vertrag — Änderung erfordert Reindex-Migration (dokumentiert).
+- **German-Stemmer-Erwartungen:** Tests müssen reale Snowball-`german`-Ergebnisse annehmen (`fehlend`/`fehlende`/`fehlt`→`fehl`), nicht idealisierte. Bei Überraschungen Erwartung an tatsächliche Lexeme anpassen (kein Verstecken).
+- **Cursor-Refactor:** Umstellung `q_en`/`q_de` → `q_translations`-Map berührt alle Sort-Branches + `cursor.py` + die Such-Tests (Translate-Aufruf-Zählung). Mechanisch, aber breit.
+- **Übersetzungs-Last:** N Sprachen = N `translate_query`-Calls auf Page 1 (gecacht). Bei EN/DE = 2 (wie heute). Skaliert linear mit Registry-Größe.
+- **`plainto_tsquery('', '')`** → leere tsquery, matcht nichts (korrekt; leerer `q` geht nicht in den q-Branch).
+- **Bestehende Tests:** Die 7 `test_problems_search.py`-Fälle müssen unter reinem FTS grün bleiben (analysiert: gedeckt, inkl. `schlecht`→`Schlechte` via Stemmer; Translate-Zählung jetzt = Registry-Größe, nicht fix 2 — Tests entsprechend anpassen). Bei Abweichung Ursache prüfen, nicht Test aufweichen.
 
 ## Done-Kriterien
 
-- [ ] Migration 010 erstellt `search_en`/`search_de` (generated) + GIN-Indizes; `alembic upgrade head` läuft sauber; Downgrade vorhanden.
-- [ ] `Problem`-Model spiegelt beide Spalten als `Computed`; `_to_read` schließt sie aus; **Drift-Guard grün**.
-- [ ] ILIKE-Recall durch FTS (`@@ plainto_tsquery`, beide Configs, raw + übersetzte Varianten) ersetzt.
-- [ ] `sort=relevance` implementiert: `ts_rank`-Summe, `ORDER BY rank DESC, id`, Keyset `(rank,id)`, Cursor trägt `rank`+`q_en`+`q_de`; ohne `q` → Fallback `created`.
-- [ ] Alle bestehenden `test_problems_search.py` grün (gegen echtes Postgres, kein `skipif`).
-- [ ] Neue Tests: (a) Stemming-Symmetrie `fehlend`/`fehlende`/`fehlt` ⇄ `missing` → identische Treffermenge; (b) `sort=relevance` ordnet stärkeren Treffer vor schwächerem; (c) Relevance-Keyset-Pagination ohne Overlap + `translate_query` ≤2×.
-- [ ] Frontend: „Relevance"-Sort-Option, `sort=relevance` durchgereicht, „Sorted by relevance"-Hinweis/Sort-Sperre auf Keyword-Fall erweitert; Vitest-Abdeckung.
+- [ ] `services/search_languages.py`: `SEARCH_LANGUAGES` + `tsvector_sql`; Initial-Registry `en`+`de`.
+- [ ] Migration 010 erstellt funktionale GIN-Indizes (`ix_problems_fts_en`/`_de`) via `tsvector_sql`; `alembic upgrade head` sauber; Downgrade dropt sie. **Kein** Model-/Spalten-Change; Drift-Guard bleibt grün.
+- [ ] ILIKE-Recall durch registry-geloopte FTS (`@@ plainto_tsquery`, alle Configs, raw + übersetzte Varianten) ersetzt.
+- [ ] `cursor.py` generalisiert auf `q_translations`-Map (`"qt"`); alle Sort-Branches gereicht; `peek_cursor_translations` vorhanden.
+- [ ] `sort=relevance`: `Σ ts_rank` über Registry, `ORDER BY rank DESC, id`, Keyset `(rank,id)`, Cursor trägt `rank`+`qt`; ohne `q` → Fallback `created`.
+- [ ] Alle bestehenden `test_problems_search.py` grün (gegen echtes Postgres).
+- [ ] Neue Tests: (a) Stemming-Symmetrie `fehlend`/`fehlende`/`fehlt` ⇄ `missing` → identische Treffermenge; (b) `sort=relevance` ordnet stärkeren Treffer vor schwächerem; (c) Relevance-Keyset-Pagination ohne Overlap; (d) **Extensibility-Smoke:** eine dritte Registry-Sprache (z. B. `("fr","french")`, nur im Test gepatcht inkl. Index) wird ohne Code-Änderung außerhalb der Registry/Migration matchbar.
+- [ ] Frontend: `'relevance'` in `SortKey`+Mapping; `keywordRelevanceEnabled`-State + Toggle (nur bei aktiver Keyword-Suche); `relevanceSortActive` auf Keyword-Fall erweitert (StatusBar-Hinweis + Header-Lock greifen); Vitest-Abdeckung.
 - [ ] Gesamte Backend-Unit-Suite + Frontend-Suite grün; ruff sauber (keine neuen Errors).
 
 ## Betroffene Dateien (Erstschätzung)
 
 **Backend (`apps/backend`):**
-- neu: `alembic/versions/010_add_fts_search_columns.py`
-- `models/problem.py` (zwei `Computed`-tsvector-Spalten)
-- `routers/problems.py` (`list_problems` WHERE-Block; `_apply_sort_and_keyset` `relevance`-Branch; Cursor; `_to_read`-Ausschluss; Docstring/`sort`-Aufzählung)
-- ggf. `services/cursor.py` (falls Relevance-Cursor-Key wie `semantic`-`emb` ein eigenes Feld braucht)
-- Tests: `tests/unit/test_problems_search.py` (Symmetrie/Stemming), neuer `tests/unit/test_problems_relevance.py` (Ranking + Keyset)
+- neu: `services/search_languages.py` (`SEARCH_LANGUAGES`, `tsvector_sql`)
+- neu: `alembic/versions/010_add_fts_functional_indexes.py` (funktionale GIN-Indizes via `tsvector_sql`)
+- `services/cursor.py` (`q_translations`-Map statt `q_en`/`q_de`; `peek_cursor_translations`)
+- `routers/problems.py` (`list_problems` WHERE-Block; `_apply_sort_and_keyset` `relevance`-Branch + `q_translations`-Threading; `q`-Übersetzungs-Loop; Docstring/`sort`-Aufzählung)
+- Tests: `tests/unit/test_problems_search.py` (FTS-Symmetrie/Stemming + Translate-Zählung = Registry-Größe), neuer `tests/unit/test_problems_relevance.py` (Ranking + Keyset + Extensibility-Smoke)
 
 **Frontend (`apps/frontend`):**
-- Sort-Option-Komponente (Such-/Table-Kontext) + API-Param `sort=relevance`
-- `layouts/default.vue` (relevanceSortActive auf Keyword-Fall erweitern) + StatusBar-Hinweis
-- Vitest-Specs für die neue Sort-Option
+- `pages/table.vue` (`SortKey`+Mapping; inject `keywordRelevanceEnabled`; `buildQuery` `sort=relevance`)
+- `layouts/default.vue` (`keywordRelevanceEnabled` ref + provide; `relevanceSortActive` erweitern; Reset-Logik)
+- `components/DmTopBar.vue` (Relevanz-Toggle, sichtbar nur bei aktiver Keyword-Suche)
+- Vitest: Sort-/Relevanz-Spec (z. B. `tests/composables/useProblemsPagination.spec.ts` erweitern + Toggle-Spec)
 
-**Root (`docs/`):** `docs/features.md` (Suche-Sektion: FTS + Relevanz), CLAUDE.md-Feature-Zeile (Suche).
+**Root (`docs/`):** `docs/features.md` (Suche: FTS + Relevanz + Sprach-Registry), CLAUDE.md-Feature-Zeile (Suche).
