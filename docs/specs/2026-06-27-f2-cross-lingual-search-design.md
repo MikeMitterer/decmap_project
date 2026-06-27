@@ -43,6 +43,7 @@ ALTER TABLE problems ADD COLUMN search_en tsvector
 ALTER TABLE problems ADD COLUMN search_de tsvector
   GENERATED ALWAYS AS (
     to_tsvector('german',
+      coalesce(title, '') || ' ' || coalesce(description, '') || ' ' ||
       coalesce(original_translations -> 'de' ->> 'title', '') || ' ' ||
       coalesce(original_translations -> 'de' ->> 'description', ''))
   ) STORED;
@@ -51,6 +52,7 @@ CREATE INDEX ix_problems_search_en ON problems USING gin (search_en);
 CREATE INDEX ix_problems_search_de ON problems USING gin (search_de);
 ```
 
+- **Warum `search_de` auch `title`/`description` einschließt:** Die EN-Übersetzung ist optional/asynchron („EN-Felder sind kein Submit-Blocker") — eine deutsche Einreichung bleibt bis zur Übersetzung **deutsch im Canonical** `title`/`description`. `search_de` muss diese Felder daher mit-stemmen (sonst verfehlt eine DE-Suche untranslatierte deutsche Probleme; genau dieser Fall steckt in `test_keyword_search_symmetric_en_finds_de_only`). `search_en` bleibt auf den (englischen) Canonical beschränkt; `original_translations -> 'de'` ist reines Deutsch und gehört nur in `search_de`.
 - **IMMUTABLE-Anforderung erfüllt:** `->`/`->>` (jsonb), `||`, `coalesce`, `to_tsvector(regconfig, text)` mit **konstanter** Config sind alle immutable → generierte Spalten zulässig.
 - **Backfill:** Generierte Spalten berechnen sich automatisch für alle bestehenden Zeilen — kein separater Backfill-Schritt nötig.
 - **Downgrade:** Indizes + Spalten droppen.
