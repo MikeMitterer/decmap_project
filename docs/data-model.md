@@ -21,7 +21,8 @@ description_en      text (optional)             — Englisch, automatisch uberse
 content_language    string (default "en")       — ISO 639-1, z.B. "de", "fr", "es"
 status              enum: pending | needs_review | approved | rejected
 rejection_reason    string (nullable)
-embedding           vector(1536)                — generiert aus description_en (nicht title_en)
+embedding           vector(1536)                — generiert aus title_en + description_en (`_embedding_text`, `\n\n`-getrennt, leere Teile fallen weg); nach Quellen-Wechsel `POST /embeddings/reindex`
+original_translations jsonb (default '{}')       — Original-Text des Users, {lang: {title?, description?}}; Migration 009
 user_id             FK → users (nullable — anonyme Submissions erlaubt)
 session_id          string (nullable)
 vote_score          integer (default 0)
@@ -32,12 +33,15 @@ deleted_by          FK → users (nullable)
 created_at          timestamp
 ```
 
+> **Funktionale FTS-Indizes (Migration 010, F2 Task 1):** `ix_problems_fts_en` / `ix_problems_fts_de` — GIN-Indizes auf `to_tsvector('<lang>', title || description || original_translations)` mit explizitem immutable Sprach-Snapshot. Single Source of Truth fuer unterstuetzte Sprachen: `services/search_languages.py` (`SEARCH_LANGUAGES` + `tsvector_sql`-Helper, dessen Output **identisch** in Index und Query genutzt wird — driftet er, nutzt der Planner die Indizes nicht mehr → Reindex-Migration). Der Keyword-Pfad von `GET /problems?q=` nutzt diese Indizes seit BE `8982048` (F2 Task 3) tatsaechlich: `plainto_tsquery` pro Registry-Sprache ersetzt ILIKE, Per-Sprache-Stemming liefert symmetrische cross-linguale Treffer (`fehlt`/`fehlend`/`missing`). Das opt-in `sort=relevance` (`ts_rank` über die Registry-Sprachen + Keyset, Cursor traegt `rank`) ist seit BE `59a2b29` (F2 Task 4) gelandet, der Frontend-Opt-in seit FE `d3a6950` (Task 5; der ursprüngliche „Sort by relevance"-Toggle ist seit 2026-06-30 entfernt — Relevanz ist bei aktiver Keyword-Suche **Default-an**, ein Spalten-Klick verlässt sie, Details: [`docs/features.md`](features.md)); der Extensibility-Smoke-Test/Doku (Task 6) ist seit BE `820083e` gelandet — alle sechs F2-Tasks sind drin. Der ai-service-Endpoint `GET /internal/problems/search` nutzt weiterhin ILIKE.
+
 **`solution_approaches`** — Losungsansatz zu einem Problem. Markdown (eingeschrankt) erlaubt. Durchlauft denselben Moderations-Workflow wie Problems. Kann von der KI oder von Usern stammen. Enthalt ebenfalls automatische Ubersetzung ins Englische.
 ```
 id                  uuid (PK)
 content             text (required, Markdown erlaubt — Links, Fettschrift, h2/h3, Listen, Blockquotes)  — Originalsprache
 content_en          text (required)             — Englisch, automatisch ubersetzt, anpassbar
 content_language    string (default "en")       — ISO 639-1
+embedding           vector(1536) (nullable)     — aus content_en; erst bei Approval befüllt (globaler Duplikat-Check über alle approved Solutions)
 status              enum: pending | needs_review | approved | rejected
 problem_id          FK → problems
 user_id             FK → users (nullable)

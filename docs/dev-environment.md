@@ -351,12 +351,13 @@ npm run test:e2e:ui                   # Interaktiver Modus
 (gitignored). Fehlen Credentials, laufen nur Smoke-Tests; `authenticated`-Tests schlagen fehl.
 
 Specs: `smoke.spec.ts` (Homepage, Table, Status-Page), `login.spec.ts`, `plus-button.spec.ts`
-(+Button Redirect-Flow inkl. PENDING_OPEN_PROBLEM_FORM), `problem-submit.spec.ts`.
+(+Button Redirect-Flow inkl. PENDING_OPEN_PROBLEM_FORM), `problem-submit.spec.ts`,
+`solution-redirect.spec.ts` (Lösungs-Login-Redirect-Flow anonym aus Table-View, T-13).
 
 `data-testid`-Attribute auf Komponenten sind der Kontrakt zwischen Specs und UI:
-`add-problem-btn`, `problem-form`, `problem-submit-btn`.
+`add-problem-btn`, `problem-form`, `problem-submit-btn`, `add-solution`, `solution-form`.
 
-**Gotcha — `npm run test` laeuft NICHT fuer E2E:** Vitest (`npm run test`) laedt alle Dateien unter `tests/` — inklusive `tests/e2e/*.spec.ts`. Diese importieren `@playwright/test` und scheitern sofort mit `Playwright Test did not expect test.describe() to be called here`. Unit-Tests und E2E-Tests immer getrennt ausfuehren: `npm run test` (Vitest, 180 Tests) und `npm run test:e2e` (Playwright, 9 E2E-Specs).
+**Gotcha — `npm run test` laeuft NICHT fuer E2E:** Vitest (`npm run test`) laedt alle Dateien unter `tests/` — inklusive `tests/e2e/*.spec.ts`. Diese importieren `@playwright/test` und scheitern sofort mit `Playwright Test did not expect test.describe() to be called here`. Unit-Tests und E2E-Tests immer getrennt ausfuehren: `npm run test` (Vitest, 143 Tests) und `npm run test:e2e` (Playwright, 11 E2E-Tests).
 
 **Gotcha — `networkidle` haengt:** Nuxt oeffnet WebSockets fuer alle User (auch anon) in `onMounted`.
 `page.waitForLoadState('networkidle')` wartet auf Netzwerkruhe — bei offenen WS-Verbindungen tritt diese nie ein.

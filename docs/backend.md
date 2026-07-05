@@ -124,6 +124,7 @@ make db-seed-demo        # System-Seeds + Demo-Daten einspielen
 make db-reset            # down -v → up → migrate → db-seed (System-Seeds)
 make db-reset-demo       # down -v → up → migrate → db-seed-demo (+ Demo-Daten)
 make api-dev             # FastAPI-Dev-Server (Port 8001, --reload)
+make ai-reindex          # Bulk-Re-Embedding triggern (POST /embeddings/reindex); Default int.decisionmap.ai/api (nginx-Proxy), URL= überschreibt
 ```
 
 **Dev-URLs (nach `make dev-up`):**
@@ -193,18 +194,21 @@ Alle Endpoints erfordern `X-Service-Token: <SERVICE_TOKEN>` Header (`verify_serv
 | `GET /internal/problems/approved` | Approved-Problems **die bereits ein Embedding haben** — für Clustering (filtert Problems ohne Embedding heraus) |
 | `GET /internal/problems/approved-all` | Alle approved Problems **unabhängig vom Embedding-Status** — für Bulk-Reindex |
 | `GET /internal/problems/{id}` | Problem by ID |
+| `GET /internal/problems/search` | Substring-Suche: `q` (EN-Canonical → `title`/`description`) + optional `q_raw` (Rohtext → `original_translations::text`, findet nicht-englische Originale); Fallback `q_raw`→`q`, Limit 10 |
 | `POST /internal/problems/{id}/solutions` | AI-generierte Lösung anlegen |
-| `POST /internal/similarity` | pgvector Cosine-Similarity-Suche |
+| `POST /internal/similarity` | pgvector Cosine-Similarity-Suche (Problems) |
+| `POST /internal/solutions/{id}/embedding` | Solution-Embedding speichern (bei Approval, englischer Canonical) |
+| `POST /internal/solutions/similarity` | Globale pgvector-Suche über **alle** approved Solutions (Duplikat-Check) |
 | `POST /internal/tags/upsert` | Tag upsert (API: `label` → DB: `name`) |
 | `GET /internal/tags/l0-root` | L0-Root-Tag holen — Ausgangspunkt fuer L1-Cluster-Tags |
 | `DELETE /internal/tags/structural` | Alle L1–L9 Tags loeschen (Cascade auf `problem_tag`) — vor Reclustering |
 | `POST /internal/problems/{id}/structural-tag` | Problem einem L1-Cluster-Tag zuweisen (`problem_tag`) |
 
-**Bulk-Reindex:** `POST /embeddings/reindex` (AI-Service) + `GET /internal/problems/approved-all` (Backend) sind implementiert — letzterer liefert alle approved Problems ohne Embedding-Filter (für initiale Befüllung oder Re-Embedding nach Modellwechsel). Smoke-Test: `./scripts/smoke-test.sh reindex`.
+**Bulk-Reindex:** `POST /embeddings/reindex` (AI-Service) + `GET /internal/problems/approved-all` (Backend) sind implementiert — letzterer liefert alle approved Problems ohne Embedding-Filter (für initiale Befüllung oder Re-Embedding nach Modellwechsel). Komfort-Wrapper: `make ai-reindex` (`scripts/ai-reindex.sh run`, self-contained nach `db-backup.sh`-Muster — läuft auch auf dem Server ohne `.libs`). Default-Ziel ist der lokale nginx-Proxy `http://int.decisionmap.ai/api` (rewrite `/api/*` → AI-Service) — aus `apps/backend` läuft das Script damit ohne Flags. Nur `SERVICE_TOKEN` kommt aus der `.env` (oder `--token`), **nicht** die URL: die `.env`-`AI_SERVICE_URL` ist die interne Backend→AI-Route, nicht der Proxy. URL via `--url` bzw. `URL=` überschreiben (z.B. `URL=http://ai-service:8000` für den Container in Prod); Token wird nie ausgegeben. Smoke-Test: `./scripts/smoke-test.sh reindex`.
 
 **Gotcha — asyncpg `:param::type` bricht Parameter-Substitution:** In SQLAlchemy `text()` Queries stoppt asyncpg die Substitution beim `::` direkt nach dem Parameternamen. Fix: Klammern setzen — `embedding <=> (:emb)::vector` statt `embedding <=> :emb::vector`.
 
-**Embedding-Input — Sprachnormalisierung (implementiert):** Gespeicherte Embeddings basieren nur auf `description_en` (`_embedding_text()`: `description_en` bevorzugt, `title` als Fallback). Similarity-Queries werden vor dem Embedding via `TranslationService.to_english()` ins Englische übersetzt — DE+EN-Vektor-Mismatch gegen Threshold 0.85 ist damit vermieden. `TranslationService` nutzt `langdetect>=1.0.9` zur Spracherkennung: englischer Text wird direkt durchgereicht (kein LLM-Call), nur nicht-englischer Text löst einen API-Call aus.
+**Embedding-Input — Sprachnormalisierung (implementiert):** Gespeicherte Embeddings basieren auf **Titel + Beschreibung** (`_embedding_text()`: `title_en` + `description_en`, `\n\n`-getrennt, leere Teile fallen weg) — so matcht ein Begriff, der nur im Titel steht, ebenfalls. Nach diesem Quellen-Wechsel (früher description-only) sind bestehende Vektoren stale → `POST /embeddings/reindex` (Service-Token). Similarity-Queries werden vor dem Embedding via `TranslationService.to_english()` ins Englische übersetzt — DE+EN-Vektor-Mismatch gegen Threshold 0.85 ist damit vermieden. `TranslationService` nutzt `langdetect>=1.0.9` zur Spracherkennung: englischer Text wird direkt durchgereicht (kein LLM-Call), nur nicht-englischer Text löst einen API-Call aus.
 
 **Gotcha — Tags: API-Feld `label` ↔ DB-Spalte `name`:** Die `tags`-Tabelle hat eine Spalte `name` (historisch — Umbenennung nicht nötig). Der AI-Service schickt/erwartet `label`. Die Internal API mappt transparent: `label` im Request-Body → `name` in der DB, `name` in der DB → `label` im Response.
 
@@ -511,8 +515,8 @@ make precheck / version / tags                        # Versioning
 make tag-patch / tag-minor / tag-major                # SemVer Git-Tag setzen + pushen
 make install                                          # FastAPI-Backend Python-Abhaengigkeiten
 make api-dev                                          # FastAPI-Dev-Server (Port 8001, --reload)
-make api-test                                         # Unit-Tests (pytest tests/unit/)
-make api-test-contract                                # Contract-Tests (pytest tests/contract/)
+make api-test                                         # Unit-Tests (pytest tests/unit/) — braucht Docker (testcontainers Postgres)
+make api-test-contract                                # Contract-Tests (pytest tests/contract/, gegen laufenden localhost:8001)
 
 # AI-Service (aus apps/ai-service/ oder via make -C apps/ai-service ...)
 make install / install-dev                            # Abhaengigkeiten
@@ -627,7 +631,8 @@ database/seeds/
     ├── 001_problems.sql     ← Demo-Probleme
     ├── 002_solutions.sql    ← Demo-Lösungsansätze
     ├── 003_problem_tags.sql ← Tag-Verknüpfungen
-    └── 004_problem_regions.sql ← Regions-Verknüpfungen
+    ├── 004_problem_regions.sql ← Regions-Verknüpfungen
+    └── 005_demo_authors.sql ← Einloggbare Demo-User mit Firma + Verknüpfung an Demo-Probleme (Autor-/Firmen-Chip, `?company=`-Filter)
 ```
 
 ```bash

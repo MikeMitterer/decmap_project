@@ -79,9 +79,56 @@ curl -s http://localhost:8000/similarity \
 
 > **Score-Interpretation:** Ein Score von ~0.5 bedeutet semantisch ähnliches Thema, aber andere Formulierung — das ist kein Bug. `text-embedding-3-small` unterscheidet korrekt zwischen *verwandtem Thema* (0.5x) und *fast identischem Text* (0.85+). Der Threshold von 0.85 ist für Duplikat-Erkennung beim Einreichen ausgelegt, nicht für thematische Suche.
 >
-> **Sprachnormalisierung:** Nicht-englischer Input wird vor dem Embedding via `TranslationService.to_english()` übersetzt (langdetect → LLM nur bei Nicht-Englisch). Gespeicherte Embeddings basieren auf `description_en` — ohne Normalisierung würden DE/EN-Vektoren nie den Threshold erreichen.
+> **Sprachnormalisierung:** Nicht-englischer Input wird vor dem Embedding via `TranslationService.to_english()` übersetzt (langdetect → LLM nur bei Nicht-Englisch). Gespeicherte Embeddings basieren auf **Titel + Beschreibung** (`title_en` + `description_en`) — ohne Normalisierung würden DE/EN-Vektoren nie den Threshold erreichen. Nach dem Quellen-Wechsel (früher description-only): `POST /embeddings/reindex`.
 >
 > **Dev-Threshold:** Bei weniger als ~50 Problems: `SIMILARITY_THRESHOLD=0.55` / `DUPLICATE_THRESHOLD=0.70` in `.env` setzen. Prod-Werte (0.85/0.92) sind für sparse Datasets zu streng.
+
+---
+
+### Solution-Similarity-Check (global)
+
+Prüft einen Lösungs-Text gegen **alle** approved Solutions (nicht problem-scoped) via pgvector.
+Kein Auth — wird vom `SolutionForm` debounced während der Eingabe aufgerufen, und als Submit-Backstop
+im `solution-submitted`-Hook. `content` mind. 20, max. 2000 Zeichen.
+
+```bash
+curl -s http://localhost:8000/solution-similarity \
+  -H "Content-Type: application/json" \
+  -d '{"content": "Implement a quarterly AI governance review board with cross-department representatives."}' | jq
+```
+
+```json
+{
+  "similar_solutions": [
+    {"id": "uuid-...", "problem_id": "uuid-...", "content": "...", "score": 0.94}
+  ],
+  "has_duplicates": false
+}
+```
+
+> Embeddings werden erst bei Solution-Approval gespeichert (`embed_and_store`, englischer Canonical) —
+> Admin-/`AUTO_APPROVE`-genehmigte und Alt-Solutions ohne Embedding werden daher noch nicht als
+> Duplikat erkannt (Stand 2026-06-19, vgl. [`features.md`](features.md)).
+
+---
+
+### Query-Übersetzungs-Kandidaten (cross-linguale Suche, Multi-Kandidaten Option B)
+
+Erweitert einen Suchbegriff in **mehrere** Kandidaten (gebeugte Formen + nahe Synonyme) in `target_lang`.
+Wird ausschließlich vom Backend-Keyword-Pfad (`GET /problems?q=`) genutzt, um den Recall zu erhöhen:
+jeder Kandidat wird als eigene `plainto_tsquery`-Klausel gegen den Sprach-`tsvector` OR-verknüpft.
+Kein Auth. Getrennt vom Single-String-`POST /translate` (Submit-/Display-Flow bleibt unverändert).
+Best-effort: deduped + auf 6 gecappt, `[]` bei LLM-Fehler (Backend fällt dann auf die rohe Query zurück).
+
+```bash
+curl -s http://localhost:8000/translate/candidates \
+  -H "Content-Type: application/json" \
+  -d '{"text": "missing", "target_lang": "de"}' | jq
+```
+
+```json
+{ "candidates": ["fehlend", "fehlende", "vermisst"] }
+```
 
 ---
 
@@ -165,7 +212,10 @@ Generiert **keine** neue KI-Lösung (die bereits vorhandene bleibt).
 
 ---
 
-**Lösung eingereicht** (Spam-Filter-Pipeline — analoger Flow zu problem-submitted)
+**Lösung eingereicht** (KI ist das Moderations-Gate — kein menschlicher Pflicht-Schritt)
+
+Sauberer LLM-Befund **und** kein Duplikat → sofort `approved` (Embedding wird gespeichert,
+Solution erscheint live). Bemängelt → `needs_review` (Admin-Queue, **kein** Auto-Reject).
 
 ```bash
 curl -s http://localhost:8000/hooks/solution-submitted \
@@ -180,17 +230,21 @@ curl -s http://localhost:8000/hooks/solution-submitted \
 ```
 
 ```json
-{"status": "pending"}
+{"status": "approved"}
 ```
 
-Spam-Beispiel (→ `rejected`):
+Bemängelte Lösung (→ `needs_review` statt früher `rejected` — die KI lehnt nicht hart ab):
 ```bash
 -d '{"solution_id": "sol-002", "problem_id": "test-001", "content": "I agree. See above.", "submitted_at": null}'
 ```
 
 ```json
-{"status": "rejected", "reason": "placeholder content with no actionable substance"}
+{"status": "needs_review", "reason": "placeholder content with no actionable substance"}
 ```
+
+Globaler Duplikat-Check (über **alle** approved Solutions): Score > `duplicate_threshold` ohne
+`"signals": ["duplicate_confirmed"]` → `{"status": "needs_review", "reason": "possible_duplicate"}`.
+LLM-Provider down → fail-safe `{"status": "needs_review", "reason": "moderation_error"}`.
 
 ---
 
@@ -214,6 +268,16 @@ Nötig nach einem Modellwechsel oder für die initiale Befüllung.
 > sind implementiert. Smoke-Test: `./scripts/smoke-test.sh reindex`.
 
 ```bash
+# Komfort-Wrapper (apps/backend) — SERVICE_TOKEN aus .env, Token wird nie ausgegeben
+# (URL kommt NICHT aus der .env: dort steht die interne Backend→AI-Route, nicht der Proxy)
+make ai-reindex                              # Default: nginx-Proxy http://int.decisionmap.ai/api
+make ai-reindex URL=http://ai-service:8000   # Prod-Override (ai-service-Container)
+make ai-reindex URL=http://localhost:8000    # AI-Service direkt (ohne Proxy)
+
+# oder direkt das Script (run-Subcommand Pflicht; --help/no-arg zeigt Hilfe):
+bash scripts/ai-reindex.sh run --token <token> --url http://localhost:8000
+
+# oder roh per curl:
 curl -s -X POST http://localhost:8000/embeddings/reindex \
   -H "X-Service-Token: <dein-token>" | jq
 ```
@@ -292,6 +356,72 @@ Vote-Events kommen über den Backend-WebSocket (`useBackendRealtime`, Port 8001)
 ## Backend-Endpunkte
 
 Endpunkte des FastAPI-Backends (Port 8001).
+
+### Problems — Keyset-Pagination + Server-Suche (Server-Driven Search Phase 1)
+
+`GET /problems` liefert eine paginierte Seite `{ items, next_cursor, total }` (kein komplettes
+Set mehr). `limit` default 50 (Cap 100); `next_cursor` der Vorseite an `cursor` weiterreichen.
+
+```bash
+# Erste Seite, nach Votes sortiert
+curl -s "http://localhost:8001/problems?sort=votes&limit=50" | jq '{total, next: .next_cursor, n: (.items|length)}'
+
+# Cross-linguale Keyword-Suche: Query wird pro Sprache in mehrere Kandidaten übersetzt
+# (POST /translate/candidates — gebeugte Formen + Synonyme), je Kandidat OR gegen den FTS-tsvector
+# — q=missing und q=fehlend liefern dieselbe Menge (#32, Multi-Kandidaten Option B)
+curl -s "http://localhost:8001/problems?q=missing" | jq '.items[].title'
+
+# Semantische Suche (Embedding-Distanz; ignoriert sort, exklusiv zu q)
+# items[].score = 1 − Distanz, auf [0,1] geklemmt (Relevanz, nur im Semantik-Modus gesetzt; sonst null)
+curl -s "http://localhost:8001/problems?semantic=poor%20data%20quality" | jq '{total, scores: [.items[].score]}'
+
+# Server-Filter: Cluster-Subtree (AND), Regionen (OR), user, company
+# user/company sind komma-separiert multi-value: user → IN, company → case-insensitive ILIKE-OR
+# company ist Ganzwert-ILIKE ohne Wildcards — vollständiger, exakter Firmenname nötig (Live-Verify F1)
+curl -s "http://localhost:8001/problems?tags=<tagId>&regions=<regId>&company=Acme%20Manufacturing%20GmbH,NordBank%20AG" | jq '.total'
+
+# Nach Cluster-/Struktur-Tag-Namen sortieren, aufsteigend (bidirektional via dir)
+curl -s "http://localhost:8001/problems?sort=tag&dir=asc&limit=50" | jq '.items[].title'
+
+# Nach Firma des Autors sortieren (Company-Spalte der Table); jedes Item trägt company + author_display_name
+curl -s "http://localhost:8001/problems?sort=company&dir=asc&limit=50" | jq '.items[] | {title, company, author_display_name}'
+```
+
+> `sort`: `created` (default) / `votes` / `title` / `solutions` / `status` / `tag` / `company` / `relevance` (Keyset pro Modus, über alle Seiten gruppiert). `tag` sortiert nach dem Struktur-/Cluster-Tag-Namen (`''`-Bucket für unclustered); `company` nach der Firma des Autors (`coalesce(User.company,'')`, `''`-Bucket für anonym/firmenlos). `relevance` ist opt-in und greift nur mit `q` (Σ `ts_rank` über die FTS-Registry-Sprachen; ohne `q` Fallback auf `created`). Jedes Item trägt die Autor-Profilfelder `company` (Firma) und `author_display_name` (öffentlicher Name; beide pro Seite via `_load_authors` gebatcht, `null` für anonyme Autoren oder ohne gesetzten Namen) — so rendert das Detail-Panel Firma **und** Autor ohne clientseitigen User-Lookup.
+> `dir`: `asc` | `desc` — server-seitig für **jeden** Modus wirksam; fehlt `dir`, gilt der Default je Modus (`created`/`votes`/`solutions` desc, `title`/`status`/`tag` asc), ungültiger Wert → `422`. Die Richtung reist im Cursor mit (Seite 2+ behält sie, `dir` wird dann ignoriert).
+> `status_filter != approved` erfordert Superuser — inkl. `status_filter=all` (keine Status-Einschränkung; die Admin-Table nutzt es, um alle
+> Status zu sehen). Folgeseite: `?cursor=<next_cursor>`. Der Graph nutzt seit Phase 2 (Task 2.3) `GET /problems/cluster-summary`
+> (s.u.) + lazy Drill-Down über `GET /problems?tags=`. Der Übergangs-Endpoint `GET /problems/all` ist seit Task 2.4
+> entfernt (samt Data-Layer-`fetchAllProblems`/`fetchProblems`). Contract: [`features.md → Sprachunabhängige Suche`](features.md).
+
+---
+
+### Graph-Cluster-Aggregat (Server-Driven Search Phase 2, Task 2.1)
+
+`GET /problems/cluster-summary` liefert das Graph-Übersichts-Aggregat, ohne alle Problems zu laden —
+Basis für den Graph-Drill-Down, der den (seit Task 2.4 entfernten) `GET /problems/all` ablöst. Kein Auth (öffentlich lesbar wie die
+approved-Liste). Route ist **vor** `/{problem_id}` deklariert (Shadow-Route-Guard wie `/all` + `/search`).
+
+```bash
+curl -s http://localhost:8001/problems/cluster-summary | jq
+```
+
+```json
+{
+  "max_vote_score": 42,
+  "clusters": [
+    {"tag_id": "uuid-...", "problem_count": 7}
+  ],
+  "unclustered_count": 3
+}
+```
+
+> `max_vote_score`: `MAX(vote_score)` über approved, nicht-gelöschte Problems. `clusters`: ein Eintrag pro
+> Struktur-Tag (`level < 10`) mit dem **Subtree**-Count (Problem trägt das Tag **oder** einen Nachfahren — selbes
+> BFS `_subtree_tag_ids` wie der `tags`-Filter, portabel SQLite + Postgres). `unclustered_count`: approved
+> Problems ganz ohne Struktur-Tag. User-Tags (`level = 10`) zählen nicht als Cluster.
+
+---
 
 ### Geo-Detection
 

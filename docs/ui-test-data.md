@@ -4,6 +4,9 @@ Testszenarien für manuelles UI-Testing und curl-basiertes Seeding.
 
 > **Dev-Endpunkte:** Backend `http://localhost:8001` | nginx-Proxy `https://int.decisionmap.ai`  
 > **Auth:** Login als Admin/Superuser vor curl-Calls — JWT-Token aus Cookie/Login-Response verwenden.
+> **UI-/Form-Pendant:** Copy-paste-fertige Einträge zum direkten Testen des „+ Add problem"-Flows
+> (Form, Similarity-Check, EN-Translation, Moderation, Locale-Guard) liegen in
+> `apps/frontend/tickets/SAMPLE-PROBLEMS.md` — dieses Dokument hier ist die curl-/Seeding-Variante.
 
 ---
 
@@ -12,6 +15,7 @@ Testszenarien für manuelles UI-Testing und curl-basiertes Seeding.
 - [Legitime Probleme](#legitime-probleme)
 - [Lösungsansätze](#lösungsansätze)
 - [Spam-Probleme](#spam-probleme)
+- [Demo-Autoren (Autor-/Firmen-Chip)](#demo-autoren-autor-firmen-chip)
 - [curl-Referenz](#curl-referenz)
 
 ---
@@ -201,6 +205,48 @@ von Experten entwickelt, von Tausenden Unternehmen genutzt. Kontaktieren Sie uns
 
 **Erwartetes Ergebnis:** `rejected` — werblicher Inhalt, kein echtes Problem,
 externe URL, Eigenwerbung.
+
+---
+
+## Demo-Autoren (Autor-/Firmen-Chip)
+
+Seed `database/seeds/demo/005_demo_authors.sql` (via `make db-seed-demo`) legt zwei einloggbare
+Demo-User mit Firma an und hängt sie als Autoren an bestehende approved Probleme — macht das
+violette Firmen-Chip im Problem-Detail-Panel und den server-seitigen `?company=`-Filter testbar.
+Der UPDATE ist idempotent und greift auch auf bereits eingespielten Daten.
+
+| Login | Passwort | Firma | Probleme |
+|---|---|---|---|
+| `demo.acme@int.decisionmap.ai` | `DemoPass123!` | Acme Manufacturing GmbH | 4 |
+| `demo.nordbank@int.decisionmap.ai` | `DemoPass123!` | NordBank AG | 2 |
+
+> **Passwort:** `DemoPass123!` erfüllt die Login-Form-Regeln (`pages/login.vue`: ≥8 Zeichen,
+> Groß-/Kleinbuchstabe, Ziffer **und** Sonderzeichen) — `demopass123` schlägt den Client-Login fehl.
+
+**Test:** Ein **beliebiges** Problem mit Firma öffnen → violettes Firmen-Chip (🏢) erscheint (bei
+nicht-anonymen Autoren zusätzlich das grüne Autor-Chip 👤, z.B. „Demo Acme"; je mit Filter-Tooltip/`aria-label`, #30) → Firma anklicken
+filtert die Table server-seitig auf diese Company.
+Der Chip emittiert den exakten Voll-Namen; derselbe Filter ist auch via `?company=`-URL setzbar.
+
+> **Firmen-Chip jetzt auf jedem Problem (`9b8f357`, #30):** Das Firmen-Chip liest die Firma direkt aus
+> `problem.company` (vom Backend auf **jedem** `ProblemRead` geliefert) und zeigt sich daher bei **jedem**
+> Problem mit gesetzter Firma — nicht mehr nur bei eigenen. Zuvor hing der **ganze** Autor-/Firmen-Block am
+> clientseitigen `userCache` (`v-if="author"`); für normale Betrachter war `author` `null`, also blieb das Chip
+> unsichtbar. Fix: Wrapper-Bedingung auf `author || problem.company` erweitert, das 🏢-Chip auf `problem.company`
+> gated. Das 👤-Autor-Chip wurde in `70f8a84` (#30) nach derselben Logik nachgezogen: `author_display_name`
+> reist jetzt auf **jedem** `ProblemRead` mit (gebatcht via `_load_authors`, das `company` + `display_name` in
+> einer Query holt), das Chip rendert aus `problem.authorDisplayName` (Cache-Fallback nur für den eigenen User)
+> und erscheint daher bei **jedem** nicht-anonymen Problem, nicht mehr nur bei eigenen.
+> Die sortierbare **Firmen-Spalte** der Table nutzt dieselbe `ProblemRead.company`-Quelle
+> und rendert sie als kompakten farbigen **Monogramm-Badge** (1–2 Initialen, Vollname per Hover-Tooltip);
+> `sort=company` + Klick auf den Badge (= Firmen-Filter) sind ebenfalls testbar.
+> **Kompakt-Modus (`27fa7a9`):** Eine Zeile anklicken (Detail-Panel öffnet, Tabelle ~70 % Breite) → die Spalten
+> **Cluster** und **Eingereicht** verschwinden, damit die Title-Spalte den Platz behält; Panel schließen → alle Spalten zurück.
+
+> **Live-Verify F1 (2026-06-27, #29):** der `company`-Filter ist ein Ganzwert-ILIKE **ohne** Wildcards —
+> der **vollständige, exakte** Firmenname (`Acme Manufacturing GmbH`, nicht `Acme`) ist nötig, sonst 0 Treffer.
+> Das in `fc68cf6` erprobte Freitext-Eingabefeld über der Tabelle wurde deshalb in `ebb759f` wieder **entfernt** —
+> Firmen-Filtern läuft über Panel-Chip + `?company=`-URL + aktive Tabellen-Chips.
 
 ---
 
