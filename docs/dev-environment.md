@@ -6,7 +6,6 @@
 - [Architektur der lokalen Umgebung](#architektur-der-lokalen-umgebung)
 - [Starten und Stoppen](#starten-und-stoppen)
 - [Ersteinrichtung (neues Dev-Gerät)](#ersteinrichtung-neues-dev-gerät)
-- [Fake-Daten vs. echte Daten](#fake-daten-vs-echte-daten)
 - [Echtzeit-Updates — Grundanforderung](#echtzeit-updates-grundanforderung)
 - [AI-Service venv-Gotcha](#ai-service-venv-gotcha)
 - [Procfile.dev](#procfiledev)
@@ -163,15 +162,21 @@ nur auf `127.0.0.1` horcht, `NUXT_HOST=0.0.0.0` ergänzen.
 **`apps/backend/.env`**:
 ```env
 DATABASE_URL=postgresql+asyncpg://decisionmap:decisionmap@localhost:5432/decisionmap
-SECRET_KEY=dev-secret-key-change-in-production
-FRONTEND_URL=http://localhost:3000    # Basis-URL für E-Mail-Links (Verify, Reset, Magic Link)
-MAIL_SUPPRESS=true                    # kein echter E-Mail-Versand in Dev
-EMAIL_FROM=noreply@decisionmap.ai     # Darf keine .local-Domain sein — Backend startet sonst nicht
-SERVICE_TOKEN=dev-service-token       # Shared Secret apps/backend ↔ apps/ai-service
-AI_SERVICE_URL=http://localhost:8000  # Docker löst localhost:8000 als host.docker.internal auf
+# Pflicht: echten Wert setzen (openssl rand -hex 32) — leer/Platzhalter bricht den Start hart ab
+SECRET_KEY=
+# Basis-URL für E-Mail-Links (Verify, Reset, Magic Link)
+FRONTEND_URL=http://localhost:3000
+# kein echter E-Mail-Versand in Dev
+MAIL_SUPPRESS=true
+# Darf keine .local-Domain sein — Backend startet sonst nicht
+MAIL_FROM=noreply@decisionmap.ai
+# Shared Secret apps/backend ↔ apps/ai-service — Pflicht, Platzhalter (dev-service-token) bricht den Start ab
+SERVICE_TOKEN=
+# Docker löst localhost:8000 als host.docker.internal auf
+AI_SERVICE_URL=http://localhost:8000
 ```
 
-> **Gotcha `EMAIL_FROM`:** Ist `EMAIL_FROM` auf eine `.local`-Domain gesetzt (z.B. `noreply@decisionmap.local`),
+> **Gotcha `MAIL_FROM`:** Ist `MAIL_FROM` auf eine `.local`-Domain gesetzt (z.B. `noreply@decisionmap.local`),
 > startet das Backend nicht. Immer eine gültige Domain verwenden, auch in Dev mit `MAIL_SUPPRESS=true`.
 
 > **Gotcha `AI_SERVICE_URL` in Docker:** Der Backend-Container läuft in Docker, der AI-Service lokal.
@@ -181,23 +186,23 @@ AI_SERVICE_URL=http://localhost:8000  # Docker löst localhost:8000 als host.doc
 
 **`apps/frontend/.env`**:
 ```env
-BACKEND_URL=http://localhost:8001     # FastAPI Backend
-USE_FAKE_DATA=false                   # true = kein Backend nötig (UI-Entwicklung)
-DEV_TOOLS=true                        # Dev-Tools-Seite (/dev-tools) — Erfordert Admin-Login
+# AI-Service-WS (ohne /ws); zugleich einzige AI-Service-Quelle im Frontend — die
+# AI-Service-HTTP(S)-Origin wird daraus abgeleitet (getAiServiceUrl), kein AI_SERVICE_URL
+WS_URL=ws://int.decisionmap.ai
+# FastAPI Backend
+BACKEND_URL=http://backend.int.decisionmap.ai
+# Dev-Tools-Seite (/dev-tools) — Erfordert Admin-Login
+DEV_TOOLS=true
 ```
 
-[↑ Inhalt](#inhalt)
+> **Gotcha AI-Service-HTTP nur mit Dev-Proxy:** Die AI-Service-Calls der Composables
+> (Translate, KI-Entwurf) sind fest auf `/api/...` (nginx-Rewrite) verdrahtet und
+> funktionieren nur ueber den Dev-Proxy (`int.decisionmap.ai`). Im Direkt-Port-Modus
+> (`WS_URL=ws://localhost:8000`) gehen WebSocket (`/ws`) + Backend direkt, die
+> AI-HTTP-Routen aber nicht.
 
----
-
-## Fake-Daten vs. echte Daten
-
-```env
-USE_FAKE_DATA=true   # In-Memory-Daten, kein Backend nötig — ideal für reine UI-Arbeit
-USE_FAKE_DATA=false  # Echter FastAPI-Backend + AI-Service
-```
-
-Beide Layer implementieren dasselbe Interface — kein Unterschied für Komponenten.
+> Der frühere Fake-Data-Layer (`USE_FAKE_DATA`) wurde entfernt (Issue #17) — das Frontend
+> läuft immer gegen Backend + AI-Service.
 
 [↑ Inhalt](#inhalt)
 
@@ -357,7 +362,7 @@ Specs: `smoke.spec.ts` (Homepage, Table, Status-Page), `login.spec.ts`, `plus-bu
 `data-testid`-Attribute auf Komponenten sind der Kontrakt zwischen Specs und UI:
 `add-problem-btn`, `problem-form`, `problem-submit-btn`, `add-solution`, `solution-form`.
 
-**Gotcha — `npm run test` laeuft NICHT fuer E2E:** Vitest (`npm run test`) laedt alle Dateien unter `tests/` — inklusive `tests/e2e/*.spec.ts`. Diese importieren `@playwright/test` und scheitern sofort mit `Playwright Test did not expect test.describe() to be called here`. Unit-Tests und E2E-Tests immer getrennt ausfuehren: `npm run test` (Vitest, 143 Tests) und `npm run test:e2e` (Playwright, 11 E2E-Tests).
+**Gotcha — `npm run test` laeuft NICHT fuer E2E:** Vitest (`npm run test`) laedt alle Dateien unter `tests/` — inklusive `tests/e2e/*.spec.ts`. Diese importieren `@playwright/test` und scheitern sofort mit `Playwright Test did not expect test.describe() to be called here`. Unit-Tests und E2E-Tests immer getrennt ausfuehren: `npm run test` (Vitest, 147 Tests) und `npm run test:e2e` (Playwright, 11 E2E-Tests).
 
 **Gotcha — `networkidle` haengt:** Nuxt oeffnet WebSockets fuer alle User (auch anon) in `onMounted`.
 `page.waitForLoadState('networkidle')` wartet auf Netzwerkruhe — bei offenen WS-Verbindungen tritt diese nie ein.

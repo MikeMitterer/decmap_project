@@ -36,58 +36,90 @@ Diese Variablen gehoeren nicht in `.env.example` — sie werden einmalig in der 
 
 ```
 # Frontend
-USE_FAKE_DATA=true             # true = in-memory Fake-Daten, false = echter Server
-BACKEND_URL=http://localhost:8001  # FastAPI-Backend (apps/backend/, Port 8001)
-WS_URL=ws://localhost:8000     # WebSocket-URL des FastAPI-Service
-SHOW_VOTING=false              # Feature Flag: Voting-Visualisierung aktivieren
-REQUIRE_AUTH=false             # Feature Flag: Login fuer Einreichungen erzwingen
-AUTO_APPROVE=false             # Feature Flag: Neue Problems automatisch freischalten (ohne Moderations-Review)
 
-# Datenbank
-POSTGRES_URL=                  # PostgreSQL Connection String (ai-service)
+# FastAPI-Backend (apps/backend/, Port 8001)
+BACKEND_URL=http://localhost:8001
+# AI-Service-WS (Port 8000, ohne /ws — der Client haengt /ws an); zugleich einzige
+# AI-Service-Quelle im Frontend: getAiServiceUrl leitet daraus die HTTP(S)-Origin ab
+# (ws->http, /ws entfaellt), Composables haengen /api/... an — kein Frontend-AI_SERVICE_URL
+WS_URL=ws://localhost:8000
+# Feature Flag: Neue Problems automatisch freischalten (ohne Moderations-Review)
+AUTO_APPROVE=false
 
 # AI-Service — Provider
-EMBEDDING_PROVIDER=openai      # openai | (ollama — noch nicht implementiert)
-LLM_PROVIDER=openai            # openai | anthropic
-OPENAI_API_KEY=                # OpenAI API-Key fuer Embeddings + LLM-Calls
+
+# openai | (ollama — noch nicht implementiert)
+EMBEDDING_PROVIDER=openai
+# openai | anthropic — Spam-Filter/Clustering/KI-Entwurf
+LLM_PROVIDER=openai
+# openai | anthropic — eigene Achse fuer Uebersetzung
+TRANSLATION_PROVIDER=openai
+# OpenAI API-Key fuer Embeddings + LLM-Calls
+OPENAI_API_KEY=
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 OPENAI_LLM_MODEL=gpt-4o-mini
-ANTHROPIC_API_KEY=             # Nur benoetigt wenn LLM_PROVIDER=anthropic
-ANTHROPIC_MODEL=claude-haiku-4-5-20251001
+# Modell nur fuer Uebersetzung (Code-Fallback auf OPENAI_LLM_MODEL, wenn leer)
+OPENAI_TRANSLATION_MODEL=gpt-4o-mini
+# Nur benoetigt wenn LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=
+ANTHROPIC_LLM_MODEL=claude-haiku-4-5-20251001
+# Modell nur fuer Uebersetzung (Code-Fallback auf ANTHROPIC_LLM_MODEL, wenn leer)
+ANTHROPIC_TRANSLATION_MODEL=claude-haiku-4-5-20251001
 
 # AI-Service — Konfiguration
-CLUSTERING_INTERVAL=360        # Batch-Clustering-Intervall in Minuten
-SIMILARITY_THRESHOLD=0.85      # Schwellenwert fuer Aehnlichkeitserkennung (0.0–1.0); Dev mit <50 Problems: 0.55 (Prod-Werte zu streng)
-DUPLICATE_THRESHOLD=0.92       # Schwellenwert fuer Duplikat-Erkennung; Dev: 0.70
-BOT_SUBMIT_MIN_SECONDS=10      # Mindestzeit zwischen Seitenaufruf und Submit
-BOT_SESSION_MAX_HOURLY=10      # Max. Submissions pro Session pro Stunde
-BOT_IP_MAX_SESSIONS=5          # Max. verschiedene Sessions pro ip_hash
-SERVICE_TOKEN=                 # Shared Secret (X-Service-Token Header); leer = Dev-Mode (kein Check)
-CORS_ORIGINS=["http://localhost:3000"]  # JSON-Array erlaubter Browser-Origins
+
+# Batch-Clustering-Intervall in Minuten
+CLUSTERING_INTERVAL=360
+# Schwellenwert fuer Aehnlichkeitserkennung (0.0–1.0); Dev mit <50 Problems: 0.55 (Prod-Werte zu streng)
+SIMILARITY_THRESHOLD=0.85
+# Schwellenwert fuer Duplikat-Erkennung; Dev: 0.70
+DUPLICATE_THRESHOLD=0.92
+# Mindestzeit zwischen Seitenaufruf und Submit
+BOT_SUBMIT_MIN_SECONDS=10
+# Max. Submissions pro Session pro Stunde
+BOT_SESSION_MAX_HOURLY=10
+# Max. verschiedene Sessions pro ip_hash
+BOT_IP_MAX_SESSIONS=5
+# Shared Secret (X-Service-Token Header); leer bricht den Start ab (fail-closed)
+SERVICE_TOKEN=
+# true = expliziter Dev-Opt-in: Start trotz leerem SERVICE_TOKEN (Hook-Auth aus)
+ALLOW_INSECURE_DEV=false
+# JSON-Array erlaubter Browser-Origins
+CORS_ORIGINS=["http://localhost:3000"]
 
 # apps/backend/ — FastAPI Backend (Port 8001)
+
 DATABASE_URL=postgresql+asyncpg://decisionmap:decisionmap@localhost:5432/decisionmap
-SECRET_KEY=dev-secret-key-change-in-production
-FRONTEND_URL=http://localhost:3000    # Basis-URL fuer E-Mail-Links (Verify, Reset, Magic Link)
+# Pflicht — leer/Platzhalter-Wert bricht den Start hart ab (RuntimeError)
+SECRET_KEY=
+# Auth-Cookie (HttpOnly): leer = host-only (Dev); Prod ".decisionmap.ai" (Frontend + api. teilen das Cookie)
+COOKIE_DOMAIN=
+# true in Prod — Cookie nur ueber HTTPS
+COOKIE_SECURE=false
+# "lax" blockt cross-site State-Changing-Requests (CSRF-Schutz)
+COOKIE_SAMESITE=lax
+# Basis-URL fuer E-Mail-Links (Verify, Reset, Magic Link)
+FRONTEND_URL=http://localhost:3000
 MAIL_SERVER=email-smtp.eu-west-1.amazonaws.com
 MAIL_PORT=587
-MAIL_USERNAME=                        # AWS SES SMTP-Zugangsdaten
+# AWS SES SMTP-Zugangsdaten
+MAIL_USERNAME=
 MAIL_PASSWORD=
 MAIL_FROM=noreply@decisionmap.ai
-MAIL_SUPPRESS=false                   # true = kein echter E-Mail-Versand (Pflicht in Tests)
+# true = kein echter E-Mail-Versand (Pflicht in Tests)
+MAIL_SUPPRESS=false
 AI_SERVICE_URL=http://localhost:8000
-SERVICE_TOKEN=dev-service-token       # Shared Secret apps/backend ↔ apps/ai-service
+# Shared Secret apps/backend ↔ apps/ai-service — Pflicht, Platzhalter (dev-service-token, change-me) bricht den Start ab
+SERVICE_TOKEN=
 ```
 
 ## Feature Flags
 
 | Flag | Standard | Beschreibung |
 |---|---|---|
-| `SHOW_VOTING` | `false` | Vote-Scores in der Graph-Visualisierung anzeigen |
-| `REQUIRE_AUTH` | `false` | Login fuer Einreichungen erzwingen |
 | `AUTO_APPROVE` | `false` | Neue Problems automatisch freischalten (ohne Moderations-Review) |
 
-**Hinweis:** Frontend-Feature-Flags (`SHOW_VOTING`, `REQUIRE_AUTH`, `AUTO_APPROVE`) werden zur Build-Zeit in das Nuxt-Bundle eingebettet (`runtimeConfig.public.*`). Eine Änderung in `.env` auf dem Server greift erst nach einem Rebuild + Redeploy des Frontend-Images:
+**Hinweis:** Das Frontend-Feature-Flag `AUTO_APPROVE` wird zur Build-Zeit in das Nuxt-Bundle eingebettet (`runtimeConfig.public.autoApprove`). Eine Änderung in `.env` auf dem Server greift erst nach einem Rebuild + Redeploy des Frontend-Images:
 ```bash
 # apps/frontend
 make build
@@ -154,7 +186,7 @@ Vollständige Einrichtungsanleitung: [`docs/ses-setup.md`](ses-setup.md). Tracki
 
 SMTP-Verbindung testen: `./scripts/smtp-test.py --send --to dein@email.com` (liest `apps/backend/.env` automatisch).
 
-**Gotcha — Hetzner blockiert ggf. Port 587:** Mit Mailjet wurde beobachtet, dass Hetzner VPS ausgehende Verbindungen auf Port 587 blockiert. AWS SES unterstützt auch Port 465 (TLS) als Fallback: `EMAIL_SMTP_PORT=465`, `EMAIL_SMTP_SECURE=true`. Vor Go-Live testen: `./scripts/smtp-test.py` oder `nc -zv email-smtp.<region>.amazonaws.com 587`.
+**Gotcha — Hetzner blockiert ggf. Port 587:** Mit Mailjet wurde beobachtet, dass Hetzner VPS ausgehende Verbindungen auf Port 587 blockiert. AWS SES unterstützt auch Port 465 (TLS) als Fallback: `MAIL_PORT=465`, `MAIL_SSL_TLS=true` (`MAIL_STARTTLS=false`). Vor Go-Live testen: `./scripts/smtp-test.py` oder `nc -zv email-smtp.<region>.amazonaws.com 587`.
 
 **Gotcha — Hetzner DNS + SES DKIM CNAME:**
 SES DKIM-Einrichtung erzeugt CNAME-Records die auf externe Hostnamen zeigen (`xxxxx.dkim.amazonses.com`). Hetzner Robot (alte Oberfläche) lehnt externe CNAME-Ziele mit Validierungsfehler ab. Lösung: DNS-Einträge in `dns.hetzner.com` (neues Interface) anlegen — dort funktionieren externe CNAME-Ziele problemlos. Hetzners Validierungswarnung ist übereifrig — die Records werden trotzdem korrekt an AWS übermittelt.
@@ -185,7 +217,7 @@ Alle Flows werden jetzt vom FastAPI-Backend ausgeloest (keine Directus-Abhaengig
 
 **Internal API `/internal/*` (Phase 6 — Phase 7 abgeschlossen, AI-Service nutzt ausschließlich diese API):**
 
-Alle Endpoints erfordern `X-Service-Token: <SERVICE_TOKEN>` Header (`verify_service_token` Dependency, 403 bei Fehler, Dev-Wert `dev-service-token`).
+Alle Endpoints erfordern `X-Service-Token: <SERVICE_TOKEN>` Header (`verify_service_token` Dependency, 403 bei Fehler; Vergleich constant-time via `secrets.compare_digest`). Platzhalter-Werte (`dev-service-token`, `change-me`) oder leerer Token brechen den Start ab — siehe Env-Sektion oben.
 
 | Endpoint | Zweck |
 |---|---|
@@ -367,23 +399,15 @@ docker buildx build --platform linux/amd64 --load -t myimage .
 ### Konfiguration ausserhalb der Pipeline
 
 Das `.env` liegt auf dem Hetzner-Server — Jenkins deployt nur den Build-Artefakt.
-Vorlage: `infrastructure/.env.example` (alle Variablen mit Prod-Defaults, HTTPS-URLs, `USE_FAKE_DATA=false`).
+Vorlage: `infrastructure/.env.example` (alle Prod-Variablen fuer den FastAPI-Stack: `SECRET_KEY`/`SERVICE_TOKEN`,
+`DATABASE_URL`, `CORS_ORIGINS`, `MAIL_*`, `COOKIE_DOMAIN/SECURE/SAMESITE`, Service-URLs — Kommentare
+immer above-line, siehe Konventionen). Drift-Check gegen das Server-`.env`: `make env-audit`.
 
 ```bash
 # Erstmalig einrichten oder aktualisieren:
 cp infrastructure/.env.example infrastructure/.env
 # Werte setzen, dann hochladen:
 scp infrastructure/.env decmap:/srv/decisionmap/.env
-```
-
-Phasenumschaltung ausschliesslich durch Anpassen von `.env` auf dem Server:
-
-```bash
-# Phase 1 — Fake-Daten
-USE_FAKE_DATA=true
-
-# Phase 2 — Live (Pipeline unveraendert)
-USE_FAKE_DATA=false
 ```
 
 ### nginx — TLS-Terminierung
@@ -497,7 +521,10 @@ make setup             # .libs/-Symlinks erstellen (einmalig, benoetigt DEV_LOCA
 make status            # Git-Status aller Workspace-Repos (dirty + ahead/behind Remote)
 make dev-up            # Docker-Services + overmind (Frontend, AI-Service, Backend-Logs via Procfile.dev)
 make dev-down          # Docker-Services stoppen
-make env-audit         # .env vs .env.example Drift-Erkennung (alle Repos; Exit-Code 1 bei Drift)
+make env-audit         # .env gegen SoT .env.example pruefen (alle Repos; Pflicht/optional via #:-Doku; Exit 1 bei Drift)
+python3 scripts/env-audit.py -c   # SoT-unbekannte Keys in .env auskommentieren (--comment-out, mit .env.bak-Backup)
+python3 scripts/env-audit.py -f   # fehlende SoT-Keys (Wert + #:-Doku) in .env uebernehmen (--fill, ueberschreibt nie, mit .env.bak-Backup)
+python3 scripts/env-audit.py --check   # Wert-Gegenueberstellung .env <-> SoT, leak-frei (Secrets nur als sha256-Fingerprint; Typ-Check; Cross-Repo-Konsistenz)
 make lint              # → delegiert an apps/frontend/ und apps/ai-service/
 make test              # → delegiert an apps/frontend/ und apps/ai-service/
 

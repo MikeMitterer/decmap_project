@@ -3,7 +3,7 @@
 Testszenarien für manuelles UI-Testing und curl-basiertes Seeding.
 
 > **Dev-Endpunkte:** Backend `http://localhost:8001` | nginx-Proxy `https://int.decisionmap.ai`  
-> **Auth:** Login als Admin/Superuser vor curl-Calls — JWT-Token aus Cookie/Login-Response verwenden.
+> **Auth:** Login als Admin/Superuser vor curl-Calls — das JWT kommt als HttpOnly-Cookie (kein Token im Response-Body), curl daher mit Cookie-Jar (`-c`/`-b`) verwenden.
 > **UI-/Form-Pendant:** Copy-paste-fertige Einträge zum direkten Testen des „+ Add problem"-Flows
 > (Form, Similarity-Check, EN-Translation, Moderation, Locale-Guard) liegen in
 > `apps/frontend/tickets/SAMPLE-PROBLEMS.md` — dieses Dokument hier ist die curl-/Seeding-Variante.
@@ -252,13 +252,15 @@ Der Chip emittiert den exakten Voll-Namen; derselbe Filter ist auch via `?compan
 
 ## curl-Referenz
 
-### Login (JWT-Token holen)
+### Login (Auth-Cookie holen)
+
+Der Login setzt das JWT als HttpOnly-Cookie (seit 2026-07-06 kein `access_token` mehr im Body) —
+Cookie-Jar speichern und bei Folge-Calls mitsenden:
 
 ```bash
-TOKEN=$(curl -s -X POST http://localhost:8001/auth/jwt/login \
+curl -s -c /tmp/dm-cookies.txt -X POST http://localhost:8001/auth/jwt/login \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=admin@decisionmap.local&password=<passwort>" \
-  | jq -r '.access_token')
+  -d "username=admin@decisionmap.local&password=<passwort>" > /dev/null
 ```
 
 ---
@@ -266,9 +268,8 @@ TOKEN=$(curl -s -X POST http://localhost:8001/auth/jwt/login \
 ### Problem einreichen (Backend-API)
 
 ```bash
-curl -s -X POST http://localhost:8001/problems \
+curl -s -b /tmp/dm-cookies.txt -X POST http://localhost:8001/problems \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $TOKEN" \
   -d '{
     "title": "Fehlender KI-Governance-Rahmen im Unternehmen",
     "description": "Unsere Geschäftsführung hat keine klaren Richtlinien für den Einsatz von KI-Tools festgelegt. Mitarbeiter nutzen eigenständig verschiedene Dienste ohne einheitliche Standards.",

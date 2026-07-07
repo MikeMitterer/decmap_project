@@ -163,7 +163,7 @@ Alembic verwaltet das gesamte Schema — vom initialen Setup bis zu allen Migrat
 database/init/000_schema.sql     → nur PostgreSQL-Extensions (uuid-ossp, vector)
 alembic/versions/001_initial.py  → initiale Tabellen (Alembic baseline)
 alembic/versions/00N_*.py        → inkrementelle Schema-Aenderungen
-database/constraints.sql         → vector(1536), CHECK-Constraints, custom Indizes
+database/constraints.sql         → Legacy (Directus-Aera) — Alembic ist Schema-Owner; referenziert gedroppte clusters-Tabellen, Rückbau-Kandidat (samt Makefile-Target db-constraints)
 ```
 
 ### Regeln

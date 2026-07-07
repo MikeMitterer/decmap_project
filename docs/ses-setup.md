@@ -304,17 +304,18 @@ nano /srv/decisionmap/.env
 
 **Folgende Variablen setzen:**
 ```env
-EMAIL_FROM=noreply@decisionmap.ai
-EMAIL_SMTP_HOST=email-smtp.eu-west-1.amazonaws.com
-EMAIL_SMTP_PORT=587
-EMAIL_SMTP_USER=<smtp-username>
-EMAIL_SMTP_PASSWORD=<smtp-password>
-EMAIL_SMTP_SECURE=false
+MAIL_FROM=noreply@decisionmap.ai
+MAIL_SERVER=email-smtp.eu-west-1.amazonaws.com
+MAIL_PORT=587
+MAIL_USERNAME=<smtp-username>
+MAIL_PASSWORD=<smtp-password>
+MAIL_STARTTLS=true
+MAIL_SSL_TLS=false
 ```
 
-> ⚠️ **Gotcha:** `EMAIL_SMTP_HOST` nur setzen wenn SMTP tatsächlich erreichbar ist.
+> ⚠️ **Gotcha:** `MAIL_SERVER` nur setzen wenn SMTP tatsächlich erreichbar ist.
 > Ist der Host gesetzt aber nicht erreichbar, kann der Backend-Container beim Start verzögert starten.
-> Während der Einrichtung `EMAIL_SMTP_HOST=` (leer) lassen und erst nach erfolgreichem
+> Während der Einrichtung `MAIL_SERVER=` (leer) lassen und erst nach erfolgreichem
 > Phase-7-Test setzen.
 
 ### Backend neu starten

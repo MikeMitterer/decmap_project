@@ -333,6 +333,13 @@ CRUD uber REST. Ruckmeldungen an das UI uber zwei WebSocket-Quellen.
 Vote-Score-Updates laufen **nicht** über den AI-Service — Basis-Funktionalität darf
 nicht vom AI-Service abhängen.
 
+**Payload-Regel (BE-08, [Security-Audit 2026-07-05](security-audit-2026-07-05.md), bewusst deferred):**
+Der Backend-`/ws` ist ein einzelner **unauthentifizierter Shared-Broadcast** — auch
+Moderations-Status-Übergänge laufen darüber (die Admin-Queue hängt daran). WS-Payloads dürfen
+deshalb nur **opake UUIDs + Status-Enum** tragen, nie Titel/Content/`rejection_reason`
+(der Content selbst ist für Dritte seit BE-06 ein 404). Sauberer Fix wäre ein separater
+authentifizierter Admin-WS-Kanal — größerer Umbau, bewusst verschoben.
+
 ### Vote-Score — Ablauf
 
 ```
@@ -511,7 +518,7 @@ Styling: Tailwind-Variant-Selektoren (`.solution-content h2`, `.solution-content
 
 **`renderSolutionMarkdown`** ist die gemeinsame Render-Funktion: `SolutionDetail.vue` (Anzeige), `SolutionForm.vue` (Live-Preview) und die Admin-Moderations-Queue nutzen alle dieselbe Funktion — garantiert konsistentes Rendering.
 
-**SSR/prerender-Pfad:** Der DOMPurify-Link-Hook wird **lazy und client-seitig** registriert (`ensureHook()`), nicht auf Modul-Ebene — sonst crasht der Import von `markdown.ts` beim Prerender von `/problem/**`, weil DOMPurify dort keine Browser-DOM hat (`addHook is not a function`). Ohne DOM (`typeof window === 'undefined'`) liefert `renderSolutionMarkdown` die rohe `markdown-it`-Ausgabe zurueck — sicher dank `html:false` + disabled `image`/`code`/`fence`. Im Browser laeuft wie bisher DOMPurify + Hook. Vgl. Konventionen Fund 28.
+**SSR/prerender-Pfad (seit [Security-Audit 2026-07-05](security-audit-2026-07-05.md)):** `utils/markdown.ts` importiert **`isomorphic-dompurify`** statt `dompurify` — das liefert server- (jsdom) wie client-seitig eine voll initialisierte Instanz, sodass `renderSolutionMarkdown` auf **beiden** Pfaden dieselbe strikte Allowlist **und** den Link-Hardening-Hook anwendet (der fruehere SSR-Bypass, der die rohe `markdown-it`-Ausgabe lieferte, ist entfernt — prerenderte Snapshots enthalten nie unsanitized/un-gehaertete Links). Der Hook wird weiterhin **lazy** registriert (`ensureHook()` im Render-Call, nie auf Modul-Ebene) — kein DOM-Seiteneffekt beim Import. Unit-Tests: `tests/utils/markdown.spec.ts`. Vgl. Konventionen Fund 28.
 
 **`SolutionForm.vue` — Split-Editor Modal (T-13, 2026-06-19):** Das Lösungs-Formular ist ein eigenständiges Centered Modal (`<Teleport to="body">` aus der Komponente selbst, 1080px R-02 Glass-Surface, `max-height: min(840px, calc(100vh - 64px))`) — nicht mehr eine Sub-View im rechten Side-Panel. Layout: Header (Eyebrow + Headline + Problem-Titel + AI-Draft-Button + Close), permanenter **Write · Markdown | Live-Preview**-Split (zwei Spalten nebeneinander) statt der früheren „Schreiben | Vorschau"-Tabs, Sticky-Footer mit Submit. Der Submit-CTA nutzt die User-gewählte Akzentfarbe (`background: rgb(var(--th-accent))` + akzent-basierter Schatten `rgb(var(--th-accent) / 0.4)`) statt des früheren Brand-Gradienten (`var(--dm-grad)`) — konsistent zur Gradient-Disziplin (Gradient nur für Identitäts-Flächen, siehe Konventionen Fund 18). Backdrop theme-aware (gleicher Pattern wie `SolutionPopup`/`ProblemForm`); ESC + Backdrop-Klick → `cancel`; ⌘+Enter / Ctrl+Enter aus dem Textarea → Submit. Entfernt gegenüber der Tab-Variante: `previewMode`-State und die Auto-grow-Textarea-Logik (Textarea füllt jetzt die volle Spaltenhöhe). Form-Logik byte-identisch: `createSolution`, `renderSolutionMarkdown`, `useAiDraft`, `translateToEnglish`, Zod-Schema — unverändert (UI-only-Regel). Trigger-Migration analog zu T-12: `ProblemPanel.vue` öffnet via eigenem `isSolutionFormOpen`-Ref (`panelView`-Variante `'solution-form'` entfernt, Panel zeigt weiter das Problem-Detail hinter dem Backdrop); `pages/problem/[id].vue` rendert `<SolutionForm v-if>` als Root-Sibling. Der Problem-Titel in der Header-Subline („Auf: …") ist **lokalisiert**: beide Caller binden `:problem-title="localizedTitle || problem.title"` — `ProblemPanel.vue` befüllt `localizedTitle` in `updateProblemLocalization()` parallel zur Description via `translateForDisplay(title, lang)` (gleicher Token-Race-Guard), `pages/problem/[id].vue` nutzt den dort bereits vorhandenen `localizedTitle`. Der `|| problem.title`-Fallback (englischer Canonical) greift nur im kurzen Moment vor dem Laden der async-Übersetzung — sonst zeigte die Subline auch im DE-Modus den englischen Titel. Die Markdown-Toolbar (B I H " • ↳) ist **funktional** (T-13a, 2026-06-19): jeder Button fügt Markdown an der aktuellen Cursor-/Selektions-Position des Textareas ein. `applyMark(type)` (gegen `textareaRef`) unterscheidet zwei Modi — `wrap(before, after, placeholder)` umschließt die Selektion (`B`→`**`, `I`→`*`, Link→`[…](https://)`; ohne Selektion wird der Platzhalter „Text" eingefügt und markiert), `linePrefix(prefix)` setzt ein Zeilen-Präfix (`H`→`## `, Quote→`> `, Liste→`- `). Nach dem Insert stellt `await nextTick()` + `el.focus()` + `el.setSelectionRange()` Fokus und Selektion wieder her; die Live-Preview rendert die Änderung sofort mit. Jeder Button hat `title`/`aria-label`. Spec: `apps/frontend/tickets/T-13-solution-form-split-editor.md`.
 
@@ -543,8 +550,7 @@ Aktive Ubersetzung beim Einreichen — nicht passiv via DeepL-Link:
 6. User kann die englische Version vor dem Submit anpassen
 7. Submit triggert Auto-Translate wenn Nicht-Englisch erkannt und noch nicht uebersetzt (`hasNonEnglishContent && !translationDone → handleTranslateAll()`) — EN-Felder sind kein Submit-Blocker
 
-Im Fake-Modus: 700ms simulierter Delay.
-Im Real-Modus: KI-Service (TranslationService via konfiguriertem LLM-Provider — OpenAI `gpt-4o-mini` oder Anthropic `claude-haiku-4-5`, je nach `llm_provider` in `.env`).
+Uebersetzt via KI-Service (`TranslationService`). Uebersetzung ist eine **eigene Faehigkeits-Achse** neben Embedding und LLM: `TRANSLATION_PROVIDER` (openai | anthropic) waehlt den Backend-Provider (OpenAI `gpt-4o-mini` bzw. Anthropic `claude-haiku-4-5` als Default-Modell), `OPENAI_TRANSLATION_MODEL` / `ANTHROPIC_TRANSLATION_MODEL` (Schema `<provider>_<zweck>_model`, leer = das jeweilige `*_LLM_MODEL`) das Modell — durchgereicht an **alle** Uebersetzungs-Calls (Submit/Display/Such-Kandidaten via `translate_query_candidates`). Spam-Filter, Clustering und KI-Entwurf laufen unabhaengig ueber `LLM_PROVIDER` + `*_LLM_MODEL`. Ein reiner Uebersetzungs-Provider (z.B. Mistral/lokal) fuegt sich als `TRANSLATION_PROVIDER=mistral` + `MISTRAL_TRANSLATION_MODEL` ein, ohne Umbenennung.
 
 **`EnglishTranslationSection.vue` — Collapsible UX (Problem Form):** EN-Felder erscheinen als Collapsible-Sektion sobald Nicht-Englisch erkannt wird. Header-Zeile zeigt Chevron-Icon + Titel-Preview im kollabierten Zustand. Auto-Expand nach Uebersetzung: zwei Trigger — `watch(showFields, { immediate: true })` (auch beim Mount wenn showFields bereits true) und `watch(isTranslating)` (Re-Translation wenn Section kollabiert war — showFields aendert sich nicht, der isTranslating-Uebergang true→false triggert Expand). Translate-Button und Info-Button bleiben immer in der Header-Zeile sichtbar — Info-Button nutzt `.stop` um den Collapse-Toggle nicht auszuloesen. Kein visueller Overhead fuer englischsprachige User — `showEnSection` in `useEnglishTranslation.ts` prueft `locale.value !== 'en'` explizit (verhindert falsch-positive Sichtbarkeit, da `looksLikeEnglish` fuer ASCII-Text immer `true` liefert). **`startCollapsed`-Prop:** Wenn `true`, bleibt die Sektion beim `showFields false→true`-Übergang initial eingeklappt — der Caller kontrolliert den Startzustand (z.B. Edit-Modus mit bestehender Übersetzung). 4 Tests in `EnglishTranslationSection.spec.ts` sichern dieses Verhalten ab.
 
@@ -577,7 +583,7 @@ Probleme ohne Region gelten als global relevant.
 Regionen beeinflussen das Ranking (lokale Regionen priorisiert fur regionalen User).
 Filterung moglich aber nicht erzwungen.
 
-**useRegions-Facade:** Komponenten importieren ausschliesslich `useRegions.ts` (`useRegionsFetch()`) — kein Direktimport von `realRegions`. Facade-Pattern ermoeglicht den `USE_FAKE_DATA`-Switch ohne Komponenten-Aenderungen. `_inflight`-Promise-Cache verhindert doppelte Requests wenn mehrere Komponenten gleichzeitig mounten.
+**useRegions-Facade:** Komponenten importieren ausschliesslich `useRegions.ts` (`useRegionsFetch()`) — kein Direktimport von `realRegions`. Facade-Pattern kapselt die Datenquelle (urspruenglich fuer den inzwischen entfernten Fake-Layer-Switch eingefuehrt). `_inflight`-Promise-Cache verhindert doppelte Requests wenn mehrere Komponenten gleichzeitig mounten.
 
 **Geo-Detection:** `useRegionDetection` ermittelt die Region des Users und setzt die Default-Auswahl im Formular.
 
@@ -676,7 +682,6 @@ User klickt "✦ AI Draft"
 - Draft wird nur zurueckgegeben — kein Storage, kein `is_ai_generated`-Flag (User submitted separat via `POST /solutions`)
 - Draft wird auf 2000 Zeichen gekuerzt (`.slice(0, 2000)`) — entspricht dem `maxlength` des Content-Feldes
 - nginx Rate Limit: 5r/min per IP, Burst=1 (enger als `/translate` wegen LLM-Kosten)
-- `USE_FAKE_DATA=true`: Hardcoded Markdown-String nach 800ms Delay
 - Spec: [`docs/specs/2026-06-07-solution-form-design.md`](specs/2026-06-07-solution-form-design.md)
 
 [↑ Inhalt](#inhalt)
@@ -783,7 +788,9 @@ HTTP-Gotcha. Wiederverwendbar fuer kuenftige Share-Buttons (z.B. `SolutionDetail
 
 ## Authentifizierung
 
-fastapi-users — JWT-Auth, E-Mail-Verifizierung, Magic Link (`apps/backend/`, Port 8001).
+fastapi-users — JWT-Auth via **HttpOnly-Cookie**, E-Mail-Verifizierung, Magic Link (`apps/backend/`, Port 8001).
+
+Seit 2026-07-06 (Security-Audit) wird das JWT als HttpOnly-Cookie transportiert (`CookieTransport`, Cookie `decisionmap_auth`) statt im localStorage — der Token ist fuer JavaScript nie lesbar (XSS-Exfiltration geschlossen), `SameSite=Lax` blockt cross-site State-Changing-Requests (CSRF). Prod teilt das Cookie via `Domain=.decisionmap.ai` zwischen Frontend und `api.` (Subdomain-Cookie-Variante, keine nginx-Restrukturierung); Dev nutzt ein host-only Cookie ohne `Secure`. Konfiguration: `COOKIE_DOMAIN`/`COOKIE_SECURE`/`COOKIE_SAMESITE`. Das Frontend sendet jeden Backend-Request mit `credentials: 'include'` (`backendFetch`).
 
 ### Registrierung
 
@@ -821,20 +828,25 @@ Submit bleibt gesperrt bis alle vier Regeln erfüllt sind.
 ```
 User fordert Magic Link an (E-Mail-Eingabe)
       ↓
-POST /auth/request-magic-link → Backend schickt Mail mit Token
+POST /auth/magic-link → Backend schickt Mail mit Token
       ↓
-User klickt Link → /auth/magic-verify.vue → GET /auth/magic-login?token=XXX
+User klickt Link → /auth/magic-verify.vue → GET /auth/magic-verify?token=XXX (credentials: 'include')
       ↓
-Backend antwortet mit JWT → Frontend speichert Token, leitet auf / weiter
+Backend setzt das HttpOnly-Auth-Cookie (kein Token im Body) + is_verified=true
+      ↓
+Frontend hydriert die Session via restoreSession(), leitet auf / weiter
 ```
+
+Ein erfolgreicher Magic-Link beweist E-Mail-Besitz — das Backend setzt dabei `is_verified=true`
+(unverifizierte Accounts werden so nachverifiziert).
 
 `/auth/magic-verify.vue` ist die Landingpage für Magic-Link-Tokens (B4-Fix: neu angelegt).
 
 ### Login / Logout
 
-- POST `/auth/login` → JWT-Token in `localStorage`
-- Token wird synchron im `setup()`-Block geladen (`loadPersistedTokens()` vor `onMounted`) — kein Race mit ersten API-Calls
-- `restoreSession()` (API-Aufruf zur Session-Validierung) in `onMounted`
+- POST `/auth/jwt/login` → Backend setzt das JWT als **HttpOnly-Cookie** (kein Token im Response-Body); der anschließende `/users/me`-Call laedt den User. Kein client-seitiger Token-State mehr — das fruehere `loadPersistedTokens()`-Muster (synchron im `setup()`) ist mit der Cookie-Migration entfallen
+- `restoreSession()` in `onMounted` = Cookie-Probe via `/users/me` — ein 401 bedeutet schlicht „nicht eingeloggt" (anonym), kein Fehler
+- POST `/auth/jwt/logout` → Backend loescht das Cookie (Logout ist nicht mehr rein client-seitig)
 - **Logout bewahrt die aktuelle View** (2026-06-24): `handleLogout` (`default.vue`) navigiert **nicht** mehr unbedingt auf `/` (Graph) — der User bleibt in der View, in der er war (z.B. `/table`). Einzige Ausnahme: auth-gated Admin-Routen (`/admin/**`) werden beim Logout explizit verlassen (→ Graph), da die Admin-Middleware nur bei Navigation greift, nicht bei einem In-Place-Wechsel des Auth-States.
 
 ### „+" Button — Login-Redirect-Flow

@@ -25,8 +25,11 @@ make dev          # uvicorn mit --reload, Port 8000
 make docker-up    # docker compose mit postgres + ai-service
 ```
 
-Ohne gesetztes `SERVICE_TOKEN` (Dev-Mode) kann der Header bei Hook-Endpunkten
-weggelassen werden. Mit Token muss jeder Hook-Aufruf den Header mitschicken:
+`SERVICE_TOKEN` ist Pflicht — ein leerer Wert bricht den Service-Start hart ab
+(fail-closed, seit [Security-Audit 2026-07-05](security-audit-2026-07-05.md)). Nur mit explizitem Dev-Opt-in
+`ALLOW_INSECURE_DEV=true` startet der Service ohne Token; dann kann der Header
+bei Hook-Endpunkten weggelassen werden. Mit Token muss jeder Hook-Aufruf den
+Header mitschicken:
 
 ```
 -H "X-Service-Token: <dein-token>"
@@ -309,9 +312,6 @@ Generiert einen Markdown-Draft für einen Lösungsansatz. User-triggered, kein A
 Kein Auth erforderlich (wie Similarity-Check). nginx Rate Limit: 5r/min per IP, Burst=1.
 
 ```bash
-# Auth-Token aus dem Browser-DevTools kopieren (Network → /api/generate-solution)
-AUTH_TOKEN="<jwt-token>"
-
 curl -s -X POST http://localhost:8000/generate-solution \
   -H "Content-Type: application/json" \
   -d '{"problem_id": "test-001", "lang": "de"}' | jq
@@ -390,7 +390,9 @@ curl -s "http://localhost:8001/problems?sort=company&dir=asc&limit=50" | jq '.it
 > `sort`: `created` (default) / `votes` / `title` / `solutions` / `status` / `tag` / `company` / `relevance` (Keyset pro Modus, über alle Seiten gruppiert). `tag` sortiert nach dem Struktur-/Cluster-Tag-Namen (`''`-Bucket für unclustered); `company` nach der Firma des Autors (`coalesce(User.company,'')`, `''`-Bucket für anonym/firmenlos). `relevance` ist opt-in und greift nur mit `q` (Σ `ts_rank` über die FTS-Registry-Sprachen; ohne `q` Fallback auf `created`). Jedes Item trägt die Autor-Profilfelder `company` (Firma) und `author_display_name` (öffentlicher Name; beide pro Seite via `_load_authors` gebatcht, `null` für anonyme Autoren oder ohne gesetzten Namen) — so rendert das Detail-Panel Firma **und** Autor ohne clientseitigen User-Lookup.
 > `dir`: `asc` | `desc` — server-seitig für **jeden** Modus wirksam; fehlt `dir`, gilt der Default je Modus (`created`/`votes`/`solutions` desc, `title`/`status`/`tag` asc), ungültiger Wert → `422`. Die Richtung reist im Cursor mit (Seite 2+ behält sie, `dir` wird dann ignoriert).
 > `status_filter != approved` erfordert Superuser — inkl. `status_filter=all` (keine Status-Einschränkung; die Admin-Table nutzt es, um alle
-> Status zu sehen). Folgeseite: `?cursor=<next_cursor>`. Der Graph nutzt seit Phase 2 (Task 2.3) `GET /problems/cluster-summary`
+> Status zu sehen). `GET /problems/{id}` (analog `GET /solutions/{id}`) liefert für nicht-`approved` Einträge **404** statt 403,
+> außer Superuser/Owner — Existenz wird Dritten nie bestätigt ([Security-Audit 2026-07-05](security-audit-2026-07-05.md), BE-06).
+> Folgeseite: `?cursor=<next_cursor>` (max. 64 KiB, darüber `422` — BE-09). Der Graph nutzt seit Phase 2 (Task 2.3) `GET /problems/cluster-summary`
 > (s.u.) + lazy Drill-Down über `GET /problems?tags=`. Der Übergangs-Endpoint `GET /problems/all` ist seit Task 2.4
 > entfernt (samt Data-Layer-`fetchAllProblems`/`fetchProblems`). Contract: [`features.md → Sprachunabhängige Suche`](features.md).
 
@@ -443,11 +445,16 @@ curl -s http://localhost:8001/regions/geo | jq
 
 `PATCH /solutions/:id` — erlaubt Inhalt-Edit für den Owner (→ `needs_review`) oder Superuser (Status bleibt unverändert).
 
-```bash
-AUTH_TOKEN="<jwt-token>"
+Auth läuft über das HttpOnly-Cookie (seit 2026-07-06 kein Bearer-Token mehr) — Login setzt das
+Cookie, curl braucht dafür einen Cookie-Jar (`-c` speichern, `-b` mitsenden):
 
-curl -s -X PATCH http://localhost:8001/solutions/<uuid> \
-  -H "Authorization: Bearer $AUTH_TOKEN" \
+```bash
+# Login — setzt das Auth-Cookie in den Jar (kein Token im Response-Body)
+curl -s -c /tmp/dm-cookies.txt -X POST http://localhost:8001/auth/jwt/login \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d 'username=<email>&password=<passwort>' > /dev/null
+
+curl -s -b /tmp/dm-cookies.txt -X PATCH http://localhost:8001/solutions/<uuid> \
   -H "Content-Type: application/json" \
   -d '{"content": "Überarbeiteter Inhalt — mindestens 20 Zeichen."}' | jq
 ```

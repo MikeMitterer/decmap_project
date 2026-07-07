@@ -9,6 +9,7 @@
 - [Composables](#composables)
 - [Python / FastAPI](#python-fastapi)
 - [Workspace Scripts (scripts/)](#workspace-scripts-scripts)
+- [.env / .env.example](#env--envexample)
 - [Klassenstruktur](#klassenstruktur)
 - [Testbarkeit](#testbarkeit)
 - [Dokumentation](#dokumentation)
@@ -162,7 +163,7 @@ Ein neues `v-if` auf einem Element innerhalb einer laufenden Kette bricht die Ke
 <script setup lang="ts">
 const props = defineProps<{
   problemId: string
-  showVoting?: boolean
+  highlighted?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -251,7 +252,9 @@ app.add_middleware(
 
 **Webhook-Security:**
 Alle Hook-Endpoints verwenden `_verify_service_token()` als Dependency.
-Leeres `SERVICE_TOKEN` = Dev-Mode (kein Check). Niemals Secrets in Code hardcoden.
+Seit [Security-Audit 2026-07-05](security-audit-2026-07-05.md) fail-closed: leeres `SERVICE_TOKEN` bricht den
+Start hart ab; Dev ohne Token nur via explizitem `ALLOW_INSECURE_DEV=true`.
+Token-Vergleich constant-time (`hmac.compare_digest`). Niemals Secrets in Code hardcoden.
 
 ```python
 async def _verify_service_token(
@@ -331,6 +334,108 @@ parser = argparse.ArgumentParser(add_help=False)
 Kritische Gotchas (Details: `/code-standards`):
 - **Lib-Funktionen geben keine Ausgaben** — nur differenzierte Exit-Codes (2, 3, …); Fehlermeldungen gehören in den Aufrufer.
 - **`readonly VAR="$(cmd)"`** gibt immer Exit-Code 0 — `|| exit 1` dahinter triggert nie. Stattdessen: `VAR="$(cmd)" || _rc=$?` dann `readonly VAR`.
+
+[↑ Inhalt](#inhalt)
+
+---
+
+## .env / .env.example
+
+**`.env.example` ist die Source of Truth** für den Key-Bestand: ein Key, den die `.env.example`
+nicht kennt, ist in der `.env` unerwartet (Default: aus `.env` entfernen; nur bewusst neue Keys
+in `.env.example` **und** Code aufnehmen — nie umgekehrt „nachdokumentieren").
+`scripts/env-audit.py` setzt diese SoT-Semantik um (neu geschrieben 2026-07-06, Lauf verifiziert):
+`.env` wird gegen `.env.example` geprüft — der SoT unbekannte Keys und fehlende Pflicht-Keys
+sind Fehler (Exit 1), fehlende optionale Keys nur Info. **Pflicht vs. optional:** leerer Wert
+(`KEY=`) = Pflicht, Wert vorhanden = optional (Default greift); Override via `[optional]` /
+`[required]` am Anfang der ersten `#:`-Zeile. **KEY↔Kommentar-Zuordnung:** `#:`-Zeile(n)
+(Debian-Style) im direkt angrenzenden Kommentar-Block über dem Key sind dessen maschinenlesbare
+Beschreibung; eine Leerzeile trennt den Block vom Key, normale `#`-Zeilen (Section-Header,
+Deko `# ───`, Notizen) werden ignoriert, ohne den Block zu unterbrechen. Zusätzliche
+Qualitätswarnungen: Keys ohne `#:`-Doku, mehrfach definierte Keys, verwaiste `#:`-Blöcke —
+mit `--strict` werden Warnungen zu Fehlern (CI-tauglich). Key-Normalisierung (strip `export `)
+an genau einer Stelle (`_normalize_key`).
+Alle vier `.env.example` sind auf `#:`-Beschreibungszeilen umgestellt und vollständig
+dokumentiert (jeder Key hat eine `#:`-Zeile) — `make env-audit` läuft ohne Doku-Warnungen
+(verifiziert 2026-07-06). **Leer bedeutet genau eine Sache: ein Pflicht-Secret, das du selbst
+eintragen musst.** Keys, die früher leer-als-„nimm-den-Code-Default" standen, tragen ihren Wert
+jetzt explizit (`OPENAI_TRANSLATION_MODEL`/`ANTHROPIC_TRANSLATION_MODEL`, `DEV_TOOLS`/`AUTO_APPROVE`,
+Dev-`POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB=decisionmap`) — die „leer → Default"-Indirektion
+ist damit eliminiert (der Fallback-Code bleibt als Sicherheitsnetz, greift aber nicht mehr).
+`[optional]`-Tags bleiben nur für die echten „leer *ist* der Wert"-Fälle ohne sinnvollen
+Nicht-Leer-Wert: `COOKIE_DOMAIN` (leer = host-only Cookie, localhost), `MAIL_USERNAME`/`MAIL_PASSWORD`
+(Dev-Mailpit braucht keine Auth), `ANTHROPIC_API_KEY` (nur bei `LLM_PROVIDER=anthropic`),
+`APP_VERSION` (SSoT ist `pyproject.toml`/Jenkins).
+
+Kommentare stehen **immer über dem Wert** (eigene `#`-Zeile), nie inline (`KEY=value # comment`).
+Inline-Kommentare sind parser-abhängig: python-dotenv/Nuxt/Compose strippen sie nur bei Leerzeichen
+vor dem `#`, ältere Parser nehmen sie in den Wert auf — korrumpiert still z.B. `MAIL_PORT`.
+Above-line ist über alle Parser eindeutig.
+
+```env
+# ─── E-Mail ───────────────────────────────
+
+#: Basis-URL für E-Mail-Links (Verify, Reset, Magic Link)
+FRONTEND_URL=http://localhost:3000
+
+#: [optional] SMTP-User — leer lassen wenn MAIL_SUPPRESS=true
+MAIL_USERNAME=
+```
+
+Drift-Check `.env` gegen die SoT `.env.example` über alle Repos: `make env-audit` (`--strict` für CI).
+**Cross-Repo-Karte:** `python3 scripts/env-audit.py --map` (Kurzform `-m`) listet alle Keys
+konsolidiert über die Repos (Überblick, welcher Key wo Pflicht/optional ist). Die Key-Beschreibung
+stammt aus der ersten `#:`-Zeile und der Repo-Reihenfolge BE → FE → AI → INF (erstes Repo mit
+`#:`-Doku gewinnt; spätere überschreiben nicht).
+**Aufräumen:** `python3 scripts/env-audit.py --comment-out` (Kurzform `-c`; das Script
+auch mit `--repo <pfad>` für ein einzelnes Repo — kein eigenes Make-Target) kommentiert
+genau die der SoT unbekannten Keys in der `.env` aus (`# KEY=wert` — auskommentieren statt löschen,
+Wert bleibt reversibel im File), legt vorher ein Backup `.env.bak-<timestamp>` an und behandelt
+`export KEY=`-Präfixe korrekt. Arbeitet nur zeilenweise auf der Datei — gibt niemals Values aus.
+`.env.bak-*` ist in den Sub-Repo-`.gitignore` eingetragen (Backups enthalten Secrets — nie einchecken).
+`make env-audit` bleibt der reine Audit ohne Schreibzugriff.
+
+**Fehlende SoT-Keys übernehmen:** `python3 scripts/env-audit.py --fill` (Kurzform `-f`) hängt Keys, die
+die SoT kennt, aber der `.env` fehlen, ans Dateiende an — mit Wert **und** `#:`-Doku (1:1 aus der
+`.env.example`, Datei-Reihenfolge) unter einer markierten Sektion (`# ─── Ergänzt aus .env.example … ───`).
+Überschreibt **nie** bestehende Werte (nur nicht vorhandene Keys), ist idempotent (2. Lauf ergänzt nichts)
+und legt vorher dasselbe `.env.bak-<timestamp>`-Backup an. Pflicht-Keys (leerer SoT-Wert) werden mit leerem
+Wert + Doku ergänzt und im Output als zu setzen markiert. `-c` (`--comment-out`) und `-f` sind kombinierbar
+und teilen **ein** Backup (via `_ensure_backup`).
+
+**Wert-Gegenüberstellung:** `python3 scripts/env-audit.py --check` (leak-frei — darf auch ein
+Assistent ausführen) stellt pro Key `.env` ↔ SoT-Default gegenüber: Nicht-Geheimes im Klartext
+(Ports, Flags, Origins), Geheimes maskiert — Keys matching `SECRET|TOKEN|PASSWORD|API_KEY|_KEY`
+erscheinen nur als `sha256:`-Fingerprint, Credentials in URLs (`user:pass@`) als `***:***`.
+Dazu Typ-Validierung aus dem SoT-Default (int/bool/float/json/url/mail — fängt z.B. durch
+Inline-Kommentare korrumpierte Werte wie `MAIL_PORT=587oops` als `UNGÜLTIG(int)`),
+`gleich`/`abweichend` zum Default und ein Cross-Repo-Konsistenz-Block für Keys in ≥2 Repos
+(z.B. `SERVICE_TOKEN` — MATCH/MISMATCH via Fingerprint, ohne Wert). Exit 1 bei Fehlern.
+Ein in der `.env` gesetzter, aber **leerer** Wert (`KEY=`) erscheint orange: `(leer)` in der
+`.env`-Spalte **und** Status `leer` statt grünem `ok` — ein unbefüllter Pflicht-Key (z.B. leeres
+`SECRET_KEY`/`MAIL_PASSWORD`) wird so nicht mehr als „ok" kaschiert. Die SoT-Spalte bleibt bei
+leerem Default grau (Pflicht-Platzhalter, kein Problem — nur die `.env`-Spalte warnt, `empty_warn`).
+Ein gesetzter, **nicht-leerer** Wert, der vom nicht-leeren SoT-Default **abweicht**, erscheint in der
+`.env`-Spalte **gelb** (`diverges` — spiegelt den gelben `abweichend`-Status in die Wert-Zelle; auch
+bei `--reveal` als gelber Rohwert und bei maskierten Secrets als gelber Fingerprint). Farb-Semantik
+eindeutig: **orange = leer** (hat Priorität — stärkeres Signal), **gelb = weicht vom Default ab**,
+neutral = gleich. `_matches_default(name, value, default)` ist der SSoT für „gleich/abweichend"
+(fingerprint-basiert bei Geheimem) und speist sowohl die Status- als auch die Wert-Zelle.
+Ausgabe als ausgerichtete Spaltentabelle (`KEY | .env | SoT | Status`), Breite via
+`shutil.get_terminal_size()`, ANSI-sichere Spaltenbreiten, lange Werte mit `…` gekürzt;
+bei schmalem Terminal (< 72 Spalten) automatisch gestapelte Voll-Darstellung.
+Die KEY-Spaltenbreite wird **global über alle Repos eines Laufs** berechnet
+(`key_column_width(repos)`, aus dem längsten Key-Namen aller Repos) und an jedes `print_comparison`
+durchgereicht — sonst startet die `.env`-Spalte je Repo unterschiedlich weit (Repos mit kürzeren
+Keys wie `apps/frontend` schoben die Spalte nach links). So beginnen alle Repo-Blöcke am identischen Offset.
+`--reveal --yes` (`-R -y`) zeigt dieselbe Gegenüberstellung mit **Rohwerten** — nur im eigenen Terminal,
+nie über einen Assistenten; ohne `--yes` verweigert das Script (Exit 2). `--reveal` erzwingt die
+gestapelte Voll-Ausgabe (kein Kürzen — Rohwerte will man vollständig sehen). Kurz-Flags: `-k`/`-R`/`-y`
+(zu `-c`/`-a`/`-r`/`-q`/`-s`).
+Das Script läuft auch unter System-`python3` 3.9 (`from __future__ import annotations`).
+
+Values nie ausgeben (`cat`/`grep` auf `.env` verboten) — nur Keys via `env-audit.py` oder `cut -d= -f1`,
+Werte-Abgleich nur via `--check` (maskiert).
 
 [↑ Inhalt](#inhalt)
 
@@ -485,7 +590,12 @@ class ProblemRepository:
 - Testdatei spiegelt Quelle: `composables/useProblems.ts` → `tests/composables/useProblems.spec.ts`
 - `vi.mock()` muss **vor** den Imports stehen — Vitest hoisted Mocks nicht automatisch wenn Imports davor kommen
 
-### Contract-Tests (Fake → Real)
+### Contract-Tests (Fake → Real) — Konvention, historisch angewendet
+
+> Der Fake-Data-Layer und die `*.contract.spec.ts`-Dateien wurden mit Issue #17 entfernt
+> (`composables/data/` enthaelt nur noch `real/`); die verbliebenen Composable-Specs testen
+> den Real-Layer mit gemocktem `$fetch`. Das Pattern bleibt Konvention fuer jede kuenftige
+> Doppel-Implementierung (Fake/Stub neben Real):
 
 Jede Fake-Implementierung braucht Contract-Tests, die beim Umstieg auf Real-Data direkt wiederverwendet werden koennen.
 
@@ -504,10 +614,9 @@ describe.each([
 })
 ```
 
-Ziel: Wenn `USE_FAKE_DATA=false` gesetzt wird, fallen keine neuen Tests noetig — die Contract-Tests greifen.
+Ziel: Beim Umstieg auf die Real-Implementierung fallen keine neuen Tests an — die Contract-Tests greifen.
 
-**Implementiert fuer:** `useAuth`, `useProblems`, `useVoting`, `useSimilarity`, `useSolutions`, `useTags`, `useClusters`, `useRegions`
-(`tests/composables/*.contract.spec.ts` — je mit `describe.each` gegen Fake und Real)
+**War implementiert fuer:** `useAuth`, `useProblems`, `useVoting`, `useSimilarity`, `useSolutions`, `useTags`, `useClusters`, `useRegions` — die Funde 1–11 unten stammen aus dieser Phase.
 
 Hinweis: `useRegionDetection` (Browser Geolocation API) hat noch keinen Contract-Test — `navigator.geolocation`-Mocking in Vitest ist nicht-trivial. Als bekannte Luecke dokumentiert, kein Blocker.
 
@@ -545,6 +654,9 @@ I18n-Fallout: `login.loading` existierte nicht — Composable nutzt jetzt `login
 `onMounted` (z.B. `fetchTags()`) lief und 403 zurueckbekam. Fix: `loadPersistedTokens()` synchron im
 `setup()`-Block aufrufen; `restoreSession()` (API-Aufruf) bleibt in `onMounted`. Reihenfolge:
 `setup()` → Token aus localStorage → `onMounted` fetchTags (Token vorhanden) → `onMounted` restoreSession.
+*(Historisch: seit der HttpOnly-Cookie-Migration 2026-07-06 gibt es keinen client-seitigen Token mehr —
+`loadPersistedTokens()` ist entfernt, der Browser sendet das Cookie automatisch via `credentials: 'include'`.
+Die Lehre — synchroner Auth-State vor den ersten `onMounted`-Fetches — bleibt gueltig.)*
 
 **Konkreter Fund 6:** `realProblems.ts` — Internal-API Tag-Naming (`label` vs. `name`).
 Backend-API gibt Tags mit Feld `label` zurueck (nicht `name` wie in DB-Spalte). Contract-Test deckte auf, dass `mapProblem` `tag.name` las — gibt `undefined`. Fix: `tag.label` verwenden. Gilt fuer alle `/internal/tags`-Endpoints.
@@ -641,7 +753,7 @@ Similarity-Card wurde von `<Teleport to="#panel-status-target">` (ausserhalb der
 `ProblemPanel.copyPermalink` rief `navigator.clipboard.writeText(url)` in einem `try/catch`, dessen `catch` den Fehler **nur in die Konsole** loggte (kein UI-Feedback). `navigator.clipboard` existiert aber ausschliesslich in Secure Contexts (HTTPS oder `localhost`); auf einem HTTP-Origin wie dem Staging-Host `int.decisionmap.ai` ist es `undefined` → `writeText` wirft sofort → fuer den User „nichts passiert". Gleiche Secure-Context-Klasse wie der dokumentierte `navigator.geolocation`-`PERMISSION_DENIED`-Gotcha (Geo-Detection faellt auf Backend-Proxy zurueck). **Fix (Frontend-only, zwei Teile):** (1) neuer wiederverwendbarer Util `utils/clipboard.ts` (`copyToClipboard(text): Promise<boolean>`) — nutzt `navigator.clipboard?.writeText` wenn vorhanden, faellt sonst (oder bei Reject wegen Focus/Permission) auf das Legacy-`document.execCommand('copy')` via verstecktem `<textarea>` zurueck, das auch auf HTTP funktioniert; gibt `true`/`false` statt zu werfen. `import.meta.client`-Guard fuer SSR-Routen. (2) `copyPermalink` zeigt bei `false` jetzt einen Error-Toast (`permalink.copyFailed`, EN+DE) statt stillem Nichts. Regel: jeden Secure-Context-only Browser-API-Zugriff (`clipboard`, `geolocation`, `crypto.subtle`, Service Worker) mit HTTP-Fallback **oder** sichtbarem Fehler-Pfad versehen — ein `catch`, der nur `consola.error` aufruft, ist auf HTTP-Staging faktisch ein Silent-Fail. Wiederverwendbar fuer kuenftige Share-Buttons (z.B. `SolutionDetail`). Vgl. Features-Doc, Permalink-System / Share-Button.
 
 **Konkreter Fund 28:** `utils/markdown.ts` — `DOMPurify.addHook(...)` auf Modul-Ebene crasht SSR/prerender.
-Der Link-Hardening-Hook (erzwingt `rel="noopener noreferrer"` + `target="_blank"` auf allen Links) war auf Modul-Ebene registriert. `DOMPurify` braucht aber ein Browser-DOM: beim SSR/prerender von `/problem/**` (`routeRules` → `prerender: true`) ist der Default-Export eine uninitialisierte Factory **ohne** `addHook`/`sanitize`. Das blosse Importieren von `markdown.ts` (via `SolutionForm`/`SolutionDetail`) wertet den Modul-Body aus → `addHook is not a function` → Render-Crash. Sichtbar wurde es ueber den T-12-Similarity-Flow (Klick auf einen Match navigiert auf `/problem/{id}`), war aber ein vorbestehender Latenzbug auf **jeder** Navigation zu einer prerender-Route. **Fix (Frontend-only):** (1) Hook lazy via `ensureHook()` (Idempotenz-Flag) statt auf Modul-Ebene — nur beim ersten client-seitigen Render. (2) `renderSolutionMarkdown` gibt bei fehlendem DOM (`typeof window === 'undefined'`) die rohe `markdown-it`-Ausgabe zurueck — sicher ohne DOMPurify dank `html:false` + disabled `image`/`code`/`fence`. Kein Hydration-Mismatch: `/problem/[id]` fetcht Solutions erst in `onMounted` (client), bei SSR ist die Liste leer → `renderSolutionMarkdown` wird server-seitig nie mit Inhalt aufgerufen. Das dokumentierte Hook-Verhalten (rel/target auf allen Links) bleibt unveraendert, nur lazy/client-seitig. Regel: keine DOM-abhaengigen Library-Seiteneffekte (`DOMPurify.addHook`, `document.*`, `window.*`) auf Modul-Ebene in Code, der ueber eine prerender/SSR-Route importiert werden kann — lazy hinter einen `typeof window`-Guard legen. Gleiche Klasse wie der `localStorage`-auf-SSR-Routen-Gotcha (Fund 8).
+Der Link-Hardening-Hook (erzwingt `rel="noopener noreferrer"` + `target="_blank"` auf allen Links) war auf Modul-Ebene registriert. `DOMPurify` braucht aber ein Browser-DOM: beim SSR/prerender von `/problem/**` (`routeRules` → `prerender: true`) ist der Default-Export eine uninitialisierte Factory **ohne** `addHook`/`sanitize`. Das blosse Importieren von `markdown.ts` (via `SolutionForm`/`SolutionDetail`) wertet den Modul-Body aus → `addHook is not a function` → Render-Crash. Sichtbar wurde es ueber den T-12-Similarity-Flow (Klick auf einen Match navigiert auf `/problem/{id}`), war aber ein vorbestehender Latenzbug auf **jeder** Navigation zu einer prerender-Route. **Fix (Frontend-only):** (1) Hook lazy via `ensureHook()` (Idempotenz-Flag) statt auf Modul-Ebene — nur beim ersten client-seitigen Render. (2) `renderSolutionMarkdown` gibt bei fehlendem DOM (`typeof window === 'undefined'`) die rohe `markdown-it`-Ausgabe zurueck — sicher ohne DOMPurify dank `html:false` + disabled `image`/`code`/`fence`. Kein Hydration-Mismatch: `/problem/[id]` fetcht Solutions erst in `onMounted` (client), bei SSR ist die Liste leer → `renderSolutionMarkdown` wird server-seitig nie mit Inhalt aufgerufen. Das dokumentierte Hook-Verhalten (rel/target auf allen Links) bleibt unveraendert, nur lazy/client-seitig. Regel: keine DOM-abhaengigen Library-Seiteneffekte (`DOMPurify.addHook`, `document.*`, `window.*`) auf Modul-Ebene in Code, der ueber eine prerender/SSR-Route importiert werden kann — lazy hinter einen `typeof window`-Guard legen. Gleiche Klasse wie der `localStorage`-auf-SSR-Routen-Gotcha (Fund 8). **Update (Security-Audit 2026-07-05):** Teil (2) des Fixes — der Raw-Bypass bei `typeof window === 'undefined'` — ist ersetzt: `markdown.ts` importiert jetzt `isomorphic-dompurify` (voll initialisierte Instanz auch server-seitig via jsdom), sodass Allowlist + Link-Hardening auf SSR/Prerender **und** Client identisch laufen (Unit-Tests: `tests/utils/markdown.spec.ts`). Teil (1) — Hook lazy via `ensureHook()`, nie auf Modul-Ebene — und die Regel gelten unveraendert.
 
 **Konkreter Fund 29:** T-13 — Vitest-Test eines Teleport-Modals, dessen Submit-Button via `form="<id>"` ausserhalb des `<form>` haengt.
 T-13 hat `SolutionForm.vue` auf das self-contained Teleport-Modal mit Sticky-Footer-Submit umgestellt (Fund 25-Pattern, `form="solution-form"`). Beim Anpassen von `tests/components/SolutionForm.spec.ts` zwei nicht-offensichtliche Test-Erkenntnisse: (1) **`<Teleport>` muss gestubbt werden** (`global: { stubs: { teleport: true } }`) — sonst rendert der Modal-Inhalt nach `body` und `wrapper.find('#solution-content')` erreicht die Felder nicht. (2) **jsdom honoriert die `form="<id>"`-Cross-Element-Assoziation nicht** — ein `.trigger('click')` auf den Footer-Submit-Button loest in jsdom **kein** Form-Submit aus (im echten Browser schon). Fix: das Submit-Event direkt auf der Form feuern (`wrapper.find('#solution-form').trigger('submit')`) statt den Button zu klicken; der fruehere `findSubmitBtn`-Helper (suchte den Button per Text `actions.submit`) wurde durch `submitForm(wrapper)` ersetzt. Regel: bei `form="<id>"`-Submit-Buttons im Test das Form-`submit`-Event triggern, nicht den Button-Klick — die HTML5-Assoziation ist Browser-Verhalten, das jsdom nicht nachbildet. Spec ergaenzt um den anonymen Login-Redirect-Flow (`tests/e2e/solution-redirect.spec.ts`, Playwright): `data-testid="add-solution"` (`SolutionList.vue`) + `data-testid="solution-form"` (`SolutionForm.vue`) als stabile E2E-Selektoren.
@@ -774,4 +886,4 @@ Erkennungsmerkmal: Funktion nutzt reaktive Props/State und waere sonst nur ueber
 - Keine echten OpenAI-Aufrufe — Client mocken
 - Fake-Daten in `tests/fakedata/`
 - Testdatei spiegelt Quelle: `services/spam_filter.py` → `tests/test_spam_filter.py`
-- **Test-DB = echtes Postgres+pgvector (testcontainers), kein SQLite mehr.** Die Backend-Unit-Tests (`apps/backend/tests/unit/`) laufen gegen ein ephemeres `pgvector/pgvector:pg16`, das `conftest.py` einmalig hochfährt (Docker erforderlich). Schema via `alembic upgrade head` (kein `Base.metadata.create_all`), System-Seeds (`001_regions.sql`/`002_tags.sql`) + ein Baseline-Test-User committet. Isolation pro Test via function-scoped Async-Session mit `join_transaction_mode="create_savepoint"` (Rollback nach jedem Test). Siehe Fund 40. Stand: 189 Unit-Tests, 0 skipped.
+- **Test-DB = echtes Postgres+pgvector (testcontainers), kein SQLite mehr.** Die Backend-Unit-Tests (`apps/backend/tests/unit/`) laufen gegen ein ephemeres `pgvector/pgvector:pg16`, das `conftest.py` einmalig hochfährt (Docker erforderlich). Schema via `alembic upgrade head` (kein `Base.metadata.create_all`), System-Seeds (`001_regions.sql`/`002_tags.sql`) + ein Baseline-Test-User committet. Isolation pro Test via function-scoped Async-Session mit `join_transaction_mode="create_savepoint"` (Rollback nach jedem Test). Siehe Fund 40. Stand: 190 Unit-Tests, 0 skipped.
