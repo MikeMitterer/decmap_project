@@ -2,8 +2,10 @@
 #------------------------------------------------------------------------------
 # smtp-test.py — Test-Mail über die SMTP-Einstellungen aus .env versenden
 #
-# Liest EMAIL_SMTP_* und EMAIL_FROM aus der .env-Datei und versendet eine
-# Test-Mail via smtplib. Nützlich um SES, smtp2go o.ä. schnell zu verifizieren.
+# Liest MAIL_* (MAIL_SERVER/PORT/USERNAME/PASSWORD/FROM sowie MAIL_STARTTLS/
+# MAIL_SSL_TLS) aus der .env-Datei und versendet eine Test-Mail via smtplib.
+# Key-Namen identisch zu apps/backend/config.py. Nützlich um SES, Mailpit
+# o.ä. schnell zu verifizieren.
 #
 # Verwendung:
 #   ./scripts/smtp-test.py --send --to <empfaenger> [--env <pfad>]
@@ -88,7 +90,20 @@ def parse_env_file(env_path: Path) -> dict[str, str]:
     return env
 
 
-def show_settings(host: str, port: str, user: str, email_from: str) -> None:
+def env_bool(value: str) -> bool:
+    """Interpretiert einen .env-String als Boolean.
+
+    Args:
+        value: Roh-String aus der .env (z.B. 'true', '1', 'yes').
+
+    Returns:
+        True fuer true/1/yes/on (case-insensitive), sonst False.
+    """
+    return value.strip().lower() in ("true", "1", "yes", "on")
+
+
+def show_settings(host: str, port: str, user: str, email_from: str,
+                  starttls: bool, ssl_tls: bool) -> None:
     """Gibt die geladenen SMTP-Einstellungen formatiert aus.
 
     Args:
@@ -96,12 +111,16 @@ def show_settings(host: str, port: str, user: str, email_from: str) -> None:
         port:       SMTP-Port.
         user:       SMTP-Benutzername.
         email_from: Absender-Adresse.
+        starttls:   STARTTLS aktiv (MAIL_STARTTLS).
+        ssl_tls:    Implizites TLS aktiv (MAIL_SSL_TLS).
     """
+    tls_mode = "SSL/TLS (implizit)" if ssl_tls else ("STARTTLS" if starttls else "keine")
     print(f"\n  {Colors.YELLOW}SMTP-Einstellungen{Colors.RESET}\n")
     print(f"    {Colors.BLUE}{'Host:':<20}{Colors.RESET} {host}")
     print(f"    {Colors.BLUE}{'Port:':<20}{Colors.RESET} {port}")
     print(f"    {Colors.BLUE}{'User:':<20}{Colors.RESET} {user or '(keine Auth)'}")
     print(f"    {Colors.BLUE}{'From:':<20}{Colors.RESET} {email_from}")
+    print(f"    {Colors.BLUE}{'TLS:':<20}{Colors.RESET} {tls_mode}")
     print()
 
 
@@ -147,31 +166,41 @@ def send_test_mail(env_path: Path, to_address: str) -> None:
     """
     env = parse_env_file(env_path)
 
-    smtp_host     = env.get("EMAIL_SMTP_HOST", "")
-    smtp_port     = int(env.get("EMAIL_SMTP_PORT", "587"))
-    smtp_user     = env.get("EMAIL_SMTP_USER", "")
-    smtp_password = env.get("EMAIL_SMTP_PASSWORD", "")
-    email_from    = env.get("EMAIL_FROM", "")
+    smtp_host     = env.get("MAIL_SERVER", "")
+    smtp_port     = int(env.get("MAIL_PORT", "587"))
+    smtp_user     = env.get("MAIL_USERNAME", "")
+    smtp_password = env.get("MAIL_PASSWORD", "")
+    email_from    = env.get("MAIL_FROM", "")
+    use_starttls  = env_bool(env.get("MAIL_STARTTLS", "true"))
+    use_ssl_tls   = env_bool(env.get("MAIL_SSL_TLS", "false"))
 
     if not smtp_host:
-        print(f"\n{Colors.RED}✗ EMAIL_SMTP_HOST nicht gesetzt in:{Colors.RESET} {env_path}\n", file=sys.stderr)
+        print(f"\n{Colors.RED}✗ MAIL_SERVER nicht gesetzt in:{Colors.RESET} {env_path}\n", file=sys.stderr)
         sys.exit(1)
 
     if not email_from:
-        print(f"\n{Colors.RED}✗ EMAIL_FROM nicht gesetzt in:{Colors.RESET} {env_path}\n", file=sys.stderr)
+        print(f"\n{Colors.RED}✗ MAIL_FROM nicht gesetzt in:{Colors.RESET} {env_path}\n", file=sys.stderr)
         sys.exit(1)
 
-    show_settings(smtp_host, str(smtp_port), smtp_user, email_from)
+    show_settings(smtp_host, str(smtp_port), smtp_user, email_from, use_starttls, use_ssl_tls)
 
     msg = build_message(email_from, to_address, smtp_host, str(smtp_port))
 
     print(f"  Versende Test-Mail an {Colors.CYAN}{to_address}{Colors.RESET} ... ", end="", flush=True)
 
     try:
-        with smtplib.SMTP(smtp_host, smtp_port, timeout=15) as server:
+        # MAIL_SSL_TLS=true (typ. Port 465) → implizites TLS via SMTP_SSL.
+        # Sonst Klartext-Verbindung, ggf. auf STARTTLS hochgestuft (MAIL_STARTTLS, typ. Port 587).
+        if use_ssl_tls:
+            server_cm = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=15)
+        else:
+            server_cm = smtplib.SMTP(smtp_host, smtp_port, timeout=15)
+
+        with server_cm as server:
             server.ehlo()
-            server.starttls()
-            server.ehlo()
+            if use_starttls and not use_ssl_tls:
+                server.starttls()
+                server.ehlo()
             if smtp_user and smtp_password:
                 server.login(smtp_user, smtp_password)
             server.sendmail(email_from, [to_address], msg.as_string())
@@ -181,7 +210,7 @@ def send_test_mail(env_path: Path, to_address: str) -> None:
     except smtplib.SMTPAuthenticationError as exc:
         print(f"{Colors.RED}✗ Authentifizierung fehlgeschlagen{Colors.RESET}\n", file=sys.stderr)
         print(f"  {Colors.YELLOW}Hinweis:{Colors.RESET} SMTP-User/Password prüfen — bei AWS SES müssen die", file=sys.stderr)
-        print(f"  SMTP-Credentials (nicht IAM-Keys) unter 'SMTP Settings' erzeugt werden.\n", file=sys.stderr)
+        print("  SMTP-Credentials (nicht IAM-Keys) unter 'SMTP Settings' erzeugt werden.\n", file=sys.stderr)
         print(f"  Detail: {exc}\n", file=sys.stderr)
         sys.exit(1)
 
