@@ -12,9 +12,22 @@ Konventionen in .env.example:
       (`KEY=default`) = optional (Default greift). Override via `[optional]` /
       `[required]` am Anfang der ersten `#:`-Zeile.
 
+Cross-Repo-Guard (beim Voll-Audit, ohne --repo):
+    Prueft zusaetzlich vier Invarianten —
+    (0) Liveness: jeder .env.example-Key wird vom App-Code gelesen (pydantic
+        config.py-Feld bzw. Frontend process.env) — faengt tote SoT-Keys,
+    (1) Superset: infrastructure/.env.example enthaelt jeden Service-Key,
+    (2) Forwarding: docker-compose.yml reicht jeden Service-Key an den
+        Service-Container durch,
+    (3) compose-${VAR}: jeder ${VAR}-Name (bare + defaulted) in den compose-Dateien
+        (auch Subprojekte) ist ein global bekannter Key (in irgendeiner
+        .env.example) — faengt Tippfehler wie ${POSTGRES_USER1:-test}.
+    Verletzungen sind Fehler (Exit 1). Ausnahmen: CODE_EXEMPT/SUPERSET_EXEMPT/
+    FORWARD_EXEMPT.
+
 Exit-Codes:
     0  — .env erfüllt die SoT (nur optionale Keys dürfen fehlen)
-    1  — Drift: Pflicht-Key fehlt in .env ODER .env hat einen der SoT unbekannten Key
+    1  — Drift: Pflicht-Key fehlt / SoT-unbekannter Key / Cross-Repo-Invariante verletzt
     2  — keine Repos/.env-Dateien gefunden
 """
 
@@ -39,6 +52,38 @@ REPOS = [
     ROOT / "apps" / "ai-service",
     ROOT / "infrastructure",
 ]
+
+# ─── Cross-Repo-Guard ─────────────────────────────────────────────────────────
+# Vier Invarianten beim Voll-Audit (Details im Modul-Docstring):
+#   0. Liveness   — .env.example-Key wird vom App-Code gelesen (CODE_EXEMPT)
+#   1. Superset   — infra/.env.example ⊇ jeder Service-Key (SUPERSET_EXEMPT)
+#   2. Forwarding — Prod-compose reicht jeden Service-Key an seinen Container
+#                   (Frontend via NUXT_PUBLIC_) durch (FORWARD_EXEMPT)
+#   3. compose-${VAR} — jeder ${VAR}-Name (bare UND defaulted) in ALLEN compose-
+#                   Dateien (auch Subprojekte, dynamisch entdeckt) ist ein global
+#                   bekannter Key (in irgendeiner .env.example) — faengt Tippfehler
+#                   wie ${POSTGRES_USER1:-test}. Ausnahmen: COMPOSE_VAR_EXEMPT.
+COMPOSE_FILE    = ROOT / "infrastructure" / "docker-compose.yml"
+INFRA_REPO      = ROOT / "infrastructure"
+# repo-Verzeichnisname → compose-Service-Name
+SERVICE_REPOS   = {"backend": "backend", "frontend": "frontend", "ai-service": "ai-service"}
+NUXT_PUBLIC     = "NUXT_PUBLIC_"
+# Bewusst NICHT in Prod: Dev-Notausgang (muss in Prod false/leer bleiben).
+SUPERSET_EXEMPT = {"ALLOW_INSECURE_DEV"}
+# Im Service-.env.example gelistet, aber nicht dem eigenen Container zugestellt:
+# Dev-Notausgang + Postgres-Plumbing (speist DATABASE_URL/den Postgres-Container,
+# nie die App direkt).
+FORWARD_EXEMPT  = {"ALLOW_INSECURE_DEV", "POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB"}
+# Liveness: .env.example-Keys, die dokumentiert sind, aber bewusst nicht vom
+# App-Code gelesen werden. POSTGRES_* stehen im backend-.env.example fuer die
+# Dev-compose (baut DATABASE_URL) — die App liest sie nie.
+CODE_EXEMPT     = {"POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB"}
+# Wo der App-Code seine Env-Keys liest (fuer die Liveness-Pruefung).
+CONFIG_PY       = {"backend": "config.py", "ai-service": "app/config.py"}
+NUXT_CONFIG     = "nuxt.config.ts"
+# compose-${VAR}, die bewusst in keiner .env.example stehen duerfen (z.B. reine
+# docker-/Shell-Builtins). Aktuell keine — Erweiterungspunkt gegen False Positives.
+COMPOSE_VAR_EXEMPT = set()
 
 # Zeile, die nur aus Deko-/Trennzeichen besteht (z.B. "# ─── Section ───").
 _DECORATION_RE = re.compile(r"^#\s*[\W_]*$")
@@ -626,6 +671,213 @@ def print_map(repos: list[Path]) -> None:
           f"{C.RED}R{C.GREY}=Pflicht  {C.GREEN}o{C.GREY}=optional  ·=fehlt{C.RESET}\n")
 
 
+# ─── Cross-Repo-Guard ─────────────────────────────────────────────────────────
+
+def example_keys(repo: Path) -> set[str]:
+    """Nur die deklarierten SoT-Keys eines Repos (.env.example) — ohne lokale .env."""
+    ex = repo / ".env.example"
+    return set(parse_example(ex).keys) if ex.exists() else set()
+
+
+def parse_compose_env(compose_path: Path) -> dict[str, set[str]]:
+    """Pro compose-Service die Menge der im `environment:`-Block gesetzten Env-Keys.
+
+    Leichter, PyYAML-freier Indent-Parser (bewusst kein externes Dependency):
+    services (Indent 2) → environment (Indent 4) → `KEY: value` (Indent >= 6).
+    Nur die Map-Form von `environment:` — dieses Repo nutzt sie durchgehend.
+    """
+    services: dict[str, set[str]] = {}
+    if not compose_path.exists():
+        return services
+    top_section: str | None = None
+    service:     str | None = None
+    in_env = False
+    for raw in compose_path.read_text().splitlines():
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        indent   = len(raw) - len(raw.lstrip())
+        stripped = raw.strip()
+        if indent == 0:
+            m = re.match(r"^([\w.-]+):", stripped)
+            top_section, service, in_env = (m.group(1) if m else None), None, False
+            continue
+        if top_section != "services":
+            continue
+        if indent == 2:
+            m = re.match(r"^([\w.-]+):\s*$", stripped)
+            if m:
+                service = m.group(1)
+                services.setdefault(service, set())
+                in_env = False
+            continue
+        if service is None:
+            continue
+        if indent == 4:
+            in_env = stripped == "environment:"
+            continue
+        if in_env and indent >= 6:
+            m = re.match(r"^([A-Za-z_][A-Za-z0-9_]*):", stripped)
+            if m:
+                services[service].add(m.group(1))
+    return services
+
+
+def check_cross_repo() -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    """Prueft die zwei Cross-Repo-Invarianten (Superset + Forwarding).
+
+    Returns (superset_violations, forward_violations), je (repo_name, key).
+    """
+    infra   = example_keys(INFRA_REPO)
+    compose = parse_compose_env(COMPOSE_FILE)
+    superset: list[tuple[str, str]] = []
+    forward:  list[tuple[str, str, str]] = []
+    for repo_name, svc in SERVICE_REPOS.items():
+        repo      = ROOT / "apps" / repo_name
+        src_rel   = str((repo / ".env.example").relative_to(ROOT))
+        forwarded = compose.get(svc, set())
+        for key in sorted(example_keys(repo)):
+            if key not in infra and key not in SUPERSET_EXEMPT:
+                superset.append((src_rel, key))
+            if key in FORWARD_EXEMPT:
+                continue
+            want = f"{NUXT_PUBLIC}{key}" if svc == "frontend" else key
+            if not ({key, want} & forwarded):
+                forward.append((svc, key, want))
+    return superset, forward
+
+
+# Jede ${VAR}-Referenz, bare ODER defaulted — ein defaulteter Tippfehler wie
+# ${POSTGRES_USER1:-test} soll ebenso auffallen. Ein Default schuetzt nicht vor
+# einem falschen Namen; geprueft wird gegen die Union ALLER .env.example.
+_COMPOSE_VAR_RE    = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)")
+_PYDANTIC_FIELD_RE = re.compile(r"^    ([a-z_][a-z0-9_]*)\s*:\s*\S")
+_PROCESS_ENV_RE    = re.compile(r"process\.env\.([A-Z][A-Z0-9_]*)")
+
+
+def compose_var_refs(compose_path: Path) -> set[str]:
+    """Alle ${VAR}-Interpolationsnamen einer compose-Datei (bare + defaulted)."""
+    if not compose_path.exists():
+        return set()
+    return set(_COMPOSE_VAR_RE.findall(compose_path.read_text()))
+
+
+def discover_composes() -> list[Path]:
+    """Alle docker-compose*.yml der Repos — inkl. Subprojekte, nicht hartkodiert."""
+    found: list[Path] = []
+    for repo in REPOS:
+        found += sorted(repo.glob("docker-compose*.y*ml"))
+    return found
+
+
+def known_env_keys() -> set[str]:
+    """Union aller in irgendeiner .env.example deklarierten Keys (global bekannt)."""
+    known: set[str] = set()
+    for repo in REPOS:
+        known |= example_keys(repo)
+    return known
+
+
+def check_compose_vars() -> list[tuple[str, str]]:
+    """${VAR}-Referenzen (bare + defaulted) in ALLEN compose-Dateien (auch Subprojekte),
+    deren Name in KEINER .env.example vorkommt — Tippfehler / undeklariert. Legitime
+    Cross-Context-Nutzung (z.B. POSTGRES_* im ai-service-Test-compose) bleibt sauber,
+    weil der Name anderswo deklariert ist. Returns (compose_label, var)."""
+    known = known_env_keys()
+    bad: list[tuple[str, str]] = []
+    for compose in discover_composes():
+        try:
+            label = str(compose.relative_to(ROOT))
+        except ValueError:
+            label = compose.name
+        for var in sorted(compose_var_refs(compose)):
+            if var not in known and var not in COMPOSE_VAR_EXEMPT:
+                bad.append((label, var))
+    return bad
+
+
+def _pydantic_field_keys(config_path: Path) -> set[str]:
+    """Env-Keys (UPPER) aus den Settings-Feldern einer pydantic config.py.
+
+    Rein textbasiert (kein Import) — laeuft ohne die Service-venv/Dependencies.
+    Feld = 4-Space-eingerueckte `name: type[ = ...]`-Zeile im Settings-Klassenkoerper.
+    """
+    if not config_path.exists():
+        return set()
+    keys: set[str] = set()
+    in_settings = False
+    for line in config_path.read_text().splitlines():
+        if line.startswith("class ") and "BaseSettings" in line:
+            in_settings = True
+            continue
+        if in_settings:
+            if line.strip() and not line[0].isspace():
+                break  # Klassenkoerper zu Ende (z.B. `settings = Settings()`)
+            m = _PYDANTIC_FIELD_RE.match(line)
+            if m and m.group(1) != "model_config":
+                keys.add(m.group(1).upper())
+    return keys
+
+
+def code_env_keys(repo: Path) -> set[str] | None:
+    """Env-Keys, die der App-Code eines Repos liest. None = keine App-Config-Flaeche
+    (z.B. infrastructure) → Liveness-Check wird uebersprungen."""
+    if repo.name in CONFIG_PY:
+        return _pydantic_field_keys(repo / CONFIG_PY[repo.name])
+    if repo.name == "frontend":
+        nc = repo / NUXT_CONFIG
+        return set(_PROCESS_ENV_RE.findall(nc.read_text())) if nc.exists() else set()
+    return None
+
+
+def check_dead_keys() -> list[tuple[str, str]]:
+    """.env.example-Keys, die der App-Code nicht liest (tote SoT-Keys, z.B. Tippfehler
+    oder Reste eines entfernten Features). Returns (repo_name, key)."""
+    dead: list[tuple[str, str]] = []
+    for repo in REPOS:
+        surface = code_env_keys(repo)
+        if surface is None:
+            continue
+        example_rel = str((repo / ".env.example").relative_to(ROOT))
+        for key in sorted(example_keys(repo)):
+            if key not in surface and key not in CODE_EXEMPT:
+                dead.append((example_rel, key))
+    return dead
+
+
+def print_cross_repo_consistency(dead: list[tuple[str, str]],
+                                 superset: list[tuple[str, str]],
+                                 forward: list[tuple[str, str, str]],
+                                 compose_vars: list[tuple[str, str]]) -> None:
+    """Gibt die Guard-Ergebnisse aus (Liveness + Superset + Forwarding + compose-${VAR})."""
+    print(f"\n{C.BOLD}  Cross-Repo-Konsistenz{C.RESET}  "
+          f"{C.GREY}(Code liest ⊇ .env.example ⊆ infra · compose reicht durch & referenziert nur bekannte Keys (${{VAR}})){C.RESET}")
+    print(f"  {'─' * 50}")
+    if not dead and not superset and not forward and not compose_vars:
+        print(f"    {C.GREEN}✓ jeder .env.example-Key wird vom App-Code gelesen{C.RESET}")
+        print(f"    {C.GREEN}✓ infrastructure/.env.example ist Superset aller Service-Keys{C.RESET}")
+        print(f"    {C.GREEN}✓ docker-compose reicht jeden Service-Key an seinen Container{C.RESET}")
+        print(f"    {C.GREEN}✓ jede compose-Variablenreferenz (${{VAR}}) ist ein bekannter Key{C.RESET}")
+        return
+    if compose_vars:
+        print(f"    {C.RED}✗ compose-Variablenreferenz (${{VAR}}) in keiner .env.example (unbekannt/Tippfehler):{C.RESET}")
+        for label, var in compose_vars:
+            print(f"      {C.RED}- {var}{C.RESET}  {C.GREY}({label}){C.RESET}")
+    if dead:
+        print(f"    {C.RED}✗ Im .env.example, aber vom App-Code nicht gelesen (toter Key):{C.RESET}")
+        for example_rel, key in dead:
+            print(f"      {C.RED}- {key}{C.RESET}  {C.GREY}({example_rel} — kein Settings-Feld / process.env){C.RESET}")
+    if superset:
+        print(f"    {C.RED}✗ Fehlt in infrastructure/.env.example (kein Prod-Superset):{C.RESET}")
+        for src_rel, key in superset:
+            print(f"      {C.RED}- {key}{C.RESET}  {C.GREY}(aus {src_rel}){C.RESET}")
+    if forward:
+        compose_rel = str(COMPOSE_FILE.relative_to(ROOT))
+        print(f"    {C.RED}✗ Nicht an den Service-Container weitergereicht:{C.RESET}")
+        for svc, key, want in forward:
+            print(f"      {C.RED}- {key}{C.RESET}  "
+                  f"{C.GREY}({compose_rel} [{svc}]: '{want}' fehlt im environment-Block){C.RESET}")
+
+
 # ─── Output ───────────────────────────────────────────────────────────────────
 
 def repo_label(repo: Path) -> str:
@@ -783,6 +1035,15 @@ def main() -> int:
                     print(f"      {C.GREY}+ {key}{C.RESET}{req}")
         elif args.fill and not result.env_exists and result.example_exists:
             print(f"    {C.GREY}→ keine .env — anlegen mit: cp .env.example .env{C.RESET}")
+
+    # ── Cross-Repo-Guard (nur beim Voll-Audit über alle Repos) ──
+    if args.repo is None:
+        dead_keys = check_dead_keys()
+        superset_viol, forward_viol = check_cross_repo()
+        compose_vars = check_compose_vars()
+        print_cross_repo_consistency(dead_keys, superset_viol, forward_viol, compose_vars)
+        if dead_keys or superset_viol or forward_viol or compose_vars:
+            any_error = True
 
     print()
     if any_error or (args.strict and any_warning):
