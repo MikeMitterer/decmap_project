@@ -362,7 +362,8 @@ def audit_repo(repo: Path) -> AuditResult:
 # ─── Wert-Inspektion (leak-frei bzw. reveal) ──────────────────────────────────
 
 # Key-Namen, deren WERT geheim ist → nie im Klartext (nur Fingerprint), ausser --reveal.
-_SECRET_NAME_RE = re.compile(r"(SECRET|TOKEN|PASSWORD|PASSWD|API[_-]?KEY|_KEY|^KEY$)", re.I)
+# USERNAME trifft z.B. MAIL_USERNAME (AWS-SES-Access-Key-ID), nicht POSTGRES_USER.
+_SECRET_NAME_RE = re.compile(r"(SECRET|TOKEN|PASSWORD|PASSWD|USERNAME|API[_-]?KEY|_KEY|^KEY$)", re.I)
 # Credentials in URLs (scheme://user:pass@host) → auch bei nicht-geheimem Key maskieren.
 _URL_CRED_RE = re.compile(r"(\w+://)([^:/@\s]+):([^@/\s]+)@")
 
@@ -588,32 +589,61 @@ def print_comparison(repo: Path, reveal: bool, w_key: int) -> bool:
 
 
 def print_cross_repo(repos: list[Path], reveal: bool) -> None:
-    """Vergleicht Keys, die in mehreren Repos vorkommen (z.B. SERVICE_TOKEN müssen matchen)."""
-    by_key: dict[str, dict[str, str]] = {}
-    for repo in repos:
-        env_path = repo / ".env"
-        if not env_path.exists():
-            continue
-        for name, value in parse_env_pairs(env_path).items():
-            by_key.setdefault(name, {})[repo_label(repo)] = value
+    """Cross-Repo-Wertevergleich als Tabelle: je Repo mit .env eine Spalte, damit ein
+    Mismatch (z.B. SERVICE_TOKEN, der zwischen Backend und ai-service matchen muss)
+    direkt am Wert ablesbar ist. Geheimes maskiert (●●● Fingerprint — gleicher Wert →
+    gleicher Fingerprint), Werte auf die Spaltenbreite gekuerzt (… )."""
+    # Spaltenreihenfolge: frontend, backend, ai-service, infrastructure (Rest alphabetisch).
+    order = ["frontend", "backend", "ai-service", "infrastructure"]
+    col_repos = sorted(
+        (r for r in repos if (r / ".env").exists()),
+        key=lambda r: (order.index(r.name) if r.name in order else len(order), r.name),
+    )
+    if len(col_repos) < 2:
+        return
+    by_key: dict[str, dict[Path, str]] = {}
+    for repo in col_repos:
+        for name, value in parse_env_pairs(repo / ".env").items():
+            by_key.setdefault(name, {})[repo] = value
 
     shared = {k: v for k, v in by_key.items() if len(v) >= 2}
     if not shared:
         return
-    print(f"\n  {C.BLUE}Cross-Repo-Konsistenz{C.RESET} {C.GREY}(Keys in ≥2 Repos){C.RESET}")
+
+    # ── Spaltenbreiten aus der Terminal-Breite ableiten ──
+    n        = len(col_repos)
+    cols     = shutil.get_terminal_size((100, 24)).columns
+    w_key    = max(8, min(24, max(len(k) for k in shared)))
+    w_status = 11                                       # " ✗ MISMATCH"
+    avail    = cols - 2 - w_key - w_status - (n + 1) * 2
+    w_val    = max(8, min(30, avail // n))
+
+    def _mismatch(values: dict[Path, str], name: str) -> bool:
+        seen = {(_fingerprint(v) if _is_secret_name(name) else v) for v in values.values()}
+        return len(seen) > 1
+
+    print(f"\n  {C.BLUE}Cross-Repo-Konsistenz{C.RESET} "
+          f"{C.GREY}(Keys in ≥2 Repos · Wert je Repo, Geheimes maskiert){C.RESET}")
+    header = f"    {C.GREY}{_fit('KEY', w_key)}"
+    for r in col_repos:
+        header += f"  {_fit(r.name, w_val)}"
+    print(header + f"  Status{C.RESET}")
+
     for name in sorted(shared):
-        values = shared[name]
-        distinct = set(values.values())
-        repos_str = ", ".join(sorted(values))
-        if len(distinct) == 1:
-            only = next(iter(distinct))
-            proof = _fingerprint(only) if _is_secret_name(name) and not reveal else \
-                (_display_value(name, only, reveal))
-            print(f"    {C.CYAN}{name:<26}{C.RESET} {C.GREEN}MATCH{C.RESET}   "
-                  f"{C.GREY}{repos_str}{C.RESET}   {proof}")
-        else:
-            print(f"    {C.CYAN}{name:<26}{C.RESET} {C.RED}MISMATCH{C.RESET}   "
-                  f"{C.GREY}{repos_str}{C.RESET}")
+        values   = shared[name]
+        mismatch = _mismatch(values, name)
+        key_col  = C.RED if mismatch else C.CYAN
+        row = f"    {key_col}{_fit(name, w_key)}{C.RESET}"
+        for r in col_repos:
+            if r in values:
+                txt, col = _render_cell(name, values[r], reveal)
+                if mismatch:
+                    col = C.ORANGE          # Mismatch-Zeile: gesetzte Werte orange hervorheben
+            else:
+                txt, col = "—", C.GREY
+            row += f"  {col}{_fit(txt, w_val)}{C.RESET}"
+        status = f"{C.RED}✗ MISMATCH{C.RESET}" if mismatch else f"{C.GREEN}✓ MATCH{C.RESET}"
+        print(f"{row}  {status}")
 
 
 _REPO_TAG = {"backend": "BE", "frontend": "FE", "ai-service": "AI", "infrastructure": "INF"}
