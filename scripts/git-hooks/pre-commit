@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#------------------------------------------------------------------------------
+# pre-commit — Cross-Cutting-Konsistenz vor jedem Commit (routing-check).
+#
+# Verhindert, dass veraltete/inkonsistente Domain-/Routing-Werte eingecheckt
+# werden. Prueft NUR die Baum-Konsistenz (routing-check), NICHT die lokale .env
+# (env-audit haengt am lokalen State — gehoert in `make check`, nicht in den Hook).
+#
+# Installieren:      make install-hooks   (symlinkt hierher)
+# Umgehen (Notfall): git commit --no-verify
+#------------------------------------------------------------------------------
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+# No-op wenn das Tool im aktuellen Repo nicht liegt (z.B. Hook in einem Sub-Repo).
+[[ -f scripts/routing-check.sh ]] || exit 0
+
+if ! bash scripts/routing-check.sh --check; then
+    echo "Commit abgebrochen — Routing-/Domain-Drift (siehe oben)." >&2
+    echo "Fix, oder im Notfall: git commit --no-verify" >&2
+    exit 1
+fi

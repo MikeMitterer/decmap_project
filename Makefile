@@ -96,6 +96,11 @@ setup: ## Lokale .libs/-Symlinks erstellen (DEV_LOCAL muss gesetzt sein)
 	ln -sf $${DEV_LOCAL}/DevMake/Production/MakeLib   .libs/MakeLib
 	@echo "${GREEN}Setup abgeschlossen.${RESET}"
 
+.PHONY: install-hooks
+install-hooks: ## Git pre-commit-Hook (routing-check) im Root-Repo installieren
+	@ln -sf ../../scripts/git-hooks/pre-commit .git/hooks/pre-commit
+	@echo "${GREEN}pre-commit-Hook installiert${RESET} — läuft routing-check vor jedem Commit ${YELLOW}(umgehen: git commit --no-verify)${RESET}"
+
 
 ##@ Lokale Entwicklung
 
@@ -134,6 +139,11 @@ env-audit: ## .env gegen .env.example prüfen — Drift in allen Repos anzeigen
 .PHONY: routing-check
 routing-check: ## Domains/Routing auf veraltete Werte prüfen (nginx/Makefile/Scripts/Doku)
 	@bash scripts/routing-check.sh --check
+
+.PHONY: check
+check: ## Alle Konsistenz-Guards: env-audit + routing-check (vor Cross-Cutting-Änderungen)
+	@$(MAKE) env-audit
+	@$(MAKE) routing-check
 
 .PHONY: loc
 loc: ## Lines of Code zählen (tokei, alle Sub-Repos + Root)

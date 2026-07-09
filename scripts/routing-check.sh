@@ -2,26 +2,30 @@
 #------------------------------------------------------------------------------
 # routing-check.sh — Cross-Cutting-Drift-Guard (Domains / Routing-Praefixe)
 #
-# Findet veraltete Domain-/Routing-Werte, die nach einem Rename in aktivem Code,
-# Config, Scripts, Makefiles oder Doku zurueckgeblieben sind — in EINEM Durchgang
-# ueber den ganzen Baum (via find, umgeht gitignore -> auch apps/ + .env.example),
-# statt sie ueber viele Iterationen manuell zusammenzugreppen.
+# Prueft in EINEM Durchgang ueber den ganzen Baum (via find, umgeht gitignore ->
+# auch apps/ + .env.example), dass Domains und Routing-Praefixe konsistent zur SoT
+# sind. Zwei Ebenen:
 #
-# SoT: infrastructure/.env(.example) fuer Werte, nginx fuer die Routing-Struktur
-# (nginx server_name / Location-Pfade lassen sich nicht aus .env variablisieren).
-# Ergaenzt env-audit.py (das .env <-> Code <-> compose deckt) um nginx / Makefile /
-# Scripts / Doku.
+#   1. Kanonische Hosts (proaktiv): Jeder <sub>.decisionmap.ai muss ein bekannter
+#      Host sein — die kanonische Menge wird aus der SoT abgeleitet (nginx
+#      server_name + Host-Teile der .env.example-Werte) + CANONICAL_EXTRA. Faengt
+#      Tippfehler, stale Werte UND undeklarierte neue Subdomains, ohne den Alt-Wert
+#      vorher zu kennen.
+#   2. Veraltete Muster (reaktiv/Regression): explizite DEPRECATED-Liste fuer
+#      Nicht-Host-Renames (z.B. Pfad /api/ -> /ai/).
 #
-# Bei einem Rename (ALT -> NEU): ALT in der DEPRECATED-Liste eintragen, dann
-# `make routing-check` — meldet alle betroffenen Files. Bewusste historische Zeile:
-# Marker `routing-check:ignore`; ganze Pfade via EXEMPT_RE.
+# SoT: infrastructure/.env(.example) fuer Werte, nginx fuer die Routing-Struktur.
+# Ergaenzt env-audit.py (.env <-> Code <-> compose) um nginx / Makefile / Scripts /
+# Doku. Bewusste historische/Anti-Beispiel-Zeile: Marker `routing-check:ignore`;
+# ganze Pfade via EXEMPT_RE.
 #
 # Verwendung:
 #   ./scripts/routing-check.sh --check
-#   make routing-check
+#   make routing-check   |   make check
 #
 # Optionen:
-#   -c | --check   Baum auf veraltete Domain-/Routing-Werte pruefen (Exit 1 bei Drift)
+#   -c | --check   Baum pruefen (Exit 1 bei Drift)
+#   -v | --verbose wie --check, listet zusaetzlich alle geprueften Dateien
 #   -h | --help    Diese Hilfe anzeigen
 #------------------------------------------------------------------------------
 set -euo pipefail
@@ -36,16 +40,33 @@ readonly APPNAME
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 readonly ROOT
 
-# Veraltete Muster (ERE) + Hinweis im Format "regex|hinweis". Bei einem Rename den
-# ALTEN Wert hier eintragen — dann findet ein Lauf alle verbliebenen Vorkommen.
+readonly PROJECT_DOMAIN='decisionmap.ai'
+# Host-Muster: <sub.>*decisionmap.ai (auch bare decisionmap.ai).
+readonly HOST_RE='([A-Za-z0-9_-]+\.)*decisionmap\.ai'
+
+# Veraltete NICHT-Host-Muster (ERE) + Hinweis, "regex|hinweis". Host-Renames deckt
+# der kanonische Check ab — hier nur Pfade/Praefixe u.ae. Bei einem Rename eintragen.
 readonly DEPRECATED=(
     '/api/|ai-service laeuft jetzt unter /ai/ (nginx strippt den Praefix)'
-    'api\.decisionmap\.ai|Backend-Subdomain ist jetzt backend.decisionmap.ai'
 )
 
-# Ausgenommene Pfade: das Tool selbst (enthaelt die Muster als Config), datierte/
-# historische Docs (Point-in-Time), Build-/VCS-Verzeichnisse.
-readonly EXEMPT_RE='routing-check\.sh|docs/plans/|docs/specs/|docs/security-audit-|docs/backend\.md|design_handoff|design_claude_code_fail|/node_modules/|/\.venv/|/\.nuxt/|/\.output/|/\.git/|/\.pytest_cache/|/\.claude/|/backups/|/dist/'
+# Kanonische Hosts, die NICHT aus nginx/.env ableitbar sind (Infra-only).
+readonly CANONICAL_EXTRA=(
+    'mail.decisionmap.ai'   # SES Custom MAIL FROM (DNS, nicht in .env/nginx)
+    'cert.decisionmap.ai'   # systemd cert-watcher-Unit-Name (kein Service-Host)
+)
+
+# Hosts, die legitim in der Doku vorkommen, aber KEINE Service-Hosts sind — bewusste
+# Anti-Beispiele / AWS-Vorschlaege. Werden nicht als Drift gewertet, aber auch nicht
+# als kanonisch angezeigt (self-contained statt Marker in fremd-editierten Docs).
+readonly DOC_ALLOWED=(
+    'no-reply.decisionmap.ai'              # AWS-SES-Vorschlag, bewusst NICHT verwendet
+    'mail.decisionmap.ai.decisionmap.ai'   # Hetzner-FQDN-Fehleingabe-Beispiel
+)
+
+# Ausgenommene Pfade: das Tool selbst, datierte/historische Docs, die SES/DNS-Doku
+# (DNS-Records + Anti-Beispiele), Build-/VCS-/Tool-Verzeichnisse.
+readonly EXEMPT_RE='routing-check\.sh|docs/plans/|docs/specs/|docs/security-audit-|docs/backend\.md|docs/ses-setup|design_handoff|design_claude_code_fail|/node_modules/|/\.venv/|/\.nuxt/|/\.output/|/\.git/|/\.pytest_cache/|/\.claude/|/backups/|/dist/'
 
 # Externe URLs, die zufaellig matchen (Nuxt-Doku-Links, Adminer-CSS, ...).
 readonly EXTERNAL_RE='nuxt\.com|/docs/api/|github\.com|adminer|apache\.org'
@@ -60,14 +81,15 @@ usage() {
     echo
     echo "Usage: ${APPNAME} [ options ]"
     echo
-    usageLine "-c | --check  " "Baum auf veraltete Domain-/Routing-Werte pruefen (Exit 1 bei Drift)"
+    usageLine "-c | --check  " "Baum auf Domain-/Routing-Drift pruefen (Exit 1 bei Drift)"
     usageLine "-v | --verbose" "wie --check, listet zusaetzlich alle geprueften Dateien"
     usageLine "-h | --help   " "Diese Hilfe anzeigen"
     echo
     echo -e "${LIGHT_BLUE}Hints:${NC}"
-    echo -e "    Pruefen:            ${GREEN}${APPNAME} --check${NC}   ${YELLOW}(oder: make routing-check)${NC}"
-    echo -e "    Bei einem Rename:   alten Wert in ${CYAN}DEPRECATED${NC} (im Script) eintragen"
-    echo -e "    Historische Zeile:  mit ${CYAN}${IGNORE_MARKER}${NC} markieren"
+    echo -e "    Pruefen:            ${GREEN}${APPNAME} --check${NC}   ${YELLOW}(oder: make routing-check / make check)${NC}"
+    echo -e "    Neuer Host?         erst in ${CYAN}nginx server_name + .env.example${NC} deklarieren (SoT)"
+    echo -e "    Nicht-Host-Rename?  alten Wert in ${CYAN}DEPRECATED${NC} (im Script) eintragen"
+    echo -e "    Anti-Beispiel:      Zeile mit ${CYAN}${IGNORE_MARKER}${NC} markieren"
     echo
 }
 
@@ -85,39 +107,68 @@ collectFiles() {
            -o -name '*.json' \) 2>/dev/null | grep -vE "${EXEMPT_RE}"
 }
 
-# Prueft den Baum gegen alle DEPRECATED-Muster und gibt Treffer coloriert aus.
-# Zeigt vorab den Umfang (Muster + Datei-Anzahl); bei "verbose" jede Datei.
-#
-# Params:
-#   $1 - "verbose" um zusaetzlich jede gepruefte Datei aufzulisten (optional)
+# Leitet die kanonische Menge der <sub>.decisionmap.ai-Hosts aus der SoT ab:
+# nginx server_name-Direktiven + Host-Teile der .env.example-Werte + CANONICAL_EXTRA.
 #
 # Returns:
-#   0 wenn keine Drift, 1 wenn veraltete Werte gefunden
-runCheck() {
-    local verbose="${1:-}"
+#   Sortierte, eindeutige Hostnamen (einer pro Zeile) auf stdout
+canonicalHosts() {
+    {
+        grep -rhoE 'server_name[[:space:]]+[^;]+' \
+            "${ROOT}/infrastructure/host/etc/nginx/"*.conf 2>/dev/null
+        find "${ROOT}" -maxdepth 3 -name '.env.example' -not -path '*/.git/*' \
+            -exec cat {} + 2>/dev/null
+        printf '%s\n' "${CANONICAL_EXTRA[@]}"
+    } | grep -oE "${HOST_RE}" | sort -u
+}
 
-    echo
-    echo -e "  ${CYAN}Routing-Check${NC}  veraltete Domains/Routing im ganzen Baum"
-    echo "  ------------------------------------------------------------"
-
-    local files file_count found=0 entry pat hint hits hit_line
-    files="$(collectFiles)"
-    file_count="$(printf '%s\n' "${files}" | grep -c . || true)"
-
-    echo -e "  ${YELLOW}Geprüfte Muster:${NC}"
-    for entry in "${DEPRECATED[@]}"; do
-        echo -e "      ${CYAN}${entry%%|*}${NC}  ${GREY}→ ${entry#*|}${NC}"
+# Gibt eine Fund-Zeile (Datei:Zeile-Treffer) eingerueckt und grau aus.
+#
+# Params:
+#   $1 - Newline-Liste von "pfad:zeile:inhalt"
+printHits() {
+    printf '%s\n' "$1" | sed "s|${ROOT}/||" | while IFS= read -r hit_line; do
+        echo -e "        ${GREY}${hit_line}${NC}"
     done
-    if [[ "${verbose}" == "verbose" ]]; then
-        echo -e "  ${YELLOW}Geprüfte Dateien (${file_count}):${NC}"
-        printf '%s\n' "${files}" | sed "s|${ROOT}/||" | while IFS= read -r hit_line; do
-            echo -e "      ${GREY}${hit_line}${NC}"
-        done
-    else
-        echo -e "  ${YELLOW}Geprüfte Dateien:${NC} ${file_count}  ${GREY}(--verbose listet sie)${NC}"
-    fi
-    echo
+}
 
+# Ebene 1 — prueft, dass jeder <sub>.decisionmap.ai im Baum kanonisch ist.
+# Unbekannte Hosts (Tippfehler / stale / undeklarierte neue Subdomain) -> Fund.
+#
+# Params:
+#   $1 - Newline-Liste der zu pruefenden Dateien
+#
+# Returns:
+#   0 wenn alle Hosts kanonisch, 1 sonst
+checkCanonicalHosts() {
+    local files="$1" allowed found_hosts host esc locations found=0
+    # Erlaubt = kanonisch (nginx+.env+EXTRA) + dokumentierte Nicht-Service-Hosts.
+    allowed="$(canonicalHosts; printf '%s\n' "${DOC_ALLOWED[@]}")"
+    found_hosts="$(printf '%s\n' "${files}" | xargs grep -hoE "${HOST_RE}" 2>/dev/null | sort -u)"
+
+    while IFS= read -r host; do
+        if [[ -z "${host}" ]]; then continue; fi
+        if grep -qxF "${host}" <<< "${allowed}"; then continue; fi
+        esc="${host//./\\.}"
+        locations="$(printf '%s\n' "${files}" | xargs grep -nE "${esc}" 2>/dev/null \
+                     | grep -vE "${EXTERNAL_RE}" | grep -v "${IGNORE_MARKER}" || true)"
+        if [[ -z "${locations}" ]]; then continue; fi
+        found=1
+        echo -e "    ${RED}✗ unbekannter Host:${NC} ${YELLOW}${host}${NC}  ${GREY}(nicht in nginx+.env — Tippfehler / stale / neue Subdomain nicht deklariert?)${NC}"
+        printHits "${locations}"
+    done <<< "${found_hosts}"
+    return "${found}"
+}
+
+# Ebene 2 — prueft die expliziten DEPRECATED-Muster (Nicht-Host-Renames).
+#
+# Params:
+#   $1 - Newline-Liste der zu pruefenden Dateien
+#
+# Returns:
+#   0 wenn kein veraltetes Muster, 1 sonst
+checkDeprecated() {
+    local files="$1" found=0 entry pat hint hits
     for entry in "${DEPRECATED[@]}"; do
         pat="${entry%%|*}"
         hint="${entry#*|}"
@@ -125,20 +176,61 @@ runCheck() {
                 | grep -vE "${EXTERNAL_RE}" | grep -v "${IGNORE_MARKER}" || true)"
         if [[ -n "${hits}" ]]; then
             found=1
-            echo -e "    ${RED}✗ veraltet:${NC} ${YELLOW}${pat}${NC}  ${CYAN}→ ${hint}${NC}"
-            printf '%s\n' "${hits}" | sed "s|${ROOT}/||" | while IFS= read -r hit_line; do
-                echo -e "        ${hit_line}"
-            done
+            echo -e "    ${RED}✗ veraltet:${NC} ${YELLOW}${pat}${NC}  ${GREY}→ ${hint}${NC}"
+            printHits "${hits}"
         fi
     done
+    return "${found}"
+}
+
+# Fuehrt beide Check-Ebenen aus, zeigt vorab den Umfang (kanonische Hosts, Muster,
+# Datei-Anzahl; bei "verbose" jede Datei).
+#
+# Params:
+#   $1 - "verbose" um zusaetzlich jede gepruefte Datei aufzulisten (optional)
+#
+# Returns:
+#   0 wenn keine Drift, 1 wenn Fund
+runCheck() {
+    local verbose="${1:-}"
+
+    echo
+    echo -e "  ${CYAN}Routing-Check${NC}  Domains/Routing konsistent zur SoT (nginx + .env)"
+    echo "  ------------------------------------------------------------"
+
+    local files file_count found=0 entry canon_host dep_pat file_path
+    files="$(collectFiles)"
+    file_count="$(printf '%s\n' "${files}" | grep -c . || true)"
+
+    echo -e "  ${YELLOW}Kanonische Hosts (aus nginx + .env):${NC}"
+    while IFS= read -r canon_host; do
+        echo -e "      ${GREY}${canon_host}${NC}"
+    done < <(canonicalHosts)
+    echo -e "  ${YELLOW}Veraltete Muster:${NC}"
+    for entry in "${DEPRECATED[@]}"; do
+        echo -e "      ${CYAN}${entry%%|*}${NC}  ${GREY}→ ${entry#*|}${NC}"
+    done
+    if [[ "${verbose}" == "verbose" ]]; then
+        echo -e "  ${YELLOW}Geprüfte Dateien (${file_count}):${NC}"
+        printf '%s\n' "${files}" | sed "s|${ROOT}/||" | while IFS= read -r file_path; do
+            echo -e "      ${GREY}${file_path}${NC}"
+        done
+    else
+        echo -e "  ${YELLOW}Geprüfte Dateien:${NC} ${file_count}  ${GREY}(--verbose listet sie)${NC}"
+    fi
+    echo
+
+    checkCanonicalHosts "${files}" || found=1
+    checkDeprecated     "${files}" || found=1
 
     echo
     if [[ "${found}" -eq 1 ]]; then
-        echo -e "  ${RED}✗ Drift gefunden${NC} — Files angleichen, oder historische Zeile mit ${CYAN}${IGNORE_MARKER}${NC} markieren."
+        echo -e "  ${RED}✗ Drift gefunden${NC} — Files angleichen, neue Subdomain in nginx+.env deklarieren,"
+        echo -e "    oder bewusstes Anti-Beispiel mit ${CYAN}${IGNORE_MARKER}${NC} markieren."
         echo
         return 1
     fi
-    echo -e "  ${GREEN}✓ keine veralteten Domain-/Routing-Werte in aktiven Files${NC}"
+    echo -e "  ${GREEN}✓ alle Domains kanonisch, keine veralteten Routing-Werte${NC}"
     echo
     return 0
 }
