@@ -13,6 +13,9 @@
 #      vorher zu kennen.
 #   2. Veraltete Muster (reaktiv/Regression): explizite DEPRECATED-Liste fuer
 #      Nicht-Host-Renames (z.B. Pfad /api/ -> /ai/).
+#   3. Live .env (value-maskiert): die tatsaechlich aktiven .env (nicht .example,
+#      nicht Backups) auf dieselben Hosts/Muster, aber Ausgabe NUR als "Key -> Host"
+#      — nie die volle KEY=value-Zeile (haelt die .env-Leak-Regel).
 #
 # SoT: infrastructure/.env(.example) fuer Werte, nginx fuer die Routing-Struktur.
 # Ergaenzt env-audit.py (.env <-> Code <-> compose) um nginx / Makefile / Scripts /
@@ -111,6 +114,18 @@ collectFiles() {
         | grep -vE "${BINARY_RE}"
 }
 
+# Listet die LIVE .env-Dateien (.env / .env.local / .env.e2e.local) — bewusst NICHT
+# .env.example (im Baum-Scan) und NICHT die .env.bak-*-Backups. Diese werden nur
+# value-maskiert geprueft (checkEnvValues), nie mit vollen Zeilen ausgegeben.
+#
+# Returns:
+#   Newline-separierte Dateipfade auf stdout
+collectEnvFiles() {
+    find "${ROOT}" -type f \
+        \( -name '.env' -o -name '.env.local' -o -name '.env.e2e.local' \) 2>/dev/null \
+        | grep -vE '/\.git/|/node_modules/|/backups/'
+}
+
 # Leitet die kanonische Menge der <sub>.decisionmap.ai-Hosts aus der SoT ab:
 # nginx server_name-Direktiven + Host-Teile der .env.example-Werte + CANONICAL_EXTRA.
 #
@@ -187,6 +202,49 @@ checkDeprecated() {
     return "${found}"
 }
 
+# Ebene 3 — prueft die LIVE .env-Werte auf veraltete Hosts/Muster, aber VALUE-MASKIERT:
+# gibt ausschliesslich "<Key> → <Host/Muster>" aus, nie die volle KEY=value-Zeile. Das
+# haelt die .env-Leak-Regel — ein <sub>.decisionmap.ai-Host ist eine oeffentliche Domain,
+# der Rest des Werts (Credentials, Ports, Pfade) wird nie gedruckt. Nur aktive Assignments
+# (Kommentare raus); env-audit deckt die volle Wert-Konsistenz leak-frei ab.
+#
+# Params:
+#   $1 - Newline-Liste der zu pruefenden .env-Dateien
+#
+# Returns:
+#   0 wenn sauber, 1 bei Fund (vom Aufrufer als nicht-blockierende Warnung behandelt)
+checkEnvValues() {
+    local env_files="$1" allowed file rel line key val host entry dep_pat found=0
+    allowed="$(canonicalHosts; printf '%s\n' "${DOC_ALLOWED[@]}")"
+
+    while IFS= read -r file; do
+        if [[ -z "${file}" ]]; then continue; fi
+        rel="${file#"${ROOT}"/}"
+        while IFS= read -r line; do
+            if [[ "${line}" == *"${IGNORE_MARKER}"* ]]; then continue; fi
+            key="${line%%=*}"
+            val="${line#*=}"
+            # unbekannte decisionmap.ai-Hosts im Wert (nur der Host wird gedruckt)
+            while IFS= read -r host; do
+                if [[ -z "${host}" ]]; then continue; fi
+                if grep -qxF "${host}" <<< "${allowed}"; then continue; fi
+                found=1
+                echo -e "    ${YELLOW}⚠${NC} ${GREY}${rel}:${NC} ${YELLOW}${key}${NC} → ${YELLOW}${host}${NC}  ${GREY}(unbekannter Host im .env-Wert)${NC}"
+            done < <(printf '%s' "${val}" | grep -oE "${HOST_RE}" | sort -u)
+            # veraltete Nicht-Host-Muster im Wert
+            for entry in "${DEPRECATED[@]}"; do
+                dep_pat="${entry%%|*}"
+                if printf '%s' "${val}" | grep -qE "${dep_pat}" \
+                   && ! printf '%s' "${val}" | grep -qE "${EXTERNAL_RE}"; then
+                    found=1
+                    echo -e "    ${YELLOW}⚠${NC} ${GREY}${rel}:${NC} ${YELLOW}${key}${NC} → ${YELLOW}${dep_pat}${NC}  ${GREY}(veraltetes Muster im .env-Wert)${NC}"
+                fi
+            done
+        done < <(grep -vE '^[[:space:]]*#' "${file}" | grep '=' || true)
+    done <<< "${env_files}"
+    return "${found}"
+}
+
 # Fuehrt beide Check-Ebenen aus, zeigt vorab den Umfang (kanonische Hosts, Muster,
 # Datei-Anzahl; bei "verbose" jede Datei).
 #
@@ -203,8 +261,11 @@ runCheck() {
     echo "  ------------------------------------------------------------"
 
     local files file_count found=0 entry canon_host dep_pat file_path
+    local env_files env_count
     files="$(collectFiles)"
     file_count="$(printf '%s\n' "${files}" | grep -c . || true)"
+    env_files="$(collectEnvFiles)"
+    env_count="$(printf '%s\n' "${env_files}" | grep -c . || true)"
 
     echo -e "  ${YELLOW}Kanonische Hosts (aus nginx + .env):${NC}"
     while IFS= read -r canon_host; do
@@ -222,10 +283,15 @@ runCheck() {
     else
         echo -e "  ${YELLOW}Geprüfte Dateien:${NC} ${file_count}  ${GREY}(--verbose listet sie)${NC}"
     fi
+    echo -e "  ${YELLOW}Live .env (value-maskiert):${NC} ${env_count}  ${GREY}(nur Key → Host, nie Werte — env-audit deckt Wert-Konsistenz ab)${NC}"
     echo
 
-    checkCanonicalHosts "${files}" || found=1
-    checkDeprecated     "${files}" || found=1
+    local env_warn=0
+    checkCanonicalHosts "${files}"     || found=1
+    checkDeprecated     "${files}"     || found=1
+    # Live-.env ist gitignoriert/persoenlich — Fund ist eine WARNUNG (sichtbar, aber
+    # blockiert den Commit nicht; env-audit ist das Enforcement-Tool fuer .env-Werte).
+    checkEnvValues      "${env_files}" || env_warn=1
 
     echo
     if [[ "${found}" -eq 1 ]]; then
@@ -233,6 +299,12 @@ runCheck() {
         echo -e "    oder bewusstes Anti-Beispiel mit ${CYAN}${IGNORE_MARKER}${NC} markieren."
         echo
         return 1
+    fi
+    if [[ "${env_warn}" -eq 1 ]]; then
+        echo -e "  ${YELLOW}⚠ Baum sauber — aber veraltete Routing-Werte in der lokalen .env (siehe oben).${NC}"
+        echo -e "    ${GREY}Die lokale .env ist deine — ${CYAN}env-audit --check${GREY} zeigt die Wert-Drift; blockiert den Commit nicht.${NC}"
+        echo
+        return 0
     fi
     echo -e "  ${GREEN}✓ alle Domains kanonisch, keine veralteten Routing-Werte${NC}"
     echo
