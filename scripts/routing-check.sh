@@ -45,7 +45,7 @@ readonly DEPRECATED=(
 
 # Ausgenommene Pfade: das Tool selbst (enthaelt die Muster als Config), datierte/
 # historische Docs (Point-in-Time), Build-/VCS-Verzeichnisse.
-readonly EXEMPT_RE='routing-check\.sh|docs/plans/|docs/specs/|docs/security-audit-|docs/backend\.md|design_handoff|design_claude_code_fail|/node_modules/|/\.venv/|/\.nuxt/|/\.output/|/\.git/|/backups/|/dist/'
+readonly EXEMPT_RE='routing-check\.sh|docs/plans/|docs/specs/|docs/security-audit-|docs/backend\.md|design_handoff|design_claude_code_fail|/node_modules/|/\.venv/|/\.nuxt/|/\.output/|/\.git/|/\.pytest_cache/|/\.claude/|/backups/|/dist/'
 
 # Externe URLs, die zufaellig matchen (Nuxt-Doku-Links, Adminer-CSS, ...).
 readonly EXTERNAL_RE='nuxt\.com|/docs/api/|github\.com|adminer|apache\.org'
@@ -61,6 +61,7 @@ usage() {
     echo "Usage: ${APPNAME} [ options ]"
     echo
     usageLine "-c | --check  " "Baum auf veraltete Domain-/Routing-Werte pruefen (Exit 1 bei Drift)"
+    usageLine "-v | --verbose" "wie --check, listet zusaetzlich alle geprueften Dateien"
     usageLine "-h | --help   " "Diese Hilfe anzeigen"
     echo
     echo -e "${LIGHT_BLUE}Hints:${NC}"
@@ -85,16 +86,37 @@ collectFiles() {
 }
 
 # Prueft den Baum gegen alle DEPRECATED-Muster und gibt Treffer coloriert aus.
+# Zeigt vorab den Umfang (Muster + Datei-Anzahl); bei "verbose" jede Datei.
+#
+# Params:
+#   $1 - "verbose" um zusaetzlich jede gepruefte Datei aufzulisten (optional)
 #
 # Returns:
 #   0 wenn keine Drift, 1 wenn veraltete Werte gefunden
 runCheck() {
+    local verbose="${1:-}"
+
     echo
     echo -e "  ${CYAN}Routing-Check${NC}  veraltete Domains/Routing im ganzen Baum"
     echo "  ------------------------------------------------------------"
 
-    local files found=0 entry pat hint hits hit_line
+    local files file_count found=0 entry pat hint hits hit_line
     files="$(collectFiles)"
+    file_count="$(printf '%s\n' "${files}" | grep -c . || true)"
+
+    echo -e "  ${YELLOW}Geprüfte Muster:${NC}"
+    for entry in "${DEPRECATED[@]}"; do
+        echo -e "      ${CYAN}${entry%%|*}${NC}  ${GREY}→ ${entry#*|}${NC}"
+    done
+    if [[ "${verbose}" == "verbose" ]]; then
+        echo -e "  ${YELLOW}Geprüfte Dateien (${file_count}):${NC}"
+        printf '%s\n' "${files}" | sed "s|${ROOT}/||" | while IFS= read -r hit_line; do
+            echo -e "      ${GREY}${hit_line}${NC}"
+        done
+    else
+        echo -e "  ${YELLOW}Geprüfte Dateien:${NC} ${file_count}  ${GREY}(--verbose listet sie)${NC}"
+    fi
+    echo
 
     for entry in "${DEPRECATED[@]}"; do
         pat="${entry%%|*}"
@@ -128,7 +150,8 @@ if [[ $# -eq 0 ]]; then
 fi
 
 case "$1" in
-    -c|--check) runCheck ;;
-    -h|--help)  usage; exit 0 ;;
+    -c|--check)   runCheck ;;
+    -v|--verbose) runCheck verbose ;;
+    -h|--help)    usage; exit 0 ;;
     *) echo -e "${RED}Unbekannte Option: $1${NC}" >&2; usage; exit 1 ;;
 esac
