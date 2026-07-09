@@ -57,7 +57,7 @@ hints: ## Nützliche Links und Hinweise anzeigen
 	@echo
 	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "App"              "http://int.decisionmap.ai"
 	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "Backend API"      "http://backend.int.decisionmap.ai"
-	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "AI-Docs"          "http://int.decisionmap.ai/api/docs"
+	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "AI-Docs"          "http://int.decisionmap.ai/ai/docs"
 	@echo
 	@echo "  ${YELLOW}Lokale Entwicklung — Direkt (ohne Proxy)${RESET}"
 	@echo
@@ -72,8 +72,8 @@ hints: ## Nützliche Links und Hinweise anzeigen
 	@echo "  ${YELLOW}Produktion${RESET}"
 	@echo
 	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "App"         "https://decisionmap.ai"
-	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Backend API" "https://api.decisionmap.ai"
-	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "AI-Docs"     "https://decisionmap.ai/api/docs"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Backend API" "https://backend.decisionmap.ai"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "AI-Docs"     "https://decisionmap.ai/ai/docs"
 	@echo
 
 ##@ Setup
