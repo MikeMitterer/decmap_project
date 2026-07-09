@@ -36,6 +36,13 @@ database/backups/
 # Implementierungspläne (temporär, nicht öffentlich)
 docs/superpowers/
 
+# Superpowers-Tool-Scratch (sdd-Reports, Brainstorm — nicht im Repo)
+.superpowers/
+
+# Design-Handoff / Referenz-Material (lokal, große Binärdateien — nicht im Repo)
+design_handoff_decisionmap_redesign-mit-SS/
+design_claude_code_fail/
+
 # Build-Logs (generiert von .templates/docker/build.sh)
 .templates/docker/logs/
 apps/frontend/
