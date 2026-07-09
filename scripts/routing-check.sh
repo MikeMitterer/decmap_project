@@ -65,11 +65,17 @@ readonly DOC_ALLOWED=(
 )
 
 # Ausgenommene Pfade: das Tool selbst, datierte/historische Docs, die SES/DNS-Doku
-# (DNS-Records + Anti-Beispiele), Build-/VCS-/Tool-Verzeichnisse.
-readonly EXEMPT_RE='routing-check\.sh|docs/plans/|docs/specs/|docs/security-audit-|docs/backend\.md|docs/ses-setup|design_handoff|design_claude_code_fail|/node_modules/|/\.venv/|/\.nuxt/|/\.output/|/\.git/|/\.pytest_cache/|/\.claude/|/backups/|/dist/'
+# (DNS-Records + Anti-Beispiele), Build-/VCS-/Tool-Verzeichnisse, lokale/gitignorierte
+# .env (env-audits Domaene — .env.example bleibt gescannt) und Backups.
+readonly EXEMPT_RE='routing-check\.sh|docs/plans/|docs/specs/|docs/security-audit-|docs/backend\.md|docs/ses-setup|design_handoff|design_claude_code_fail|/node_modules/|/\.venv/|/\.nuxt/|/\.output/|/\.git/|/\.pytest_cache/|/\.claude/|/\.superpowers/|/coverage/|/htmlcov/|/playwright-report/|/backups/|/dist/|/\.env$|/\.env\.bak|/\.env\.local|/\.env\.e2e\.local|\.backup$|\.orig$'
 
 # Externe URLs, die zufaellig matchen (Nuxt-Doku-Links, Adminer-CSS, ...).
 readonly EXTERNAL_RE='nuxt\.com|/docs/api/|github\.com|adminer|apache\.org'
+
+# Binaer-/generierte Dateien (nach Name) — nie prueferelevant. Der Scan ist sonst
+# typ-agnostisch (alle Text-Dateien), damit neue Quell-Dateitypen automatisch
+# abgedeckt sind; grep -I filtert Binaeres zusaetzlich am Inhalt.
+readonly BINARY_RE='\.(png|jpe?g|gif|svg|ico|webp|woff2?|ttf|eot|otf|pdf|zip|gz|tgz|jar|class|pyc|pyo|so|o|a|dylib|dll|exe|bin|wasm|mp4|mov|webm|db|sqlite3?|lock)$|package-lock\.json$|[^/]*-lock\.ya?ml$|\.min\.(js|css)$'
 
 # Zeilen mit diesem Marker gelten als bewusst historisch/gewollt.
 readonly IGNORE_MARKER='routing-check:ignore'
@@ -93,18 +99,16 @@ usage() {
     echo
 }
 
-# Listet alle zu pruefenden Text-Dateien — via find (umgeht gitignore), Pfade aus
-# EXEMPT_RE herausgefiltert.
+# Listet alle zu pruefenden Text-Dateien — typ-agnostisch via find (umgeht gitignore),
+# EXEMPT_RE-Pfade + BINARY_RE-Dateien herausgefiltert. Bewusst KEINE Extension-Allowlist:
+# ein neuer Quell-Dateityp (z.B. .sql/.tsx/.toml) ist damit automatisch abgedeckt.
 #
 # Returns:
 #   Newline-separierte Dateipfade auf stdout
 collectFiles() {
-    find "${ROOT}" -type f \
-        \( -name '*.ts' -o -name '*.vue' -o -name '*.js' -o -name '*.py' \
-           -o -name '*.sh' -o -name '*.md' -o -name '*.yml' -o -name '*.yaml' \
-           -o -name '*.conf' -o -name '*.example' -o -name 'Makefile' \
-           -o -name 'Dockerfile' -o -name 'Jenkinsfile' -o -name 'Procfile*' \
-           -o -name '*.json' \) 2>/dev/null | grep -vE "${EXEMPT_RE}"
+    find "${ROOT}" -type f 2>/dev/null \
+        | grep -vE "${EXEMPT_RE}" \
+        | grep -vE "${BINARY_RE}"
 }
 
 # Leitet die kanonische Menge der <sub>.decisionmap.ai-Hosts aus der SoT ab:
@@ -144,13 +148,13 @@ checkCanonicalHosts() {
     local files="$1" allowed found_hosts host esc locations found=0
     # Erlaubt = kanonisch (nginx+.env+EXTRA) + dokumentierte Nicht-Service-Hosts.
     allowed="$(canonicalHosts; printf '%s\n' "${DOC_ALLOWED[@]}")"
-    found_hosts="$(printf '%s\n' "${files}" | xargs grep -hoE "${HOST_RE}" 2>/dev/null | sort -u)"
+    found_hosts="$(printf '%s\n' "${files}" | xargs grep -IhoE "${HOST_RE}" 2>/dev/null | sort -u)"
 
     while IFS= read -r host; do
         if [[ -z "${host}" ]]; then continue; fi
         if grep -qxF "${host}" <<< "${allowed}"; then continue; fi
         esc="${host//./\\.}"
-        locations="$(printf '%s\n' "${files}" | xargs grep -nE "${esc}" 2>/dev/null \
+        locations="$(printf '%s\n' "${files}" | xargs grep -InE "${esc}" 2>/dev/null \
                      | grep -vE "${EXTERNAL_RE}" | grep -v "${IGNORE_MARKER}" || true)"
         if [[ -z "${locations}" ]]; then continue; fi
         found=1
@@ -172,7 +176,7 @@ checkDeprecated() {
     for entry in "${DEPRECATED[@]}"; do
         pat="${entry%%|*}"
         hint="${entry#*|}"
-        hits="$(printf '%s\n' "${files}" | xargs grep -nE "${pat}" 2>/dev/null \
+        hits="$(printf '%s\n' "${files}" | xargs grep -InE "${pat}" 2>/dev/null \
                 | grep -vE "${EXTERNAL_RE}" | grep -v "${IGNORE_MARKER}" || true)"
         if [[ -n "${hits}" ]]; then
             found=1
