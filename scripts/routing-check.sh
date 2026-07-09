@@ -4,115 +4,131 @@
 #
 # Findet veraltete Domain-/Routing-Werte, die nach einem Rename in aktivem Code,
 # Config, Scripts, Makefiles oder Doku zurueckgeblieben sind — in EINEM Durchgang
-# ueber den ganzen Baum (auch gitignorierte apps/ + .env.example), statt sie ueber
-# viele Iterationen manuell zusammenzugreppen.
+# ueber den ganzen Baum (via find, umgeht gitignore -> auch apps/ + .env.example),
+# statt sie ueber viele Iterationen manuell zusammenzugreppen.
 #
-# SoT: infra/.env(.example) fuer Werte, nginx fuer die Routing-Struktur. Ueberall
-# sonst per Variable ableiten; wo hardcoded unvermeidbar ist (nginx server_name /
-# Location-Pfade), faengt dieses Tool die Drift.
+# SoT: infrastructure/.env(.example) fuer Werte, nginx fuer die Routing-Struktur
+# (nginx server_name / Location-Pfade lassen sich nicht aus .env variablisieren).
+# Ergaenzt env-audit.py (das .env <-> Code <-> compose deckt) um nginx / Makefile /
+# Scripts / Doku.
 #
-# Ergaenzt env-audit.py: env-audit deckt .env <-> Code <-> compose ab,
-# routing-check deckt nginx / Makefile / Scripts / Doku.
-#
-# Bei einem Rename (ALT -> NEU): ALT in der DEPRECATED-Liste eintragen,
-# `make routing-check` laufen, alle gemeldeten Files angleichen. Der Eintrag bleibt
-# als Regressions-Guard. Bewusste historische Erwaehnung: Zeile mit dem Marker
-# `routing-check:ignore` versehen; ganze Pfade via EXEMPT_RE.
+# Bei einem Rename (ALT -> NEU): ALT in der DEPRECATED-Liste eintragen, dann
+# `make routing-check` — meldet alle betroffenen Files. Bewusste historische Zeile:
+# Marker `routing-check:ignore`; ganze Pfade via EXEMPT_RE.
 #
 # Verwendung:
-#   routing-check.sh            pruefen (Exit 1 bei Drift)
-#   routing-check.sh --help
+#   ./scripts/routing-check.sh --check
+#   make routing-check
+#
+# Optionen:
+#   -c | --check   Baum auf veraltete Domain-/Routing-Werte pruefen (Exit 1 bei Drift)
+#   -h | --help    Diese Hilfe anzeigen
 #------------------------------------------------------------------------------
 set -euo pipefail
 
-APPNAME="$(basename "$0")"
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+BASH_LIBS="${BASH_LIBS:-$(cd "$(dirname "$0")/../.libs/BashLib/src" && pwd)}"
 
-# Veraltete Muster (ERE) + Hinweis, "regex|hinweis". Bei Rename ALT hier eintragen.
-DEPRECATED=(
+if [[ "${__COLORS_LIB__:=""}"  == "" ]]; then . "${BASH_LIBS}/colors.lib.sh";  fi
+if [[ "${__TOOLS_LIB__:=""}"   == "" ]]; then . "${BASH_LIBS}/tools.lib.sh";   fi
+
+APPNAME="$(basename "$0")"
+readonly APPNAME
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+readonly ROOT
+
+# Veraltete Muster (ERE) + Hinweis im Format "regex|hinweis". Bei einem Rename den
+# ALTEN Wert hier eintragen — dann findet ein Lauf alle verbliebenen Vorkommen.
+readonly DEPRECATED=(
     '/api/|ai-service laeuft jetzt unter /ai/ (nginx strippt den Praefix)'
     'api\.decisionmap\.ai|Backend-Subdomain ist jetzt backend.decisionmap.ai'
 )
 
 # Ausgenommene Pfade: das Tool selbst (enthaelt die Muster als Config), datierte/
-# historische Artefakte + Build-/VCS-Verzeichnisse.
-EXEMPT_RE='routing-check\.sh|docs/plans/|docs/specs/|docs/security-audit-|docs/backend\.md|design_handoff|design_claude_code_fail|/node_modules/|/\.venv/|/\.nuxt/|/\.output/|/\.git/|/backups/|/dist/'
+# historische Docs (Point-in-Time), Build-/VCS-Verzeichnisse.
+readonly EXEMPT_RE='routing-check\.sh|docs/plans/|docs/specs/|docs/security-audit-|docs/backend\.md|design_handoff|design_claude_code_fail|/node_modules/|/\.venv/|/\.nuxt/|/\.output/|/\.git/|/backups/|/dist/'
 
 # Externe URLs, die zufaellig matchen (Nuxt-Doku-Links, Adminer-CSS, ...).
-EXTERNAL_RE='nuxt\.com|/docs/api/|github\.com|adminer|apache\.org'
+readonly EXTERNAL_RE='nuxt\.com|/docs/api/|github\.com|adminer|apache\.org'
 
 # Zeilen mit diesem Marker gelten als bewusst historisch/gewollt.
-IGNORE_MARKER='routing-check:ignore'
-
-if [ -t 1 ]; then
-    RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[1;33m'
-    CYAN=$'\033[0;36m'; GREY=$'\033[0;90m'; RESET=$'\033[0m'
-else
-    RED=; GREEN=; YELLOW=; CYAN=; GREY=; RESET=
-fi
+readonly IGNORE_MARKER='routing-check:ignore'
 
 # Zeigt die Verwendungshinweise an.
+#
+# Aufbau: Usage-Zeile, Optionen mit usageLine(), Hints-Sektion.
 usage() {
     echo
-    echo "  ${CYAN}${APPNAME}${RESET} — Cross-Cutting-Drift-Guard (Domains / Routing)"
+    echo "Usage: ${APPNAME} [ options ]"
     echo
-    echo "  Prueft den ganzen Baum auf veraltete Domain-/Routing-Werte nach einem"
-    echo "  Rename. SoT: infra/.env + nginx. Ergaenzt env-audit (.env/Code/compose)."
+    usageLine "-c | --check  " "Baum auf veraltete Domain-/Routing-Werte pruefen (Exit 1 bei Drift)"
+    usageLine "-h | --help   " "Diese Hilfe anzeigen"
     echo
-    echo "  ${YELLOW}Verwendung:${RESET}"
-    echo "    ${GREEN}${APPNAME}${RESET}            pruefen (Exit 1 bei Drift)"
-    echo "    ${GREEN}${APPNAME} --help${RESET}     diese Hilfe"
-    echo
-    echo "  ${YELLOW}Bei einem Rename${RESET} (ALT -> NEU): ALT in DEPRECATED (im Script) eintragen,"
-    echo "  dann ${GREEN}make routing-check${RESET} — findet alle betroffenen Files in einem Durchgang."
-    echo "  Bewusste historische Zeile: mit ${CYAN}${IGNORE_MARKER}${RESET} markieren."
+    echo -e "${LIGHT_BLUE}Hints:${NC}"
+    echo -e "    Pruefen:            ${GREEN}${APPNAME} --check${NC}   ${YELLOW}(oder: make routing-check)${NC}"
+    echo -e "    Bei einem Rename:   alten Wert in ${CYAN}DEPRECATED${NC} (im Script) eintragen"
+    echo -e "    Historische Zeile:  mit ${CYAN}${IGNORE_MARKER}${NC} markieren"
     echo
 }
 
-# Listet alle zu pruefenden Text-Dateien (bypass gitignore via find).
-collect_files() {
-    find "$ROOT" -type f \
+# Listet alle zu pruefenden Text-Dateien — via find (umgeht gitignore), Pfade aus
+# EXEMPT_RE herausgefiltert.
+#
+# Returns:
+#   Newline-separierte Dateipfade auf stdout
+collectFiles() {
+    find "${ROOT}" -type f \
         \( -name '*.ts' -o -name '*.vue' -o -name '*.js' -o -name '*.py' \
            -o -name '*.sh' -o -name '*.md' -o -name '*.yml' -o -name '*.yaml' \
            -o -name '*.conf' -o -name '*.example' -o -name 'Makefile' \
            -o -name 'Dockerfile' -o -name 'Jenkinsfile' -o -name 'Procfile*' \
-           -o -name '*.json' \) 2>/dev/null | grep -vE "$EXEMPT_RE"
+           -o -name '*.json' \) 2>/dev/null | grep -vE "${EXEMPT_RE}"
 }
 
-main() {
-    case "${1:-}" in
-        -h|--help) usage; exit 0 ;;
-    esac
-
+# Prueft den Baum gegen alle DEPRECATED-Muster und gibt Treffer coloriert aus.
+#
+# Returns:
+#   0 wenn keine Drift, 1 wenn veraltete Werte gefunden
+runCheck() {
     echo
-    echo "  ${CYAN}Routing-Check${RESET} ${GREY}(veraltete Domains/Routing im ganzen Baum)${RESET}"
+    echo -e "  ${CYAN}Routing-Check${NC}  veraltete Domains/Routing im ganzen Baum"
     echo "  ------------------------------------------------------------"
 
-    local files found=0 entry pat hint hits
-    files="$(collect_files)"
+    local files found=0 entry pat hint hits hit_line
+    files="$(collectFiles)"
 
     for entry in "${DEPRECATED[@]}"; do
         pat="${entry%%|*}"
         hint="${entry#*|}"
-        hits="$(printf '%s\n' "$files" | xargs grep -nE "$pat" 2>/dev/null \
-                | grep -vE "$EXTERNAL_RE" | grep -v "$IGNORE_MARKER" || true)"
-        if [ -n "$hits" ]; then
+        hits="$(printf '%s\n' "${files}" | xargs grep -nE "${pat}" 2>/dev/null \
+                | grep -vE "${EXTERNAL_RE}" | grep -v "${IGNORE_MARKER}" || true)"
+        if [[ -n "${hits}" ]]; then
             found=1
-            echo "    ${RED}✗ veraltet:${RESET} ${YELLOW}${pat}${RESET}  ${GREY}→ ${hint}${RESET}"
-            printf '%s\n' "$hits" | sed "s|${ROOT}/||" | while IFS= read -r l; do
-                echo "        ${GREY}${l}${RESET}"
+            echo -e "    ${RED}✗ veraltet:${NC} ${YELLOW}${pat}${NC}  ${CYAN}→ ${hint}${NC}"
+            printf '%s\n' "${hits}" | sed "s|${ROOT}/||" | while IFS= read -r hit_line; do
+                echo -e "        ${hit_line}"
             done
         fi
     done
 
     echo
-    if [ "$found" -eq 1 ]; then
-        echo "  ${RED}✗ Drift gefunden${RESET} — Files angleichen, oder historische Zeile mit ${CYAN}${IGNORE_MARKER}${RESET} markieren."
+    if [[ "${found}" -eq 1 ]]; then
+        echo -e "  ${RED}✗ Drift gefunden${NC} — Files angleichen, oder historische Zeile mit ${CYAN}${IGNORE_MARKER}${NC} markieren."
         echo
-        exit 1
+        return 1
     fi
-    echo "  ${GREEN}✓ keine veralteten Domain-/Routing-Werte in aktiven Files${RESET}"
+    echo -e "  ${GREEN}✓ keine veralteten Domain-/Routing-Werte in aktiven Files${NC}"
     echo
+    return 0
 }
 
-main "$@"
+# Kein Argument → Help anzeigen (kein stilles Loslegen).
+if [[ $# -eq 0 ]]; then
+    usage
+    exit 0
+fi
+
+case "$1" in
+    -c|--check) runCheck ;;
+    -h|--help)  usage; exit 0 ;;
+    *) echo -e "${RED}Unbekannte Option: $1${NC}" >&2; usage; exit 1 ;;
+esac

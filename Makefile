@@ -133,7 +133,7 @@ env-audit: ## .env gegen .env.example prüfen — Drift in allen Repos anzeigen
 
 .PHONY: routing-check
 routing-check: ## Domains/Routing auf veraltete Werte prüfen (nginx/Makefile/Scripts/Doku)
-	@bash scripts/routing-check.sh
+	@bash scripts/routing-check.sh --check
 
 .PHONY: loc
 loc: ## Lines of Code zählen (tokei, alle Sub-Repos + Root)
