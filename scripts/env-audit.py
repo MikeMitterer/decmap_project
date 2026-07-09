@@ -91,21 +91,22 @@ _DECORATION_RE = re.compile(r"^#\s*[\W_]*$")
 
 # ─── ANSI Output ──────────────────────────────────────────────────────────────
 
-class C:
-    YELLOW = "\033[38;5;11m"
-    GREEN  = "\033[38;5;10m"
-    RED    = "\033[38;5;196m"
-    ORANGE = "\033[38;5;214m"
-    BLUE   = "\033[38;5;33m"
-    CYAN   = "\033[38;5;51m"
-    GREY   = "\033[38;5;245m"
-    BOLD   = "\033[1m"
-    RESET  = "\033[0m"
+class Colors:
+    YELLOW     = "\033[38;5;11m"
+    GREEN      = "\033[38;5;10m"
+    RED        = "\033[38;5;196m"
+    ORANGE     = "\033[38;5;214m"
+    BLUE       = "\033[38;5;33m"
+    CYAN       = "\033[38;5;51m"
+    LIGHT_BLUE = "\033[38;5;45m"
+    GREY       = "\033[38;5;245m"
+    BOLD       = "\033[1m"
+    RESET      = "\033[0m"
 
 
 def usage_line(option: str, description: str, col_width: int = 32) -> None:
     """Gibt eine formatierte Options-Zeile aus."""
-    print(f"    {C.CYAN}{option:<{col_width}}{C.RESET} {description}")
+    print(f"    {Colors.CYAN}{option:<{col_width}}{Colors.RESET} {description}")
 
 
 def usage() -> None:
@@ -121,9 +122,9 @@ def usage() -> None:
     usage_line("-k | --check",     "Wert-Gegenüberstellung .env ↔ SoT (leak-frei: Geheimes maskiert)")
     usage_line("-R | --reveal -y", "wie --check, aber ROHE Werte (NUR im eigenen Terminal ausführen!)")
     usage_line("-h | --help",      "Diese Hilfe anzeigen")
-    print(f"\n{C.BLUE}Beispiele:{C.RESET}")
-    print(f"    {C.GREEN}{APPNAME} --audit{C.RESET}")
-    print(f"    {C.GREEN}{APPNAME} --repo apps/backend{C.RESET}")
+    print(f"\n{Colors.LIGHT_BLUE}Hints:{Colors.RESET}")
+    print(f"    {Colors.GREEN}{APPNAME} --audit{Colors.RESET}")
+    print(f"    {Colors.GREEN}{APPNAME} --repo apps/backend{Colors.RESET}")
     print()
 
 
@@ -475,39 +476,39 @@ def _render_cell(name: str, value: str | None, reveal: bool,
     den „abweichend"-Status in die .env-Spalte.
     """
     if value is None:
-        return "—", C.GREY
+        return "—", Colors.GREY
     if value == "":
-        return "(leer)", C.ORANGE if empty_warn else C.GREY
-    diverge_col = C.YELLOW if diverges else ""
+        return "(leer)", Colors.ORANGE if empty_warn else Colors.GREY
+    diverge_col = Colors.YELLOW if diverges else ""
     if reveal:
         return value, diverge_col
     if _is_secret_name(name):
-        return f"●●● {_fingerprint(value)}", diverge_col or C.GREY
+        return f"●●● {_fingerprint(value)}", diverge_col or Colors.GREY
     return _URL_CRED_RE.sub(r"\1***:***@", value), diverge_col
 
 
 def _display_value(name: str, value: str | None, reveal: bool) -> str:
     """Gefärbter Einzelwert (für die Cross-Repo-Ausgabe)."""
     text, color = _render_cell(name, value, reveal)
-    return f"{color}{text}{C.RESET}" if color else text
+    return f"{color}{text}{Colors.RESET}" if color else text
 
 
 def _status_cell(name: str, present: bool, env_value: str, default: str, ttype: str) -> str:
     """Baut die Status-Zelle: Typ-Validität + gleich/abweichend zum SoT-Default."""
     if not present:
-        return f"{C.RED}fehlt in .env{C.RESET}"
+        return f"{Colors.RED}fehlt in .env{Colors.RESET}"
     parts: list[str] = []
     if env_value == "":
-        parts.append(f"{C.ORANGE}leer{C.RESET}")
+        parts.append(f"{Colors.ORANGE}leer{Colors.RESET}")
     elif not _valid_for_type(env_value, ttype):
-        parts.append(f"{C.RED}UNGÜLTIG({ttype}){C.RESET}")
+        parts.append(f"{Colors.RED}UNGÜLTIG({ttype}){Colors.RESET}")
     else:
-        parts.append(f"{C.GREEN}ok{C.RESET}")
+        parts.append(f"{Colors.GREEN}ok{Colors.RESET}")
     if default != "":
         same = _matches_default(name, env_value, default)
-        parts.append(f"{C.GREY}gleich{C.RESET}" if same else f"{C.YELLOW}abweichend{C.RESET}")
+        parts.append(f"{Colors.GREY}gleich{Colors.RESET}" if same else f"{Colors.YELLOW}abweichend{Colors.RESET}")
     elif env_value != "":
-        parts.append(f"{C.GREY}gesetzt{C.RESET}")
+        parts.append(f"{Colors.GREY}gesetzt{Colors.RESET}")
     return " · ".join(parts)
 
 
@@ -532,12 +533,12 @@ def print_comparison(repo: Path, reveal: bool, w_key: int) -> bool:
     """Spalten-Gegenüberstellung .env ↔ .env.example je Key. Rückgabe: hat_fehler."""
     example_path = repo / ".env.example"
     env_path     = repo / ".env"
-    print(f"\n  {C.BLUE}{repo_label(repo)}{C.RESET}")
+    print(f"\n  {Colors.BLUE}{repo_label(repo)}{Colors.RESET}")
     if not example_path.exists():
-        print(f"    {C.RED}✗ .env.example (SoT) fehlt{C.RESET}")
+        print(f"    {Colors.RED}✗ .env.example (SoT) fehlt{Colors.RESET}")
         return True
     if not env_path.exists():
-        print(f"    {C.YELLOW}⚠ .env fehlt — nicht konfiguriert{C.RESET}")
+        print(f"    {Colors.YELLOW}⚠ .env fehlt — nicht konfiguriert{Colors.RESET}")
         return False
 
     example = parse_example(example_path)
@@ -553,8 +554,8 @@ def print_comparison(repo: Path, reveal: bool, w_key: int) -> bool:
     if not stacked:
         avail = cols - 4 - w_key - 3 * 2 - 26           # 4 Indent, 3×2 Gaps, 26 Status-Reserve
         w_val = max(12, min(46, avail // 2))
-        print(f"    {C.GREY}{_fit('KEY', w_key)}  {_fit('.env', w_val)}  "
-              f"{_fit('SoT (.env.example)', w_val)}  Status{C.RESET}")
+        print(f"    {Colors.GREY}{_fit('KEY', w_key)}  {_fit('.env', w_val)}  "
+              f"{_fit('SoT (.env.example)', w_val)}  Status{Colors.RESET}")
 
     for name in names:
         ek      = example.keys.get(name)
@@ -563,7 +564,7 @@ def print_comparison(repo: Path, reveal: bool, w_key: int) -> bool:
         default = ek.default if ek else ""
         ttype   = _infer_type(default) if ek else "any"
 
-        note = f"{C.RED}nicht in SoT{C.RESET}" if ek is None \
+        note = f"{Colors.RED}nicht in SoT{Colors.RESET}" if ek is None \
             else _status_cell(name, present, env_val, default, ttype)
         if (ek is None) or (present and not _valid_for_type(env_val, ttype)) \
                 or (ek is not None and ek.required and not present):
@@ -576,14 +577,14 @@ def print_comparison(repo: Path, reveal: bool, w_key: int) -> bool:
         sot_txt, sot_col = _render_cell(name, default if ek else None, reveal)
 
         if stacked:
-            print(f"    {C.CYAN}{name}{C.RESET}")
-            print(f"        .env = {env_col}{env_txt}{C.RESET}")
-            print(f"        SoT  = {sot_col}{sot_txt}{C.RESET}")
+            print(f"    {Colors.CYAN}{name}{Colors.RESET}")
+            print(f"        .env = {env_col}{env_txt}{Colors.RESET}")
+            print(f"        SoT  = {sot_col}{sot_txt}{Colors.RESET}")
             print(f"        → {note}")
         else:
-            print(f"    {C.CYAN}{_fit(name, w_key)}{C.RESET}  "
-                  f"{env_col}{_fit(env_txt, w_val)}{C.RESET}  "
-                  f"{sot_col}{_fit(sot_txt, w_val)}{C.RESET}  {note}")
+            print(f"    {Colors.CYAN}{_fit(name, w_key)}{Colors.RESET}  "
+                  f"{env_col}{_fit(env_txt, w_val)}{Colors.RESET}  "
+                  f"{sot_col}{_fit(sot_txt, w_val)}{Colors.RESET}  {note}")
 
     return has_error
 
@@ -622,27 +623,26 @@ def print_cross_repo(repos: list[Path], reveal: bool) -> None:
         seen = {(_fingerprint(v) if _is_secret_name(name) else v) for v in values.values()}
         return len(seen) > 1
 
-    print(f"\n  {C.BLUE}Cross-Repo-Konsistenz{C.RESET} "
-          f"{C.GREY}(Keys in ≥2 Repos · Wert je Repo, Geheimes maskiert){C.RESET}")
-    header = f"    {C.GREY}{_fit('KEY', w_key)}"
+    print(f"\n  {Colors.BLUE}Cross-Repo-Konsistenz{Colors.RESET} "
+          f"{Colors.GREY}(Keys in ≥2 Repos · Wert je Repo, Geheimes maskiert){Colors.RESET}")
+    header = f"    {Colors.GREY}{_fit('KEY', w_key)}"
     for r in col_repos:
         header += f"  {_fit(r.name, w_val)}"
-    print(header + f"  Status{C.RESET}")
+    print(header + f"  Status{Colors.RESET}")
 
     for name in sorted(shared):
         values   = shared[name]
         mismatch = _mismatch(values, name)
-        key_col  = C.RED if mismatch else C.CYAN
-        row = f"    {key_col}{_fit(name, w_key)}{C.RESET}"
+        row = f"    {Colors.CYAN}{_fit(name, w_key)}{Colors.RESET}"
         for r in col_repos:
             if r in values:
                 txt, col = _render_cell(name, values[r], reveal)
                 if mismatch:
-                    col = C.ORANGE          # Mismatch-Zeile: gesetzte Werte orange hervorheben
+                    col = Colors.YELLOW          # Abweichung gelb — wie "abweichend" in der Wertegegenueberstellung
             else:
-                txt, col = "—", C.GREY
-            row += f"  {col}{_fit(txt, w_val)}{C.RESET}"
-        status = f"{C.RED}✗ MISMATCH{C.RESET}" if mismatch else f"{C.GREEN}✓ MATCH{C.RESET}"
+                txt, col = "—", Colors.GREY
+            row += f"  {col}{_fit(txt, w_val)}{Colors.RESET}"
+        status = f"{Colors.YELLOW}abweichend{Colors.RESET}" if mismatch else f"{Colors.GREEN}✓ gleich{Colors.RESET}"
         print(f"{row}  {status}")
 
 
@@ -669,7 +669,7 @@ def print_map(repos: list[Path]) -> None:
                 desc[name] = ek.description[0]
 
     if not data:
-        print(f"\n  {C.YELLOW}Keine .env.example gefunden.{C.RESET}\n")
+        print(f"\n  {Colors.YELLOW}Keine .env.example gefunden.{Colors.RESET}\n")
         return
 
     cols   = shutil.get_terminal_size((100, 24)).columns
@@ -681,24 +681,24 @@ def print_map(repos: list[Path]) -> None:
 
     def cell(name: str, tag: str) -> str:
         if tag not in data[name]:
-            return f"{C.GREY}{'·':>{w_tag}}{C.RESET}"
+            return f"{Colors.GREY}{'·':>{w_tag}}{Colors.RESET}"
         req = data[name][tag]
-        col = C.RED if req else C.GREEN
-        return f"{col}{('R' if req else 'o'):>{w_tag}}{C.RESET}"
+        col = Colors.RED if req else Colors.GREEN
+        return f"{col}{('R' if req else 'o'):>{w_tag}}{Colors.RESET}"
 
-    print(f"\n{C.BOLD}  Env-Karte{C.RESET}  {C.GREY}(alle .env.example / SoT){C.RESET}")
+    print(f"\n{Colors.BOLD}  Env-Karte{Colors.RESET}  {Colors.GREY}(alle .env.example / SoT){Colors.RESET}")
     print(f"  {rule}")
     head_tags = " ".join(f"{lbl:>{w_tag}}" for lbl in labels)
-    print(f"    {C.GREY}{_fit('KEY', w_key)}  {head_tags}  Beschreibung{C.RESET}")
+    print(f"    {Colors.GREY}{_fit('KEY', w_key)}  {head_tags}  Beschreibung{Colors.RESET}")
     for name in sorted(data):
         cells = " ".join(cell(name, lbl) for lbl in labels)
-        print(f"    {C.CYAN}{_fit(name, w_key)}{C.RESET}  {cells}  "
-              f"{C.GREY}{_fit(desc.get(name, ''), w_desc)}{C.RESET}")
+        print(f"    {Colors.CYAN}{_fit(name, w_key)}{Colors.RESET}  {cells}  "
+              f"{Colors.GREY}{_fit(desc.get(name, ''), w_desc)}{Colors.RESET}")
     total  = len(data)
     shared = sum(1 for r in data.values() if len(r) >= 2)
     print(f"  {rule}")
-    print(f"    {C.GREY}{total} Keys · {shared} in ≥2 Repos · "
-          f"{C.RED}R{C.GREY}=Pflicht  {C.GREEN}o{C.GREY}=optional  ·=fehlt{C.RESET}\n")
+    print(f"    {Colors.GREY}{total} Keys · {shared} in ≥2 Repos · "
+          f"{Colors.RED}R{Colors.GREY}=Pflicht  {Colors.GREEN}o{Colors.GREY}=optional  ·=fehlt{Colors.RESET}\n")
 
 
 # ─── Cross-Repo-Guard ─────────────────────────────────────────────────────────
@@ -879,33 +879,33 @@ def print_cross_repo_consistency(dead: list[tuple[str, str]],
                                  forward: list[tuple[str, str, str]],
                                  compose_vars: list[tuple[str, str]]) -> None:
     """Gibt die Guard-Ergebnisse aus (Liveness + Superset + Forwarding + compose-${VAR})."""
-    print(f"\n{C.BOLD}  Cross-Repo-Konsistenz{C.RESET}  "
-          f"{C.GREY}(Code liest ⊇ .env.example ⊆ infra · compose reicht durch & referenziert nur bekannte Keys (${{VAR}})){C.RESET}")
+    print(f"\n{Colors.BOLD}  Cross-Repo-Konsistenz{Colors.RESET}  "
+          f"{Colors.GREY}(Code liest ⊇ .env.example ⊆ infra · compose reicht durch & referenziert nur bekannte Keys (${{VAR}})){Colors.RESET}")
     print(f"  {'─' * 50}")
     if not dead and not superset and not forward and not compose_vars:
-        print(f"    {C.GREEN}✓ jeder .env.example-Key wird vom App-Code gelesen{C.RESET}")
-        print(f"    {C.GREEN}✓ infrastructure/.env.example ist Superset aller Service-Keys{C.RESET}")
-        print(f"    {C.GREEN}✓ docker-compose reicht jeden Service-Key an seinen Container{C.RESET}")
-        print(f"    {C.GREEN}✓ jede compose-Variablenreferenz (${{VAR}}) ist ein bekannter Key{C.RESET}")
+        print(f"    {Colors.GREEN}✓ jeder .env.example-Key wird vom App-Code gelesen{Colors.RESET}")
+        print(f"    {Colors.GREEN}✓ infrastructure/.env.example ist Superset aller Service-Keys{Colors.RESET}")
+        print(f"    {Colors.GREEN}✓ docker-compose reicht jeden Service-Key an seinen Container{Colors.RESET}")
+        print(f"    {Colors.GREEN}✓ jede compose-Variablenreferenz (${{VAR}}) ist ein bekannter Key{Colors.RESET}")
         return
     if compose_vars:
-        print(f"    {C.RED}✗ compose-Variablenreferenz (${{VAR}}) in keiner .env.example (unbekannt/Tippfehler):{C.RESET}")
+        print(f"    {Colors.RED}✗ compose-Variablenreferenz (${{VAR}}) in keiner .env.example (unbekannt/Tippfehler):{Colors.RESET}")
         for label, var in compose_vars:
-            print(f"      {C.RED}- {var}{C.RESET}  {C.GREY}({label}){C.RESET}")
+            print(f"      {Colors.RED}- {var}{Colors.RESET}  {Colors.GREY}({label}){Colors.RESET}")
     if dead:
-        print(f"    {C.RED}✗ Im .env.example, aber vom App-Code nicht gelesen (toter Key):{C.RESET}")
+        print(f"    {Colors.RED}✗ Im .env.example, aber vom App-Code nicht gelesen (toter Key):{Colors.RESET}")
         for example_rel, key in dead:
-            print(f"      {C.RED}- {key}{C.RESET}  {C.GREY}({example_rel} — kein Settings-Feld / process.env){C.RESET}")
+            print(f"      {Colors.RED}- {key}{Colors.RESET}  {Colors.GREY}({example_rel} — kein Settings-Feld / process.env){Colors.RESET}")
     if superset:
-        print(f"    {C.RED}✗ Fehlt in infrastructure/.env.example (kein Prod-Superset):{C.RESET}")
+        print(f"    {Colors.RED}✗ Fehlt in infrastructure/.env.example (kein Prod-Superset):{Colors.RESET}")
         for src_rel, key in superset:
-            print(f"      {C.RED}- {key}{C.RESET}  {C.GREY}(aus {src_rel}){C.RESET}")
+            print(f"      {Colors.RED}- {key}{Colors.RESET}  {Colors.GREY}(aus {src_rel}){Colors.RESET}")
     if forward:
         compose_rel = str(COMPOSE_FILE.relative_to(ROOT))
-        print(f"    {C.RED}✗ Nicht an den Service-Container weitergereicht:{C.RESET}")
+        print(f"    {Colors.RED}✗ Nicht an den Service-Container weitergereicht:{Colors.RESET}")
         for svc, key, want in forward:
-            print(f"      {C.RED}- {key}{C.RESET}  "
-                  f"{C.GREY}({compose_rel} [{svc}]: '{want}' fehlt im environment-Block){C.RESET}")
+            print(f"      {Colors.RED}- {key}{Colors.RESET}  "
+                  f"{Colors.GREY}({compose_rel} [{svc}]: '{want}' fehlt im environment-Block){Colors.RESET}")
 
 
 # ─── Output ───────────────────────────────────────────────────────────────────
@@ -922,20 +922,20 @@ def repo_label(repo: Path) -> str:
 def _print_description(desc: list[str], hint: str) -> None:
     """Gibt alle `#:`-Beschreibungszeilen eines Keys aus."""
     for line in desc:
-        print(f"{hint}{C.GREY}#: {line}{C.RESET}")
+        print(f"{hint}{Colors.GREY}#: {line}{Colors.RESET}")
 
 
 def print_result(result: AuditResult, quiet: bool, strict: bool) -> tuple[bool, bool]:
     """Gibt den Befund eines Repos aus. Rückgabe: (hat_fehler, hat_warnung)."""
     indent = "    "
     hint   = "      "
-    print(f"\n  {C.BLUE}{repo_label(result.repo)}{C.RESET}")
+    print(f"\n  {Colors.BLUE}{repo_label(result.repo)}{Colors.RESET}")
 
     if not result.example_exists:
-        print(f"{indent}{C.RED}✗ .env.example (SoT) fehlt — kein Vergleich möglich{C.RESET}")
+        print(f"{indent}{Colors.RED}✗ .env.example (SoT) fehlt — kein Vergleich möglich{Colors.RESET}")
         return True, False
     if not result.env_exists:
-        print(f"{indent}{C.YELLOW}⚠ .env fehlt — noch nicht konfiguriert{C.RESET}")
+        print(f"{indent}{Colors.YELLOW}⚠ .env fehlt — noch nicht konfiguriert{Colors.RESET}")
         return False, True
 
     ex = result.example
@@ -946,36 +946,36 @@ def print_result(result: AuditResult, quiet: bool, strict: bool) -> tuple[bool, 
     has_warning = bool(result.unknown or ex.duplicates or ex.orphan_docs or undocumented)
 
     if not has_error and not has_warning and not quiet:
-        print(f"{indent}{C.GREEN}✓ {result.synced} Keys in Sync{C.RESET}")
+        print(f"{indent}{Colors.GREEN}✓ {result.synced} Keys in Sync{Colors.RESET}")
         return False, False
 
     if result.synced and not quiet:
-        print(f"{indent}{C.GREEN}✓ {result.synced} Keys in Sync{C.RESET}")
+        print(f"{indent}{Colors.GREEN}✓ {result.synced} Keys in Sync{Colors.RESET}")
 
     # Pflicht-Keys fehlen (echter Konfigurationsfehler)
     for key in result.missing_req:
-        print(f"{indent}{C.RED}✗ {key:<35}{C.RESET}  Pflicht-Key fehlt in .env")
+        print(f"{indent}{Colors.RED}✗ {key:<35}{Colors.RESET}  Pflicht-Key fehlt in .env")
         _print_description(ex.keys[key].description, hint)
 
     # Der SoT unbekannte Keys in .env
     for key in result.unknown:
-        print(f"{indent}{C.RED}✗ {key:<35}{C.RESET}  in .env, nicht in SoT (.env.example)")
-        print(f"{hint}{C.GREY}→ aus .env entfernen — oder, falls bewusst neu, in .env.example (+ Code) aufnehmen{C.RESET}")
+        print(f"{indent}{Colors.RED}✗ {key:<35}{Colors.RESET}  in .env, nicht in SoT (.env.example)")
+        print(f"{hint}{Colors.GREY}→ aus .env entfernen — oder, falls bewusst neu, in .env.example (+ Code) aufnehmen{Colors.RESET}")
 
     # Optionale Keys fehlen (Info, kein Fehler)
     if not quiet:
         for key in result.missing_opt:
-            print(f"{indent}{C.CYAN}○ {key:<35}{C.RESET}  optional, fehlt in .env (Default in .env.example)")
+            print(f"{indent}{Colors.CYAN}○ {key:<35}{Colors.RESET}  optional, fehlt in .env (Default in .env.example)")
             _print_description(ex.keys[key].description, hint)
 
     # SoT-Qualitätswarnungen
     for key in ex.duplicates:
-        print(f"{indent}{C.YELLOW}⚠ {key:<35}{C.RESET}  mehrfach in .env.example definiert")
+        print(f"{indent}{Colors.YELLOW}⚠ {key:<35}{Colors.RESET}  mehrfach in .env.example definiert")
     if ex.orphan_docs:
-        print(f"{indent}{C.YELLOW}⚠ {ex.orphan_docs} verwaiste #:-Beschreibung(en) in .env.example (kein Key darunter){C.RESET}")
+        print(f"{indent}{Colors.YELLOW}⚠ {ex.orphan_docs} verwaiste #:-Beschreibung(en) in .env.example (kein Key darunter){Colors.RESET}")
     if undocumented and not quiet:
         joined = ", ".join(undocumented)
-        print(f"{indent}{C.YELLOW}⚠ ohne #:-Doku in .env.example: {C.RESET}{C.GREY}{joined}{C.RESET}")
+        print(f"{indent}{Colors.YELLOW}⚠ ohne #:-Doku in .env.example: {Colors.RESET}{Colors.GREY}{joined}{Colors.RESET}")
 
     return has_error, has_warning
 
@@ -1006,7 +1006,7 @@ def main() -> int:
     repos = [args.repo.resolve()] if args.repo else REPOS
     repos = [r for r in repos if r.exists()]
     if not repos:
-        print(f"\n{C.RED}Keine Repos gefunden.{C.RESET}\n")
+        print(f"\n{Colors.RED}Keine Repos gefunden.{Colors.RESET}\n")
         return 2
 
     # ── Konsolidierte Karte (--map) ──
@@ -1017,12 +1017,12 @@ def main() -> int:
     # ── Wert-Gegenüberstellung (--check / --reveal) ──
     if args.check or args.reveal:
         if args.reveal and not args.yes:
-            print(f"\n  {C.RED}--reveal zeigt ROHE Geheimwerte.{C.RESET}")
-            print(f"  {C.YELLOW}Nur im eigenen Terminal ausführen — nie über einen Assistenten.{C.RESET}")
-            print(f"  {C.GREY}Bewusst bestätigen: {APPNAME} --reveal --yes{C.RESET}\n")
+            print(f"\n  {Colors.RED}--reveal zeigt ROHE Geheimwerte.{Colors.RESET}")
+            print(f"  {Colors.YELLOW}Nur im eigenen Terminal ausführen — nie über einen Assistenten.{Colors.RESET}")
+            print(f"  {Colors.GREY}Bewusst bestätigen: {APPNAME} --reveal --yes{Colors.RESET}\n")
             return 2
-        heading = "Wert-Gegenüberstellung" + (f" {C.RED}[REVEAL — Rohwerte]{C.RESET}" if args.reveal else " (leak-frei)")
-        print(f"\n{C.BOLD}  {heading}{C.RESET}  {C.GREY}(.env ↔ SoT .env.example){C.RESET}")
+        heading = "Wert-Gegenüberstellung" + (f" {Colors.RED}[REVEAL — Rohwerte]{Colors.RESET}" if args.reveal else " (leak-frei)")
+        print(f"\n{Colors.BOLD}  {heading}{Colors.RESET}  {Colors.GREY}(.env ↔ SoT .env.example){Colors.RESET}")
         print(f"  {'─' * 50}")
         w_key = key_column_width(repos)
         any_error = False
@@ -1032,7 +1032,7 @@ def main() -> int:
         print()
         return 1 if any_error else 0
 
-    print(f"\n{C.BOLD}  .env Audit{C.RESET}  {C.GREY}(SoT: .env.example){C.RESET}")
+    print(f"\n{Colors.BOLD}  .env Audit{Colors.RESET}  {Colors.GREY}(SoT: .env.example){Colors.RESET}")
     print(f"  {'─' * 50}")
 
     backup_suffix = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -1047,24 +1047,24 @@ def main() -> int:
 
         if args.comment_out and result.env_exists and result.unknown:
             backup, affected = comment_out_env(repo / ".env", result.unknown, backup_suffix)
-            print(f"    {C.GREEN}✎ {len(affected)} Key(s) auskommentiert{C.RESET}"
-                  f"  {C.GREY}Backup: {backup.name}{C.RESET}")
+            print(f"    {Colors.GREEN}✎ {len(affected)} Key(s) auskommentiert{Colors.RESET}"
+                  f"  {Colors.GREY}Backup: {backup.name}{Colors.RESET}")
             for key in affected:
-                print(f"      {C.GREY}- {key}{C.RESET}")
+                print(f"      {Colors.GREY}- {key}{Colors.RESET}")
 
         if args.fill and result.env_exists:
             missing = result.missing_req + result.missing_opt
             if missing:
                 backup, added = fill_env(repo / ".env", repo / ".env.example",
                                          missing, backup_suffix)
-                print(f"    {C.GREEN}✎ {len(added)} Key(s) aus SoT ergänzt{C.RESET}"
-                      f"  {C.GREY}Backup: {backup.name}{C.RESET}")
+                print(f"    {Colors.GREEN}✎ {len(added)} Key(s) aus SoT ergänzt{Colors.RESET}"
+                      f"  {Colors.GREY}Backup: {backup.name}{Colors.RESET}")
                 for key in added:
                     req = "" if not result.example.keys[key].required \
-                        else f"  {C.RED}(Pflicht — Wert setzen){C.RESET}"
-                    print(f"      {C.GREY}+ {key}{C.RESET}{req}")
+                        else f"  {Colors.RED}(Pflicht — Wert setzen){Colors.RESET}"
+                    print(f"      {Colors.GREY}+ {key}{Colors.RESET}{req}")
         elif args.fill and not result.env_exists and result.example_exists:
-            print(f"    {C.GREY}→ keine .env — anlegen mit: cp .env.example .env{C.RESET}")
+            print(f"    {Colors.GREY}→ keine .env — anlegen mit: cp .env.example .env{Colors.RESET}")
 
     # ── Cross-Repo-Guard (nur beim Voll-Audit über alle Repos) ──
     if args.repo is None:
@@ -1077,13 +1077,13 @@ def main() -> int:
 
     print()
     if any_error or (args.strict and any_warning):
-        print(f"  {C.RED}✗ Drift gegen die SoT (.env.example) — .env angleichen{C.RESET}\n")
+        print(f"  {Colors.RED}✗ Drift gegen die SoT (.env.example) — .env angleichen{Colors.RESET}\n")
         return 1
     if any_warning and not args.quiet:
-        print(f"  {C.YELLOW}✓ .env erfüllt die SoT — Warnungen offen (siehe oben){C.RESET}\n")
+        print(f"  {Colors.YELLOW}✓ .env erfüllt die SoT — Warnungen offen (siehe oben){Colors.RESET}\n")
         return 0
     if not args.quiet:
-        print(f"  {C.GREEN}✓ Alle Repos erfüllen die SoT{C.RESET}\n")
+        print(f"  {Colors.GREEN}✓ Alle Repos erfüllen die SoT{Colors.RESET}\n")
     return 0
 
 
