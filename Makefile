@@ -5,6 +5,16 @@ SHELL := /bin/bash
 WORKSPACE    := $(realpath $(shell pwd))
 PROJECT_NAME := $(notdir $(WORKSPACE))
 
+# ─── Cross-Cutting-Werte (Domains/Routing) ────────────────────────────────────
+# SoT: infra/.env(.example) fuer Werte + nginx fuer die Routing-Struktur. Hier nur
+# fuer die `hints`-Ausgabe gespiegelt (eine Stelle statt vieler). Aenderung? -> nginx
+# + .env.example anpassen, danach `make routing-check` (findet Alt-Werte im Baum).
+DEV_FRONTEND  := int.decisionmap.ai
+DEV_BACKEND   := backend.int.decisionmap.ai
+PROD_FRONTEND := decisionmap.ai
+PROD_BACKEND  := backend.decisionmap.ai
+AI_PREFIX     := /ai
+
 include ${DEV_MAKE}/colours.mk
 include ${DEV_MAKE}/tools.mk
 
@@ -55,9 +65,9 @@ hints: ## Nützliche Links und Hinweise anzeigen
 	@echo
 	@echo "  ${YELLOW}Lokale Entwicklung — via Dev-Proxy (make dev-nginx-up)${RESET}"
 	@echo
-	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "App"              "http://int.decisionmap.ai"
-	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "Backend API"      "http://backend.int.decisionmap.ai"
-	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "AI-Docs"          "http://int.decisionmap.ai/ai/docs"
+	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "App"              "http://$(DEV_FRONTEND)"
+	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "Backend API"      "http://$(DEV_BACKEND)"
+	@printf "    ${BLUE}%-22s${RESET} ${WHITE}%s${RESET}\n" "AI-Docs"          "http://$(DEV_FRONTEND)$(AI_PREFIX)/docs"
 	@echo
 	@echo "  ${YELLOW}Lokale Entwicklung — Direkt (ohne Proxy)${RESET}"
 	@echo
@@ -71,9 +81,9 @@ hints: ## Nützliche Links und Hinweise anzeigen
 	@echo
 	@echo "  ${YELLOW}Produktion${RESET}"
 	@echo
-	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "App"         "https://decisionmap.ai"
-	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Backend API" "https://backend.decisionmap.ai"
-	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "AI-Docs"     "https://decisionmap.ai/ai/docs"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "App"         "https://$(PROD_FRONTEND)"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "Backend API" "https://$(PROD_BACKEND)"
+	@printf "    ${BLUE}%-18s${RESET} ${WHITE}%s${RESET}\n" "AI-Docs"     "https://$(PROD_FRONTEND)$(AI_PREFIX)/docs"
 	@echo
 
 ##@ Setup
@@ -120,6 +130,10 @@ status: ## Git-Status aller Repos (dirty + ahead/behind Remote)
 .PHONY: env-audit
 env-audit: ## .env gegen .env.example prüfen — Drift in allen Repos anzeigen
 	@python3 scripts/env-audit.py --audit
+
+.PHONY: routing-check
+routing-check: ## Domains/Routing auf veraltete Werte prüfen (nginx/Makefile/Scripts/Doku)
+	@bash scripts/routing-check.sh
 
 .PHONY: loc
 loc: ## Lines of Code zählen (tokei, alle Sub-Repos + Root)
