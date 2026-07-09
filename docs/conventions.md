@@ -364,8 +364,9 @@ Dev-`POSTGRES_USER`/`POSTGRES_PASSWORD`/`POSTGRES_DB=decisionmap`) — die „le
 ist damit eliminiert (der Fallback-Code bleibt als Sicherheitsnetz, greift aber nicht mehr).
 `[optional]`-Tags bleiben nur für die echten „leer *ist* der Wert"-Fälle ohne sinnvollen
 Nicht-Leer-Wert: `COOKIE_DOMAIN` (leer = host-only Cookie, localhost), `MAIL_USERNAME`/`MAIL_PASSWORD`
-(Dev-Mailpit braucht keine Auth), `ANTHROPIC_API_KEY` (nur bei `LLM_PROVIDER=anthropic`),
-`APP_VERSION` (SSoT ist `pyproject.toml`/Jenkins).
+(Dev-Mailpit braucht keine Auth), `ANTHROPIC_API_KEY` (nur bei `LLM_PROVIDER=anthropic`).
+Der frühere ai-service-Key `APP_VERSION` ist 2026-07-08 entfernt — die Version ist kein Env-Wert
+mehr, sondern wird framework-nativ aus `pyproject.toml` gelesen (`app/version.py`, s. `docs/backend.md`).
 
 Kommentare stehen **immer über dem Wert** (eigene `#`-Zeile), nie inline (`KEY=value # comment`).
 Inline-Kommentare sind parser-abhängig: python-dotenv/Nuxt/Compose strippen sie nur bei Leerzeichen
@@ -409,8 +410,32 @@ Assistent ausführen) stellt pro Key `.env` ↔ SoT-Default gegenüber: Nicht-Ge
 erscheinen nur als `sha256:`-Fingerprint, Credentials in URLs (`user:pass@`) als `***:***`.
 Dazu Typ-Validierung aus dem SoT-Default (int/bool/float/json/url/mail — fängt z.B. durch
 Inline-Kommentare korrumpierte Werte wie `MAIL_PORT=587oops` als `UNGÜLTIG(int)`),
-`gleich`/`abweichend` zum Default und ein Cross-Repo-Konsistenz-Block für Keys in ≥2 Repos
-(z.B. `SERVICE_TOKEN` — MATCH/MISMATCH via Fingerprint, ohne Wert). Exit 1 bei Fehlern.
+`gleich`/`abweichend` zum Default und eine Cross-Repo-Konsistenz-**Tabelle** für Keys in ≥2 Repos:
+je Repo mit `.env` eine Spalte mit dem (auf Spaltenbreite gekürzten) Wert, Geheimes als
+`●●● sha256:…`-Fingerprint (gleicher Wert → gleicher Fingerprint → als Gleichheit ablesbar, ohne den
+Wert zu zeigen), pro Zeile Status `✓ gleich` (grün) / `abweichend` (gelb) — abweichende Werte
+werden dabei gelb hervorgehoben, Keys bleiben durchgehend cyan (dieselbe Konvention wie die
+Wertegegenüberstellung; eine Cross-Repo-Abweichung ist eine Review-Sache, kein harter Fehler).
+So wird ein Drift wie `SERVICE_TOKEN` backend=ai-service aber infra `(leer)` direkt am Wert ablesbar.
+Exit 1 bei Fehlern.
+
+**Cross-Repo-Guard (automatisch beim Voll-Audit, kein Flag):** Läuft ohne `--repo` bei jedem
+`make env-audit` mit und prüft vier Invarianten (Verletzung = Exit 1, `--strict`-tauglich):
+(0) **Liveness** — jeder `.env.example`-Key wird vom App-Code gelesen (pydantic-`config.py`-Feld
+bei BE/AI bzw. `process.env.<KEY>` im Frontend-`nuxt.config.ts`); rein textbasiert geparst, kein
+Import, läuft ohne die Service-venvs. Fängt tote SoT-Keys (Tippfehler oder Reste eines entfernten
+Features, z.B. die 2026-07-08 entfernten `BOT_*`/`AUTO_APPROVE`/`APP_VERSION`). (1) **Superset** —
+`infrastructure/.env.example` enthält jeden Service-Key (BE/FE/AI), damit das eine Prod-`.env`
+alles abdeckt; (2) **Forwarding** — `docker-compose.yml` reicht jeden Service-Key an den passenden
+Container durch (Frontend via `NUXT_PUBLIC_`-Präfix); (3) **compose-`${VAR}`** — jeder `${VAR}`-Name (bare
+**und** defaulted `${VAR:-default}`) in allen compose-Dateien (prod + Dev-composes, via `discover_composes()`
+auch in Subprojekten) ist ein global bekannter SoT-Key — in **irgendeiner** `.env.example` deklariert
+(`known_env_keys()`); ein Default schützt nicht vor einem falschen Namen, sodass der Tippfehler
+`${POSTGRES_USER1:-test}` ebenso auffliegt wie ein bare `${TYPO}`. Fängt vier Drift-Klassen: toter Key (von keinem Code gelesen), fehlt-in-Prod
+(Superset-Lücke), nicht-zugestellt (Forwarding-Lücke) **und** undokumentierte/vertippte compose-`${VAR}`.
+Bewusste Ausnahmen deklariert: `CODE_EXEMPT` (`POSTGRES_*` — Dev-compose-Plumbing, speist
+`DATABASE_URL`/den Postgres-Container, nie die App direkt), `SUPERSET_EXEMPT`/`FORWARD_EXEMPT`
+(`ALLOW_INSECURE_DEV` — Dev-Opt-in, nie in Prod). Details: [`backend.md`](backend.md).
 Ein in der `.env` gesetzter, aber **leerer** Wert (`KEY=`) erscheint orange: `(leer)` in der
 `.env`-Spalte **und** Status `leer` statt grünem `ok` — ein unbefüllter Pflicht-Key (z.B. leeres
 `SECRET_KEY`/`MAIL_PASSWORD`) wird so nicht mehr als „ok" kaschiert. Die SoT-Spalte bleibt bei
@@ -436,6 +461,53 @@ Das Script läuft auch unter System-`python3` 3.9 (`from __future__ import annot
 
 Values nie ausgeben (`cat`/`grep` auf `.env` verboten) — nur Keys via `env-audit.py` oder `cut -d= -f1`,
 Werte-Abgleich nur via `--check` (maskiert).
+
+[↑ Inhalt](#inhalt)
+
+---
+
+## Cross-Cutting-Werte / Routing (Anti-Drift)
+
+Domains, Routing-Präfixe (`/ai/`), die Backend-Subdomain und Ports sind über nginx, Makefiles, Scripts,
+`.env.example` und Doku verstreut. nginx `server_name` + Location-Pfade lassen sich **nicht** aus `.env`
+variablisieren (nginx interpoliert keine Env-Variablen) — nginx *ist* die SoT der Routing-Struktur,
+`infrastructure/.env(.example)` die SoT der Werte.
+
+**Regel:** Überall sonst per Variable ableiten statt hardcoden — Makefile-Hints aus `DEV_BACKEND` /
+`PROD_BACKEND` / `AI_PREFIX`, build.sh + Scripts via `${BACKEND_URL}` bzw. `${VAR:-default}`.
+
+**Guard — drei Ebenen** (`make routing-check` / `scripts/routing-check.sh`; greppt den **ganzen Baum** via
+`find`, umgeht gitignore → erfasst auch die gitignorierten `apps/` + `.env.example`; Baum-Drift → Exit 1).
+**Typ-agnostisch** (seit 2026-07-09): kein Extension-Allowlist mehr — jede Text-Datei wird gescannt,
+Binäres fällt über `BINARY_RE` (Name) **plus** `grep -I` (Inhalts-Backstop) weg. So sind auch vorher blinde
+Quelltypen abgedeckt (`.sql`-Seeds, `.tsx`, `.toml`, `.css` und die App-Links tragenden Backend-Email-Templates
+`apps/backend/templates/email/*.html`); ein neuer Dateityp ist automatisch dabei. Aus dem **Baum-Scan**
+(Ebene 1+2) sind lokale `.env`/`.bak` exempt (Domäne von `env-audit`), `.env.example` bleibt gescannt; die
+live `.env` prüft separat Ebene 3 (value-maskiert):
+
+1. **Kanonische Hosts (proaktiv):** jeder `<sub>.decisionmap.ai` im Baum muss ein bekannter Host sein — die
+   kanonische Menge wird aus der SoT **abgeleitet** (nginx `server_name` + Host-Teile der `.env.example`-Werte,
+   + `CANONICAL_EXTRA` für Infra-only wie `mail.`/`cert.`). Fängt **Tippfehler, stale Werte UND undeklarierte
+   neue Subdomains** — ohne den Alt-Wert vorher zu kennen. Neue Subdomain? → erst in nginx + `.env` deklarieren
+   (dann ist sie automatisch kanonisch).
+2. **Veraltete Muster (reaktiv/Regression):** explizite `DEPRECATED`-Liste für Nicht-Host-Renames (z.B. Pfad
+   `/api/`→`/ai/`). Bei so einem Rename den alten Wert dort eintragen. <!-- routing-check:ignore dokumentiert das Muster -->
+3. **Live `.env`-Werte (value-maskiert, nicht-blockierend, seit 2026-07-09):** prüft die aktiven
+   `.env`/`.env.local`/`.env.e2e.local` (nicht `.example`, nicht die `.bak`-Backups; nur unkommentierte
+   Assignments) auf
+   dieselben Hosts/Muster wie Ebene 1+2. Ausgabe ist **nur `Key → Host`**, nie die volle `KEY=value`-Zeile —
+   ein `<sub>.decisionmap.ai`-Host ist eine öffentliche Domain, Credentials/Ports/Pfade werden weggeschnitten
+   (hält die `.env`-Leak-Regel). Ein Fund ist eine **Warnung, kein Fehler** (**Exit 0**): die lokale `.env` ist
+   persönlich/gitignoriert, soll bei jedem `make check` sichtbar sein, aber keine unbeteiligten Commits
+   blockieren. Das Enforcement für `.env`-Werte bleibt `env-audit --check` (leak-frei via sha256-Fingerprints).
+
+Ausnahmen: `EXEMPT_RE` (datierte Docs, SES/DNS-Doku, Tool selbst), `DOC_ALLOWED` (dokumentierte
+Nicht-Service-Hosts / Anti-Beispiele) + Zeilen-Marker `routing-check:ignore`. Ergänzt `env-audit`
+(`.env` ↔ Code ↔ compose) um nginx / Makefile / Scripts / Doku.
+
+**Routine:** `make check` = `env-audit` + `routing-check` — vor jeder Cross-Cutting-Änderung ausführen.
+Optionaler pre-commit-Hook: `make install-hooks` (läuft `routing-check` vor jedem Commit; umgehen:
+`git commit --no-verify`). In CI dasselbe `make check`.
 
 [↑ Inhalt](#inhalt)
 
@@ -662,7 +734,7 @@ Die Lehre — synchroner Auth-State vor den ersten `onMounted`-Fetches — bleib
 Backend-API gibt Tags mit Feld `label` zurueck (nicht `name` wie in DB-Spalte). Contract-Test deckte auf, dass `mapProblem` `tag.name` las — gibt `undefined`. Fix: `tag.label` verwenden. Gilt fuer alle `/internal/tags`-Endpoints.
 
 **Konkreter Fund 7:** `useServiceStatus.ts` — URL-Detection-Logik und `fetchJson`.
-Composable unterscheidet Backend (:8001) von AI-Service (/api/health) per URL-String-Pattern. `fetchJson()` prueft `res.ok` vor dem Parsen — Mock ohne `ok: true` gibt `null` zurueck (kein Parse-Fehler). Contract-Test deckte auf: Mocks benoetigen `ok: true, status: 200`.
+Composable unterscheidet Backend (:8001) von AI-Service (/ai/health) per URL-String-Pattern. `fetchJson()` prueft `res.ok` vor dem Parsen — Mock ohne `ok: true` gibt `null` zurueck (kein Parse-Fehler). Contract-Test deckte auf: Mocks benoetigen `ok: true, status: 200`.
 
 **Konkreter Fund 8:** `default.vue` Layout — `localStorage`-Zugriff auf SSR-Routen.
 `default.vue` ist das gemeinsame Layout fuer SPA- und SSR-Routen (`/problem/**`, `/cluster/**`).
@@ -746,8 +818,8 @@ Similarity-Card wurde von `<Teleport to="#panel-status-target">` (ausserhalb der
 
 **Post-T-12 Regression — Ghost-Open auf `/table` (Fix `87eb98f`):** Der Initial-T-12-Refactor hat nur `pages/index.vue` auf das neue Modal-Mount-Pattern umgestellt; `pages/table.vue` rendert die Form weiterhin im alten Side-Panel-Slot (`<Teleport to="#panel-slot-target"><ProblemForm v-else /></Teleport>` — unconditional gemountet wenn kein `selectedProblem` gesetzt war). Sobald `ProblemForm` sein eigenes `<Teleport to="body">` Modal traegt, oeffnet jeder Mount der Komponente das Modal — der Routing-Wechsel auf `/table` poppte deshalb das Centered Modal auf, obwohl kein „+ Add problem"-Klick erfolgt war. Fix analog zu `pages/index.vue`: `ProblemForm` aus dem panel-slot Teleport entfernen, als Root-Sibling mit `v-if="isProblemFormModalOpen"` rendern, `isProblemFormModalOpen` + `closeProblemFormModal` via `inject` aus dem Layout beziehen. Meta-Lesson: beim Einfuehren von self-contained Teleport-Komponenten **vor** dem Commit alle Verwender systematisch auditieren (`grep -rn '<ProblemForm' apps/frontend/pages/ apps/frontend/components/`) — der Refactor ist nicht abgeschlossen, bevor jeder Mount-Pfad einen v-if-Guard hat. Beim Touch state-tragender Komponenten ist „nur ein File angefasst, restliche Pages identisch" eine Annahme, kein Beleg. Regel: Page-Coverage-Check ist Teil jedes Modal-Refactors, nicht ein Folge-Bugfix.
 
-**Konkreter Fund 26:** `translateForDisplayReal` (`composables/useTranslation.ts`) — stiller EN-Fallback bei `/translate`-Fehler kippt im DE-Modus die EN-Section.
-`translateForDisplay(content, lang)` uebersetzt das kanonisch gespeicherte Englisch zur Laufzeit zurueck in die UI-Sprache (z.B. EN→DE im Problem-Panel via `loadLocalizedEditFields`). Schlaegt der `/translate`-Call fehl, gibt der `catch`-Block stillschweigend den **englischen** `text` zurueck (`return text`, Z. 86) und cached ihn **nicht** (nur Erfolge → `_displayCache`, Z. 82). Trigger in der Praxis: nginx-Rate-Limit auf `/api/translate` (5r/m, burst 2). Beim Submit feuern die Auto-Translate-Calls (DE→EN fuer Titel + Beschreibung); klickt der User das Problem direkt danach an, feuern die Display-Calls (EN→DE) und laufen ins 429. Kaskade im DE-Modus: Felder zeigen Englisch → `looksLikeEnglish()` = `true` → `englishAutoDetected` = `true` → EN-Section klappt faelschlich auf (leere EN-Felder, weil der `watch` in `useEnglishTranslation` bei englischem Orig-Text die EN-Felder leert). **Es ist kein Datenfehler** — das deutsche Original liegt korrekt in `original_translations.de`. **Self-healing:** der Fehlversuch wird nicht gecached → der naechste Aufruf (Rate-Limit-Fenster zurueckgesetzt, oder Re-Fetch nach Clustering via `editedAt`-Watch) liefert wieder Deutsch → EN-Section eingeklappt. **Behoben via Fix-Option (1):** `/problems` liefert `original_translations` jetzt ans Frontend (`ProblemRead.original_translations`, Batch-Read `_load_original_translations` reverse-mappt die `sha256(englisch)`-Cache-Keys auf Titel/Beschreibung). `loadLocalizedEditFields` bevorzugt `originalTranslations[locale]` statt des LLM-Round-Trips — kein 429-Risiko mehr im Edit-Pfad, `translateForDisplay` bleibt nur Fallback fuer Sprachen ohne gespeichertes Original. PATCH re-cached das Original gegen den **neuen** englischen Canonical (`_store_original_translations`, DRY-Helper aus dem Create-Pfad), sodass ein Edit das Original mitfuehrt. Restrisiko (2) — 429 bei reinen Display-Stellen ohne gespeichertes Original (z.B. `SolutionList`) — bleibt offen. Vgl. Features-Doc, `translateForDisplay`-Abschnitt.
+**Konkreter Fund 26:** `translateForDisplay` (`composables/useTranslation.ts`) — stiller EN-Fallback bei `/translate`-Fehler kippt im DE-Modus die EN-Section.
+`translateForDisplay(content, lang)` uebersetzt das kanonisch gespeicherte Englisch zur Laufzeit zurueck in die UI-Sprache (z.B. EN→DE im Problem-Panel via `loadLocalizedEditFields`). Schlaegt der `/translate`-Call fehl, gibt der `catch`-Block stillschweigend den **englischen** `text` zurueck (`return text`, Z. 86) und cached ihn **nicht** (nur Erfolge → `_displayCache`, Z. 82). Trigger in der Praxis: nginx-Rate-Limit auf `/ai/translate` (5r/m, burst 2). Beim Submit feuern die Auto-Translate-Calls (DE→EN fuer Titel + Beschreibung); klickt der User das Problem direkt danach an, feuern die Display-Calls (EN→DE) und laufen ins 429. Kaskade im DE-Modus: Felder zeigen Englisch → `looksLikeEnglish()` = `true` → `englishAutoDetected` = `true` → EN-Section klappt faelschlich auf (leere EN-Felder, weil der `watch` in `useEnglishTranslation` bei englischem Orig-Text die EN-Felder leert). **Es ist kein Datenfehler** — das deutsche Original liegt korrekt in `original_translations.de`. **Self-healing:** der Fehlversuch wird nicht gecached → der naechste Aufruf (Rate-Limit-Fenster zurueckgesetzt, oder Re-Fetch nach Clustering via `editedAt`-Watch) liefert wieder Deutsch → EN-Section eingeklappt. **Behoben via Fix-Option (1):** `/problems` liefert `original_translations` jetzt ans Frontend (`ProblemRead.original_translations`, Batch-Read `_load_original_translations` reverse-mappt die `sha256(englisch)`-Cache-Keys auf Titel/Beschreibung). `loadLocalizedEditFields` bevorzugt `originalTranslations[locale]` statt des LLM-Round-Trips — kein 429-Risiko mehr im Edit-Pfad, `translateForDisplay` bleibt nur Fallback fuer Sprachen ohne gespeichertes Original. PATCH re-cached das Original gegen den **neuen** englischen Canonical (`_store_original_translations`, DRY-Helper aus dem Create-Pfad), sodass ein Edit das Original mitfuehrt. Restrisiko (2) — 429 bei reinen Display-Stellen ohne gespeichertes Original (z.B. `SolutionList`) — bleibt offen. Vgl. Features-Doc, `translateForDisplay`-Abschnitt.
 
 **Konkreter Fund 27:** `navigator.clipboard` nur im Secure Context — naiver `writeText` faellt auf HTTP-Origins still aus.
 `ProblemPanel.copyPermalink` rief `navigator.clipboard.writeText(url)` in einem `try/catch`, dessen `catch` den Fehler **nur in die Konsole** loggte (kein UI-Feedback). `navigator.clipboard` existiert aber ausschliesslich in Secure Contexts (HTTPS oder `localhost`); auf einem HTTP-Origin wie dem Staging-Host `int.decisionmap.ai` ist es `undefined` → `writeText` wirft sofort → fuer den User „nichts passiert". Gleiche Secure-Context-Klasse wie der dokumentierte `navigator.geolocation`-`PERMISSION_DENIED`-Gotcha (Geo-Detection faellt auf Backend-Proxy zurueck). **Fix (Frontend-only, zwei Teile):** (1) neuer wiederverwendbarer Util `utils/clipboard.ts` (`copyToClipboard(text): Promise<boolean>`) — nutzt `navigator.clipboard?.writeText` wenn vorhanden, faellt sonst (oder bei Reject wegen Focus/Permission) auf das Legacy-`document.execCommand('copy')` via verstecktem `<textarea>` zurueck, das auch auf HTTP funktioniert; gibt `true`/`false` statt zu werfen. `import.meta.client`-Guard fuer SSR-Routen. (2) `copyPermalink` zeigt bei `false` jetzt einen Error-Toast (`permalink.copyFailed`, EN+DE) statt stillem Nichts. Regel: jeden Secure-Context-only Browser-API-Zugriff (`clipboard`, `geolocation`, `crypto.subtle`, Service Worker) mit HTTP-Fallback **oder** sichtbarem Fehler-Pfad versehen — ein `catch`, der nur `consola.error` aufruft, ist auf HTTP-Staging faktisch ein Silent-Fail. Wiederverwendbar fuer kuenftige Share-Buttons (z.B. `SolutionDetail`). Vgl. Features-Doc, Permalink-System / Share-Button.

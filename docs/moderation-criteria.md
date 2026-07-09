@@ -23,8 +23,11 @@ Prompt: `SPAM_SYSTEM` in `app/providers/llm/prompts.py`
 ### Zur manuellen Prüfung (`is_spam: false`, Status → `needs_review`)
 
 Die Eskalation nach `needs_review` wird **nicht** vom LLM gesteuert — sie erfolgt auf Ebene
-der Verhaltens-Signale in `BotDetectionMiddleware` (1 Signal → `needs_review`).
-Der LLM liefert nur `is_spam: true/false`.
+des `signals`-Arrays im ai-service `SpamFilterService` (genau 1 Signal → `needs_review`,
+≥2 Signale → `rejected`, 0 → LLM). Der LLM liefert nur `is_spam: true/false`. Hinweis: Eine
+`BotDetectionMiddleware`, die behavioral-timing-Signale berechnet, ist derzeit **nicht**
+implementiert (die `BOT_*`-Schwellenwerte wurden 2026-07-08 als toter Config entfernt) —
+faktisch fließt nur `duplicate_confirmed` durch das Array.
 
 Grenzfälle, bei denen `is_spam: false` erwartet wird, aber manuell geprüft werden sollte:
 

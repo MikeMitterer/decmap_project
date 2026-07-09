@@ -69,7 +69,7 @@ Mailpit und Adminer laufen im Backend-Docker-Compose — Teil von `make -C apps/
 |---|---|
 | http://int.decisionmap.ai | Frontend (Nuxt dev) |
 | http://backend.int.decisionmap.ai | Backend API (FastAPI) — öffnet Swagger direkt |
-| http://int.decisionmap.ai/api/docs | AI-Service (FastAPI Swagger) |
+| http://int.decisionmap.ai/ai/docs | AI-Service (FastAPI Swagger) |
 
 [↑ Inhalt](#inhalt)
 
@@ -186,7 +186,7 @@ AI_SERVICE_URL=http://localhost:8000
 
 **`apps/frontend/.env`**:
 ```env
-# AI-Service-WS (ohne /ws); zugleich einzige AI-Service-Quelle im Frontend — die
+# AI-Service-WS (ohne /ai/ws); zugleich einzige AI-Service-Quelle im Frontend — die
 # AI-Service-HTTP(S)-Origin wird daraus abgeleitet (getAiServiceUrl), kein AI_SERVICE_URL
 WS_URL=ws://int.decisionmap.ai
 # FastAPI Backend
@@ -195,11 +195,12 @@ BACKEND_URL=http://backend.int.decisionmap.ai
 DEV_TOOLS=true
 ```
 
-> **Gotcha AI-Service-HTTP nur mit Dev-Proxy:** Die AI-Service-Calls der Composables
-> (Translate, KI-Entwurf) sind fest auf `/api/...` (nginx-Rewrite) verdrahtet und
-> funktionieren nur ueber den Dev-Proxy (`int.decisionmap.ai`). Im Direkt-Port-Modus
-> (`WS_URL=ws://localhost:8000`) gehen WebSocket (`/ws`) + Backend direkt, die
-> AI-HTTP-Routen aber nicht.
+> **Gotcha AI-Service nur mit Dev-Proxy:** Die AI-Service-Calls der Composables
+> (Translate, KI-Entwurf **und der AI-WebSocket** `/ai/ws`) sind fest auf `/ai/...`
+> (nginx-Rewrite) verdrahtet und funktionieren nur ueber den Dev-Proxy
+> (`int.decisionmap.ai`) — der ai-service selbst bedient intern `/ws`, nginx strippt
+> das `/ai`-Prefix. Im Direkt-Port-Modus (`WS_URL=ws://localhost:8000`) geht nur das
+> **Backend** direkt; die AI-Routen (HTTP **und** WS `/ai/ws`) nicht.
 
 > Der frühere Fake-Data-Layer (`USE_FAKE_DATA`) wurde entfernt (Issue #17) — das Frontend
 > läuft immer gegen Backend + AI-Service.
@@ -219,7 +220,7 @@ DEV_TOOLS=true
 | Composable | WebSocket-Quelle | Verantwortlich für |
 |---|---|---|
 | `useBackendRealtime.ts` | Backend WS `ws://localhost:8001/ws` | Mutations: Vote-Scores, Problem/Solution CRUD |
-| `useRealtimeUpdates.ts` | AI-Service WS (`/ws`) | AI-Events: `problem.approved`, `solution.generated` |
+| `useRealtimeUpdates.ts` | AI-Service WS (`/ai/ws`) | AI-Events: `problem.approved`, `solution.generated` |
 
 ### Vote-Score-Flow
 
@@ -269,11 +270,11 @@ Danach kann beliebig oft gevoted werden — nützlich für manuelle Tests des Vo
 
 ### nginx (Produktion)
 
-Der `api.decisionmap.ai`-Serverblock muss WebSocket-Upgrade-Headers weiterleiten:
+Der `backend.decisionmap.ai`-Serverblock muss WebSocket-Upgrade-Headers weiterleiten:
 
 ```nginx
 server {
-    server_name api.decisionmap.ai;
+    server_name backend.decisionmap.ai;
     location / {
         proxy_pass http://backend:8001;
         proxy_set_header Upgrade $http_upgrade;

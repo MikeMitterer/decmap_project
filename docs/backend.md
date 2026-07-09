@@ -39,12 +39,10 @@ Diese Variablen gehoeren nicht in `.env.example` — sie werden einmalig in der 
 
 # FastAPI-Backend (apps/backend/, Port 8001)
 BACKEND_URL=http://localhost:8001
-# AI-Service-WS (Port 8000, ohne /ws — der Client haengt /ws an); zugleich einzige
+# AI-Service-WS (Port 8000, ohne /ai/ws — der Client haengt /ai/ws an); zugleich einzige
 # AI-Service-Quelle im Frontend: getAiServiceUrl leitet daraus die HTTP(S)-Origin ab
-# (ws->http, /ws entfaellt), Composables haengen /api/... an — kein Frontend-AI_SERVICE_URL
+# (ws->http, /ai/ws entfaellt), Composables haengen /ai/... an — kein Frontend-AI_SERVICE_URL
 WS_URL=ws://localhost:8000
-# Feature Flag: Neue Problems automatisch freischalten (ohne Moderations-Review)
-AUTO_APPROVE=false
 
 # AI-Service — Provider
 
@@ -57,7 +55,8 @@ TRANSLATION_PROVIDER=openai
 # OpenAI API-Key fuer Embeddings + LLM-Calls
 OPENAI_API_KEY=
 OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-OPENAI_LLM_MODEL=gpt-4o-mini
+# LLM fuer Spam-Filter/Clustering/KI-Entwurf (gpt-4o: bessere Ergebnisse als -mini)
+OPENAI_LLM_MODEL=gpt-4o
 # Modell nur fuer Uebersetzung (Code-Fallback auf OPENAI_LLM_MODEL, wenn leer)
 OPENAI_TRANSLATION_MODEL=gpt-4o-mini
 # Nur benoetigt wenn LLM_PROVIDER=anthropic
@@ -74,12 +73,6 @@ CLUSTERING_INTERVAL=360
 SIMILARITY_THRESHOLD=0.85
 # Schwellenwert fuer Duplikat-Erkennung; Dev: 0.70
 DUPLICATE_THRESHOLD=0.92
-# Mindestzeit zwischen Seitenaufruf und Submit
-BOT_SUBMIT_MIN_SECONDS=10
-# Max. Submissions pro Session pro Stunde
-BOT_SESSION_MAX_HOURLY=10
-# Max. verschiedene Sessions pro ip_hash
-BOT_IP_MAX_SESSIONS=5
 # Shared Secret (X-Service-Token Header); leer bricht den Start ab (fail-closed)
 SERVICE_TOKEN=
 # true = expliziter Dev-Opt-in: Start trotz leerem SERVICE_TOKEN (Hook-Auth aus)
@@ -89,6 +82,9 @@ CORS_ORIGINS=["http://localhost:3000"]
 
 # apps/backend/ — FastAPI Backend (Port 8001)
 
+# Feature Flag (rein server-seitig): neue Problems + Lösungen direkt auf approved,
+# überspringt das LLM-Moderations-Gate (kein Frontend-Gegenstück, s. Feature Flags)
+AUTO_APPROVE=false
 DATABASE_URL=postgresql+asyncpg://decisionmap:decisionmap@localhost:5432/decisionmap
 # Pflicht — leer/Platzhalter-Wert bricht den Start hart ab (RuntimeError)
 SECRET_KEY=
@@ -117,15 +113,9 @@ SERVICE_TOKEN=
 
 | Flag | Standard | Beschreibung |
 |---|---|---|
-| `AUTO_APPROVE` | `false` | Neue Problems automatisch freischalten (ohne Moderations-Review) |
+| `AUTO_APPROVE` | `false` | Neue Problems **und Lösungen** automatisch freischalten (überspringt das LLM-Moderations-Gate — Spam-Filter + Duplikat-Check; Embedding + Clustering laufen weiter) |
 
-**Hinweis:** Das Frontend-Feature-Flag `AUTO_APPROVE` wird zur Build-Zeit in das Nuxt-Bundle eingebettet (`runtimeConfig.public.autoApprove`). Eine Änderung in `.env` auf dem Server greift erst nach einem Rebuild + Redeploy des Frontend-Images:
-```bash
-# apps/frontend
-make build
-# infrastructure
-make deploy-service SVC=frontend
-```
+**Hinweis — die Freigabe-Entscheidung ist ausschließlich server-seitig:** `AUTO_APPROVE` wirkt allein über den Backend-Wert (`settings.auto_approve` → `initial_status` in `routers/problems.py` + `routers/solutions.py`); eine Änderung greift nach einem Backend-Neustart, ohne Frontend-Rebuild. Ein gleichnamiges Frontend-Public-Flag (`runtimeConfig.public.autoApprove`, in Prod via `NUXT_PUBLIC_AUTO_APPROVE`) existierte, wurde aber von keiner `.vue`/`.ts`-Stelle gelesen und ist deshalb entfernt (`nuxt.config.ts`, `apps/frontend/.env.example`, `docker-compose.yml` frontend-Service). Das ist konzeptionell korrekt — ein Public-Client-Flag darf Moderation nicht umgehen können; das Frontend zeigt nur den vom Backend zurückgelieferten Status an. Einzige verbleibende Erwähnung: ein JSDoc-Kommentar in `composables/data/types.ts`, der das **Backend**-Verhalten beschreibt.
 
 [↑ Inhalt](#inhalt)
 
@@ -184,7 +174,7 @@ MAIL_FROM=noreply@decisionmap.ai
 ```
 Vollständige Einrichtungsanleitung: [`docs/ses-setup.md`](ses-setup.md). Tracking: MikeMitterer/decmap_project#1.
 
-SMTP-Verbindung testen: `./scripts/smtp-test.py --send --to dein@email.com` (liest `apps/backend/.env` automatisch).
+SMTP-Verbindung testen: `./scripts/smtp-test.py --send --to dein@email.com` (liest `apps/backend/.env` automatisch — dieselben `MAIL_*`-Keys wie `config.py`, inkl. TLS-Modus: `MAIL_SSL_TLS=true` → implizites TLS via `SMTP_SSL` (Port 465), sonst `MAIL_STARTTLS` → STARTTLS (Port 587)).
 
 **Gotcha — Hetzner blockiert ggf. Port 587:** Mit Mailjet wurde beobachtet, dass Hetzner VPS ausgehende Verbindungen auf Port 587 blockiert. AWS SES unterstützt auch Port 465 (TLS) als Fallback: `MAIL_PORT=465`, `MAIL_SSL_TLS=true` (`MAIL_STARTTLS=false`). Vor Go-Live testen: `./scripts/smtp-test.py` oder `nc -zv email-smtp.<region>.amazonaws.com 587`.
 
@@ -236,7 +226,7 @@ Alle Endpoints erfordern `X-Service-Token: <SERVICE_TOKEN>` Header (`verify_serv
 | `DELETE /internal/tags/structural` | Alle L1–L9 Tags loeschen (Cascade auf `problem_tag`) — vor Reclustering |
 | `POST /internal/problems/{id}/structural-tag` | Problem einem L1-Cluster-Tag zuweisen (`problem_tag`) |
 
-**Bulk-Reindex:** `POST /embeddings/reindex` (AI-Service) + `GET /internal/problems/approved-all` (Backend) sind implementiert — letzterer liefert alle approved Problems ohne Embedding-Filter (für initiale Befüllung oder Re-Embedding nach Modellwechsel). Komfort-Wrapper: `make ai-reindex` (`scripts/ai-reindex.sh run`, self-contained nach `db-backup.sh`-Muster — läuft auch auf dem Server ohne `.libs`). Default-Ziel ist der lokale nginx-Proxy `http://int.decisionmap.ai/api` (rewrite `/api/*` → AI-Service) — aus `apps/backend` läuft das Script damit ohne Flags. Nur `SERVICE_TOKEN` kommt aus der `.env` (oder `--token`), **nicht** die URL: die `.env`-`AI_SERVICE_URL` ist die interne Backend→AI-Route, nicht der Proxy. URL via `--url` bzw. `URL=` überschreiben (z.B. `URL=http://ai-service:8000` für den Container in Prod); Token wird nie ausgegeben. Smoke-Test: `./scripts/smoke-test.sh reindex`.
+**Bulk-Reindex:** `POST /embeddings/reindex` (AI-Service) + `GET /internal/problems/approved-all` (Backend) sind implementiert — letzterer liefert alle approved Problems ohne Embedding-Filter (für initiale Befüllung oder Re-Embedding nach Modellwechsel). Komfort-Wrapper: `make ai-reindex` (`scripts/ai-reindex.sh run`, self-contained nach `db-backup.sh`-Muster — läuft auch auf dem Server ohne `.libs`). Default-Ziel ist der lokale nginx-Proxy `http://int.decisionmap.ai/ai` (rewrite `/ai/*` → AI-Service) — aus `apps/backend` läuft das Script damit ohne Flags. Nur `SERVICE_TOKEN` kommt aus der `.env` (oder `--token`), **nicht** die URL: die `.env`-`AI_SERVICE_URL` ist die interne Backend→AI-Route, nicht der Proxy. URL via `--url` bzw. `URL=` überschreiben (z.B. `URL=http://ai-service:8000` für den Container in Prod); Token wird nie ausgegeben. Smoke-Test: `./scripts/smoke-test.sh reindex`.
 
 **Gotcha — asyncpg `:param::type` bricht Parameter-Substitution:** In SQLAlchemy `text()` Queries stoppt asyncpg die Substitution beim `::` direkt nach dem Parameternamen. Fix: Klammern setzen — `embedding <=> (:emb)::vector` statt `embedding <=> :emb::vector`.
 
@@ -244,7 +234,7 @@ Alle Endpoints erfordern `X-Service-Token: <SERVICE_TOKEN>` Header (`verify_serv
 
 **Gotcha — Tags: API-Feld `label` ↔ DB-Spalte `name`:** Die `tags`-Tabelle hat eine Spalte `name` (historisch — Umbenennung nicht nötig). Der AI-Service schickt/erwartet `label`. Die Internal API mappt transparent: `label` im Request-Body → `name` in der DB, `name` in der DB → `label` im Response.
 
-**Gotcha — `useServiceStatus` URL-Detection:** Das Composable unterscheidet die zwei Services anhand der URL-Signatur, nicht anhand eines Namens-Parameters. Backend wird an `:8001` erkannt (Port im URL-String), AI-Service an `/api/health` (Pfad-Präfix nach nginx-Proxy). In Tests müssen Mock-URLs diese Muster enthalten (`url.includes(':8001')` vs. `url.includes('/api/health')`). Außerdem prüft `fetchJson()` `res.ok` bevor es parst — Mocks müssen `ok: true, status: 200` setzen, sonst gibt `fetchJson` immer `null` zurück.
+**Gotcha — `useServiceStatus` URL-Detection:** Das Composable unterscheidet die zwei Services anhand der URL-Signatur, nicht anhand eines Namens-Parameters. Backend wird an `:8001` erkannt (Port im URL-String), AI-Service an `/ai/health` (Pfad-Präfix nach nginx-Proxy). In Tests müssen Mock-URLs diese Muster enthalten (`url.includes(':8001')` vs. `url.includes('/ai/health')`). Außerdem prüft `fetchJson()` `res.ok` bevor es parst — Mocks müssen `ok: true, status: 200` setzen, sonst gibt `fetchJson` immer `null` zurück.
 
 [↑ Inhalt](#inhalt)
 
@@ -401,7 +391,34 @@ docker buildx build --platform linux/amd64 --load -t myimage .
 Das `.env` liegt auf dem Hetzner-Server — Jenkins deployt nur den Build-Artefakt.
 Vorlage: `infrastructure/.env.example` (alle Prod-Variablen fuer den FastAPI-Stack: `SECRET_KEY`/`SERVICE_TOKEN`,
 `DATABASE_URL`, `CORS_ORIGINS`, `MAIL_*`, `COOKIE_DOMAIN/SECURE/SAMESITE`, Service-URLs — Kommentare
-immer above-line, siehe Konventionen). Drift-Check gegen das Server-`.env`: `make env-audit`.
+immer above-line, siehe Konventionen). **Zwei getrennte Service-URLs zum Backend — seit 2026-07-08
+distinkt benannt (früher trugen beide denselben Namen `BACKEND_URL`):** `BACKEND_URL_INTERNAL` (`http://backend:8001`)
+ist **intern** — nur der ai-service-Container liest ihn (`settings.backend_url_internal`), Docker-direkt,
+**nicht über nginx** (nginx blockt `/internal/`); `BACKEND_URL` (`https://backend.decisionmap.ai`) ist
+**browser-facing** — nur das Frontend bekommt ihn (als `NUXT_PUBLIC_BACKEND_URL`), über die
+nginx-Backend-Subdomain. Der backend-Container selbst referenziert keinen von beiden. Drift-Check gegen das
+Server-`.env`: `make env-audit`.
+
+**Invariante — Code liest ⊇ .env.example ⊆ infra · Compose-Forwarding:** `make env-audit` prüft beim
+Voll-Audit vier Invarianten (jede Verletzung → Exit 1): (0) **Liveness** — jeder `.env.example`-Key
+wird vom App-Code gelesen (pydantic-`config.py`-Feld bzw. Frontend-`process.env`), rein textbasiert
+geparst ohne Import; fängt tote SoT-Keys (z.B. die 2026-07-08 entfernten `BOT_*`/`AUTO_APPROVE`/`APP_VERSION`).
+(1) **Superset** — `infrastructure/.env.example` ist das **eine** Prod-`.env` und deckt damit auch die
+ai-service-Keys ab (Provider/Modell/Threshold: `EMBEDDING_PROVIDER`, `LLM_PROVIDER`, `TRANSLATION_PROVIDER`,
+`OPENAI_*`/`ANTHROPIC_*`, `SIMILARITY_THRESHOLD`, `DUPLICATE_THRESHOLD`, `SIMILARITY_RATE_LIMIT`) genauso wie
+die Frontend-Keys (`NUXT_PUBLIC_*`, `DEV_TOOLS`).
+(2) **Forwarding** — jeder Key muss in `docker-compose.yml` per `${VAR:-default}` an den passenden Service
+durchgereicht werden, sonst driftet Prod still gegen den Code-Default. Behoben wurde dabei auch ein realer
+Drift: das Frontend bekommt `NUXT_PUBLIC_SIMILARITY_THRESHOLD` jetzt aus demselben `SIMILARITY_THRESHOLD`
+wie der ai-service. (3) **compose-`${VAR}`** — jeder `${VAR}`-Name (bare **und** defaulted `${VAR:-default}`)
+in allen compose-Dateien (prod + Dev-composes, via `discover_composes()` auch in Subprojekten gefunden) ist
+ein global bekannter SoT-Key, d.h. in **irgendeiner** `.env.example` deklariert (`known_env_keys()` — die
+Union aller Repos). Ein Default schützt nicht vor einem falschen Namen: der defaultete Tippfehler
+`${POSTGRES_USER1:-test}` fliegt ebenso auf wie ein bare `${BACKEND_URL1}`; legitime
+Cross-Context-Nutzung (z.B. `POSTGRES_*` im ai-service-Test-compose) bleibt sauber, weil der Name anderswo
+deklariert ist. Fängt Tippfehler/undokumentierte compose-Variablen (die Gegenrichtung zu (2)). Bewusste Ausnahmen: `ALLOW_INSECURE_DEV`
+(Dev-only Opt-in, in Prod nie gesetzt) und das `POSTGRES_*`-Plumbing (speist `DATABASE_URL`/den
+Postgres-Container, wird von der App nie direkt gelesen).
 
 ```bash
 # Erstmalig einrichten oder aktualisieren:
@@ -428,12 +445,12 @@ volumes:
 - Port 80: reiner `301`-Redirect zu HTTPS
 - Port 443: TLS (`TLSv1.2/1.3`), alle Location-Bloecke (Frontend, Backend-API, AI-Service, WebSocket)
 
-**Backend API auf Subdomain `api.decisionmap.ai`:**
+**Backend API auf Subdomain `backend.decisionmap.ai`:**
 FastAPI Backend läuft auf Port 8001 — kein Pfad-Prefix, direkte Subdomain.
 
 ```nginx
 server {
-    server_name api.decisionmap.ai;
+    server_name backend.decisionmap.ai;
     location / {
         proxy_pass http://backend:8001;
         proxy_set_header Upgrade $http_upgrade;
@@ -446,15 +463,15 @@ server {
 
 **nginx — `proxy_pass` mit Variable + `rewrite` — drei Gotchas:**
 
-1. **`proxy_pass http://$var/` macht keine Prefix-Substitution.** Ohne Variable würde `location /api/` + `proxy_pass http://upstream/` das `/api/`-Prefix automatisch ersetzen. Mit Variable passiert das nicht — `/api/health` landet als `/api/health` beim Backend. Fix: `rewrite` + `$uri` explizit übergeben.
+1. **`proxy_pass http://$var/` macht keine Prefix-Substitution.** Ohne Variable würde `location /ai/` + `proxy_pass http://upstream/` das `/ai/`-Prefix automatisch ersetzen. Mit Variable passiert das nicht — `/ai/health` landet als `/ai/health` beim AI-Service. Fix: `rewrite` + `$uri` explizit übergeben.
 
 2. **`rewrite ... break` stoppt auch `set`.** `break` unterbricht alle Direktiven des nginx Rewrite-Moduls — dazu gehört auch `set`. Eine `set`-Direktive nach `rewrite ... break` wird nie ausgeführt → Variable bleibt leer → nginx-Error "no host in upstream". **`set` immer vor `rewrite` stellen.**
 
 3. **`proxy_pass http://$var` (ohne URI) nach `rewrite` nimmt die Original-URI.** `$uri` enthält nach einem `rewrite` die neue URI — explizit übergeben:
 ```nginx
-location /api/ {
+location /ai/ {
     set $upstream_ai ai-service:8000;          # set VOR rewrite
-    rewrite ^/api/(.*)$ /$1 break;
+    rewrite ^/ai/(.*)$ /$1 break;
     proxy_pass http://$upstream_ai$uri$is_args$args;
 }
 ```
@@ -595,6 +612,13 @@ make tags               # Letzte 10 Tags anzeigen
 
 `bumpVer` (BashLib) schreibt die Version in die Datei (`VERSION`, `package.json` oder `pyproject.toml`),
 erstellt einen Git-Commit und setzt den Tag. Reihenfolge: Version berechnen → Datei schreiben → Commit → Tag.
+
+**Laufzeit-Auflösung (framework-nativ, kein Env):** Jeder Service liest seine Version zur Laufzeit aus
+seiner Versionsdatei — es gibt keinen `APP_VERSION`-Env-Wert (2026-07-08 aus ai-service `.env.example` +
+`config.py` entfernt). Der ai-service kapselt das in `app/version.py`: `importlib.metadata.version` für den
+installierten Prod-Container, mit `tomllib`-Fallback auf `pyproject.toml` beim Lauf aus dem Source-Tree;
+`GET /health` gibt `SERVICE_VERSION` zurück (bislang meldete es fälschlich den `config.py`-Default `0.1.0`
+statt der `pyproject.toml`-Version). Analog Frontend → `package.json`, Backend → `VERSION`.
 
 ### Snapshot-Tags (Docker)
 

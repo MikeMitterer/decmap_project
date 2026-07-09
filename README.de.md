@@ -100,10 +100,11 @@ DecisionMap/                     ← Workspace-Root (Issues, Doku, CI-Koordinati
 │   └── ses-setup.md             ← AWS SES: Domain-Verifizierung → SMTP → Production Access
 ├── scripts/                     ← Workspace-Skripte
 │   ├── db-backup.sh             ← Einheitliches DB-Backup/Restore (Backend + Infrastructure)
-│   ├── env-audit.py             ← .env-Audit gegen .env.example als SoT (--strict, --comment-out, --fill, leak-freier --check Wert-Abgleich)
+│   ├── env-audit.py             ← .env-Audit gegen .env.example als SoT (--strict, --comment-out, --fill, leak-freier --check Wert-Abgleich, Cross-Repo-Liveness/Superset/Forwarding/Compose-Var-Guard)
 │   ├── git-push-all.sh          ← Git-Push in allen ausgecheckten Sub-Repos
 │   ├── repo-status.sh           ← Git-Status aller Sub-Repos
-│   └── smtp-test.py             ← SMTP-Relay-Verifikation (AWS SES)
+│   ├── routing-check.sh         ← Anti-Drift-Guard: greppt den ganzen Baum auf veraltete Domains/Routing-Präfixe (make routing-check)
+│   └── smtp-test.py             ← SMTP-Relay-Verifikation (Backend-MAIL_*-Keys — SES / Mailpit)
 ├── .templates/                  ← Wiederverwendbare Templates (Jenkinsfile, Makefile, Docker)
 ├── .libs/                       ← Lokale Symlinks (BashLib, MakeLib) — gitignored
 ├── apps/                        ← Service-Repos (gitignored, eigene Repos)
@@ -161,7 +162,7 @@ make dev-down  # overmind beenden + alle Docker-Services stoppen
 |---|---|
 | http://int.decisionmap.ai | App (Frontend) |
 | http://backend.int.decisionmap.ai | Backend API (FastAPI) |
-| http://int.decisionmap.ai/api/docs | AI-Service (Swagger) |
+| http://int.decisionmap.ai/ai/docs | AI-Service (Swagger) |
 
 **Direkt** (ohne Proxy):
 
@@ -211,14 +212,15 @@ Jedes Textfeld existiert doppelt — Original + `_en`. Embeddings und Clustering
 **Probleme (mehrstufig):**
 
 1. nginx Rate Limiting (5 Req/Minute pro IP)
-2. Verhaltens-Signale (zu schneller Submit, Session-Flood, Bot-Agents)
-3. Honeypot-Feld (verstecktes HTML-Feld)
-4. GPT-4o-mini als letzte Instanz
+2. Honeypot-Feld (verstecktes HTML-Feld, sofortiger Reject wenn befüllt)
+3. GPT-4o als letzte Instanz
 
 Kein CAPTCHA — Friction-freies UX ist Designziel.
 
+> Jeder Submit trägt zusätzlich ein `signals`-Array (server-seitig ausgewertet: ≥2 → Reject, 1 → Review). Die *Berechnung* von Verhaltens-Signalen (zu schneller Submit, Session-Flood, Bot-Agents) ist **noch nicht implementiert** — aktuell fließt nur `duplicate_confirmed` durch.
+
 **Lösungsansätze (nach Login, nur LLM):**
-- GPT-4o-mini prüft den Inhalt — kein Verhaltens-Layer nötig (Auth vorausgesetzt)
+- GPT-4o prüft den Inhalt — kein Verhaltens-Layer nötig (Auth vorausgesetzt)
 
 ### Automatisches Clustering
 
@@ -232,9 +234,9 @@ Kein CAPTCHA — Friction-freies UX ist Designziel.
 
 **Probleme:**
 ```
-eingereicht → [Verhaltens-Signale] ─→ needs_review ─→ [Admin] → approved / rejected
-            → [LLM-Spam-Filter]   ─→ pending       ─→ [Admin] → approved / rejected
-                                   ↘ Spam → rejected (automatisch)
+eingereicht → [Honeypot / signals] ─→ rejected / needs_review   (signals: aktuell nur duplicate_confirmed)
+            → [LLM-Spam-Filter]    ─→ pending       ─→ [Admin] → approved / rejected
+                                    ↘ Spam → rejected (automatisch)
 ```
 
 **Lösungsansätze** (nach Login, kein Verhaltens-Layer):
@@ -283,7 +285,7 @@ users ──< problems ──< solution_approaches
 - [x] FastAPI Backend + Auth (fastapi-users, JWT im HttpOnly-Cookie, Magic Link, E-Mail-Verifizierung)
 - [x] pgvector Ähnlichkeitserkennung + Duplikat-Filter
 - [x] HDBSCAN-Clustering + LLM-Labeling → hierarchische Tags
-- [x] Spam-Filter: mehrstufig für Probleme (Rate Limiting → Honeypot → GPT-4o-mini), LLM-only für Lösungsansätze
+- [x] Spam-Filter: mehrstufig für Probleme (Rate Limiting → Honeypot → GPT-4o), LLM-only für Lösungsansätze
 - [x] WebSocket Echtzeit-Updates (Voting, Graph-Änderungen)
 - [x] Moderations-Workflow (Admin-Queue, Batch-Operationen)
 - [x] Cytoscape.js Graph-Visualisierung
@@ -316,7 +318,7 @@ users ──< problems ──< solution_approaches
 - [ ] Server-driven Search + Pagination (Phase 3) — den Voll-Re-Fetch bei `problem.created` durch ein „N neue Probleme"-Banner ersetzen; der Graph-Drill-Down und die `GET /problems/all`-Entfernung (Task 2.4) sind bereits ausgeliefert (siehe [`docs/features.md → Sprachunabhängige Suche`](docs/features.md))
 - [ ] Cross-linguale Volltextsuche + Relevanz-Ranking (F2) — das Backend ist **gelandet** (Tasks 1–4): die registry-getriebene Postgres-FTS (`plainto_tsquery` gegen per-Sprache funktionale GIN-Indizes, Migration 010) hat Keyword-ILIKE im `q`-Pfad ersetzt, `fehlt`/`fehlende`/`missing` matchen jetzt symmetrisch via Stemming, plus das opt-in `sort=relevance` (`ts_rank` über die Registry-Sprachen, keyset-paginiert; BE `59a2b29`, #37). Das Frontend-`sort=relevance` ist jetzt ebenfalls **gelandet** (Task 5, FE `d3a6950`); seit 2026-06-30 ist Relevanz bei aktiver Keyword-Suche (Begriff vorhanden, KI-Suche aus) **standardmäßig an** (am Übergang in diesen Zustand gesetzt, damit ein manuelles Ausschalten das Weitertippen überlebt) und sendet `sort=relevance` an `/problems` samt bestehendem StatusBar-Hinweis „Sortiert nach Relevanz". Der explizite „Sort by relevance"-Toggle-**Button** wurde inzwischen **entfernt**: ein Klick auf einen beliebigen Spalten-Header verlässt jetzt die Relevanz und sortiert die geladenen Treffer nach dieser Spalte (innerhalb derselben Suche kein expliziter Rückweg zur Relevanz — eine neue/geleerte Suche startet wieder bei Relevanz). Die Sort-Header sind nur noch im **Semantik**-Modus gesperrt (dort ordnet das Backend server-seitig nach Embedding-Distanz); im Keyword-Relevanz-Default bleiben sie klickbar, und während aktiver Relevanz erscheint kein irreführender Sort-Pfeil. Task 6 (Extensibility-Smoke-Test `test_third_language_needs_only_registry_and_index` + Doku, BE `820083e`) ist ebenfalls **gelandet** — alle sechs F2-Tasks sind drin und die finale Branch-Review ist eingearbeitet (insbesondere I-1: die `original_translations`-Persist-Allowlist wird jetzt aus der Such-Registry abgeleitet — eine Sprache hinzufügen ist damit wirklich nur Registry-Eintrag + Index, kein zweiter hartkodierter Gatekeeper) (siehe [`docs/specs/2026-06-27-f2-cross-lingual-search-design.md`](docs/specs/2026-06-27-f2-cross-lingual-search-design.md))
 - [ ] Diskussion / Forum (post-Launch, [decmap_project#38](https://github.com/MikeMitterer/decmap_project/issues/38)) — leichtgewichtige In-App-Kommentare, **am Problem verankert, am Cluster aggregiert**: Threads hängen an stabilen Problem-UUIDs (Cluster-L1-Tags werden von HDBSCAN neu berechnet und verlören ihren Anker), die Cluster-Ansicht zieht die neueste Diskussion über ihre Probleme zur Laufzeit zusammen. Nutzt ~80 % vorhandener Bausteine (Markdown + DOMPurify, LLM-Spam-Filter + `needs_review`-Queue, WebSocket, Voting, Soft-Delete). Launch-gated: erst nach dem öffentlichen Launch gebaut, wenn der Bedarf nachgewiesen ist; eskaliert zu Discourse + SSO, falls echte Forum-Features verlangt werden
-- [ ] DNSBL-Check aktivieren (post-Launch)
+- [ ] DNSBL-Check ergänzen (post-Launch — derzeit nicht implementiert)
 
 ---
 

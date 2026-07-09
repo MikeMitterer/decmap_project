@@ -200,12 +200,19 @@ Request kommt rein
       ↓
 1. nginx — Rate Limiting (5r/m pro IP)
       ↓
-2. DNSBL-Check (aiodnsbl) — bekannte Spam-IPs
-      ↓
-3. FastAPI Middleware — Verhaltens-Signale + Honeypot
-      ↓
-4. GPT Spam-Filter
+2. ai-service SpamFilterService:
+   Honeypot → signals-Array (≥2 → reject) → LLM Spam-Filter
 ```
+
+> **Implementierungsstand (Stand 2026-07-08):** Tatsächlich verdrahtet sind
+> nur nginx-Rate-Limiting, Honeypot und der LLM-Spam-Filter — alle drei im
+> ai-service `SpamFilterService`. Ein DNSBL-Check (`aiodnsbl`) und eine
+> backend-seitige `BotDetectionMiddleware` existieren **nicht** im Code; die
+> geplanten `BOT_*`-Schwellenwerte (`BOT_SUBMIT_MIN_SECONDS`,
+> `BOT_SESSION_MAX_HOURLY`, `BOT_IP_MAX_SESSIONS`) wurden 2026-07-08 als toter
+> Config entfernt (nie gelesen). Das `signals`-Array reist zwar Frontend → Hook,
+> aber es berechnet aktuell **niemand** behavioral-timing-Signale — durch den
+> Pfad fließt einzig `duplicate_confirmed`.
 
 ### nginx Rate Limiting
 
@@ -213,31 +220,30 @@ Request kommt rein
 limit_req_zone $binary_remote_addr zone=submissions:10m rate=5r/m;
 limit_req_zone $binary_remote_addr zone=translate:10m   rate=5r/m;
 
-location /api/problems {
+location /ai/problems {
     limit_req zone=submissions burst=3 nodelay;
 }
 
-location /api/translate {
+location /ai/translate {
     limit_req zone=translate burst=2 nodelay;
 }
 ```
 
-### Verhaltens-Signale (FastAPI Middleware)
+### Verhaltens-Signale (signals-Array — geplant, nur Plumbing)
 
-```python
-class BotDetectionMiddleware:
-    SUSPICIOUS_SIGNALS = [
-        "submit_too_fast",        # < 10 Sekunden zwischen Seitenaufruf und Submit
-        "session_flood",          # > 10 Submissions in 60 Minuten
-        "ip_hash_multi_session",  # ip_hash in > 5 verschiedenen Sessions
-        "missing_user_agent",
-        "known_bot_agent",
-        "honeypot_filled",
-    ]
-```
+Das `signals`-Array wird vom Frontend im Hook-Payload mitgeschickt und im
+ai-service `SpamFilterService` ausgewertet:
 
-- 2+ Signale → automatisch `rejected`, kein GPT-Call
-- 1 Signal → `needs_review` mit Flag im Moderations-Log
+- 2+ Signale → sofort `rejected`, kein LLM-Call
+- genau 1 Signal → `needs_review`, kein LLM-Call
+- 0 Signale → LLM-Evaluation
+
+Der **Auswertungs-Pfad** existiert, aber es gibt aktuell keine Instanz, die
+behavioral-timing-Signale (`submit_too_fast`, `session_flood`,
+`ip_hash_multi_session` etc.) berechnet und einspeist — eine
+`BotDetectionMiddleware` ist **nicht** implementiert. Die früher hierfür
+vorgesehenen `BOT_*`-Schwellenwerte wurden 2026-07-08 entfernt (toter Config).
+Faktisch fließt durch das `signals`-Array nur `duplicate_confirmed`.
 
 ### Honeypot
 
@@ -286,14 +292,19 @@ früher fälschlich `pending` für saubere Lösungen, die so dauerhaft hängen b
 Nichts wird **automatisch hart abgelehnt**. Bei Approval feuert der Hook `SolutionApprovedEvent`
 → die Lösung erscheint live im UI.
 
+Bei `AUTO_APPROVE=true` entfällt dieses Gate: Der Backend-Wert (`settings.auto_approve`) setzt
+`initial_status="approved"` direkt in `routers/solutions.py` — die Lösung wird sofort sichtbar,
+ohne LLM-Spam-/Duplikat-Check. Reine Server-Entscheidung, kein Frontend-Flag (Details:
+[`backend.md`](backend.md)).
+
 ### Lösungs-Duplikat-Check (global, live + Submit-Backstop)
 
 Analog zur Problem-Similarity, aber über **alle** approved Solutions (nicht problem-scoped):
 
-- **Frontend:** `useSolutionSimilarity` ruft `POST /api/solution-similarity` (debounced 600ms)
+- **Frontend:** `useSolutionSimilarity` ruft `POST /ai/solution-similarity` (debounced 600ms)
   und zeigt eine Live-Warnkarte im `SolutionForm`. „Trotzdem absenden" → `signals: ['duplicate_confirmed']`.
 - **AI-Service:** `SolutionSimilarityService`, Public-Endpoint `POST /solution-similarity`
-  (nginx-Rate-Limit 10/min — generischer `/api/`-Proxy, keine nginx-Änderung nötig). Im
+  (nginx-Rate-Limit 10/min — generischer `/ai/`-Proxy, keine nginx-Änderung nötig). Im
   `solution-submitted`-Hook läuft der Check als Submit-Backstop und speichert bei Approval
   das Embedding (englischer Canonical via `embed_and_store`).
 - **Backend:** `POST /internal/solutions/{id}/embedding` + `POST /internal/solutions/similarity`
@@ -328,7 +339,7 @@ CRUD uber REST. Ruckmeldungen an das UI uber zwei WebSocket-Quellen.
 | Composable | WebSocket | Verantwortlich für |
 |---|---|---|
 | `useBackendRealtime.ts` | Backend `/ws` (Port 8001) | Mutations: Vote-Scores, Problem/Solution CRUD |
-| `useRealtimeUpdates.ts` | AI-Service `/ws` | AI-Events: `problem.approved`, `clustering.started`, `clustering.completed` |
+| `useRealtimeUpdates.ts` | AI-Service `/ai/ws` | AI-Events: `problem.approved`, `clustering.started`, `clustering.completed` |
 
 Vote-Score-Updates laufen **nicht** über den AI-Service — Basis-Funktionalität darf
 nicht vom AI-Service abhängen.
@@ -468,7 +479,7 @@ onUnmounted(() => { disconnectBackend(); disconnectAiWs() })
 ### Voraussetzungen
 
 - Backend (`apps/backend/`) läuft auf Port 8001 — WS-Endpoint: `ws://localhost:8001/ws`
-- nginx `api.decisionmap.ai`-Serverblock: Upgrade-Header + `proxy_read_timeout 3600s`
+- nginx `backend.decisionmap.ai`-Serverblock: Upgrade-Header + `proxy_read_timeout 3600s`
 
 → Vollständige Dokumentation: [`docs/dev-environment.md`](dev-environment.md)
 
@@ -564,7 +575,7 @@ Uebersetzt via KI-Service (`TranslationService`). Uebersetzung ist eine **eigene
 
 **`translateForDisplay` — Display-seitige Lokalisierung:** `useTranslation` bietet `translateForDisplay(content, lang)` fuer read-only UI-Stellen. `SolutionList.vue` nutzt dies um Headlines in der Liste zu lokalisieren: `watch([locale, solutions])` → `translateForDisplay` fuer alle Solutions → `localizedHeadlines`-Map. Bei `lang === 'en'` wird die Map geleert (EN-Content ist Original). Lokale `_displayCache` verhindert redundante API-Calls.
 
-**Stiller Fallback bei `/translate`-Fehler (transient):** Schlaegt der `/translate`-Call fehl (z.B. nginx Rate-Limit 429, 5r/m burst 2), gibt `translateForDisplayReal` den **englischen Original-Text** zurueck (`catch` → `return text`) und cached dieses Ergebnis **nicht** (nur Erfolge landen in `_displayCache`) — es heilt sich beim naechsten Aufruf selbst. Direkt nach dem Submit ist das Rate-Limit-Fenster durch die eigenen Auto-Translate-Calls (DE→EN) belegt, sodass die Display-Calls (EN→DE) ins 429 laufen koennen. Konsequenz im DE-Modus: Haupt-Felder zeigen Englisch → `looksLikeEnglish()` = `true` → `englishAutoDetected` = `true` → EN-Section klappt faelschlich auf. Kein Datenfehler, rein transient. **Der Edit-Pfad (`ProblemPanel`) ist davon nicht mehr betroffen** — `loadLocalizedEditFields` bevorzugt das gespeicherte `originalTranslations[locale]` (kein LLM-Round-Trip, kein 429-Risiko); `translateForDisplay` greift nur als Fallback fuer Sprachen ohne gespeichertes Original. Reine Display-Stellen ohne gespeichertes Original (z.B. `SolutionList`) koennen den Fallback weiterhin treffen. Siehe Konventionen Fund 26.
+**Stiller Fallback bei `/translate`-Fehler (transient):** Schlaegt der `/translate`-Call fehl (z.B. nginx Rate-Limit 429, 5r/m burst 2), gibt `translateForDisplay` den **englischen Original-Text** zurueck (`catch` → `return text`) und cached dieses Ergebnis **nicht** (nur Erfolge landen in `_displayCache`) — es heilt sich beim naechsten Aufruf selbst. Direkt nach dem Submit ist das Rate-Limit-Fenster durch die eigenen Auto-Translate-Calls (DE→EN) belegt, sodass die Display-Calls (EN→DE) ins 429 laufen koennen. Konsequenz im DE-Modus: Haupt-Felder zeigen Englisch → `looksLikeEnglish()` = `true` → `englishAutoDetected` = `true` → EN-Section klappt faelschlich auf. Kein Datenfehler, rein transient. **Der Edit-Pfad (`ProblemPanel`) ist davon nicht mehr betroffen** — `loadLocalizedEditFields` bevorzugt das gespeicherte `originalTranslations[locale]` (kein LLM-Round-Trip, kein 429-Risiko); `translateForDisplay` greift nur als Fallback fuer Sprachen ohne gespeichertes Original. Reine Display-Stellen ohne gespeichertes Original (z.B. `SolutionList`) koennen den Fallback weiterhin treffen. Siehe Konventionen Fund 26.
 
 [↑ Inhalt](#inhalt)
 
@@ -673,7 +684,7 @@ User kann per Button einen KI-generierten Entwurf anfordern — kein Auto-Generi
 
 ```
 User klickt "✦ AI Draft"
-  → POST /api/generate-solution { problem_id, lang? }   (AI-Service, kein SERVICE_TOKEN)
+  → POST /ai/generate-solution { problem_id, lang? }   (AI-Service, kein SERVICE_TOKEN)
   → Draft-Text erscheint in Textarea (auto-grow)
   → User bearbeitet → Uebersetzung → Submit
 ```
@@ -881,7 +892,7 @@ Details: [`backend.md`](backend.md)
 - **Suche:** Filtert live nach Titel, Titel (EN), Beschreibung und Beschreibung (EN)
 - **Sortierung:** Toggle "Newest first" / "Oldest first" (`createdAt`)
 - Status-Workflow: `pending → needs_review → approved / rejected`
-- **`AUTO_APPROVE=true`:** Neue Problems überspringen die Moderations-Queue und wechseln direkt auf `approved`. Feature-Flag wird zur Build-Zeit ins Nuxt-Bundle eingebettet — Änderung erfordert Rebuild + Redeploy.
+- **`AUTO_APPROVE=true`:** Neue Problems **und Lösungen** überspringen die Moderations-Queue und wechseln direkt auf `approved` (`initial_status` in `routers/problems.py` bzw. `routers/solutions.py`). Übersprungen wird das gesamte LLM-Moderations-Gate (Spam-Filter, Duplikat-Check, `needs_review`-Queue) — der `-approved`-Hook (Embedding + Clustering) läuft weiterhin, ist aber Anreicherung *nach* der Freigabe, kein Gate. Nicht verwechseln mit dem AI-Service-Log `problem_auto_approved`, das die KI im *normalen* Flow (`AUTO_APPROVE=false`) nach sauberem Spam-/Dup-Check ausgibt. Wirksam ist ausschließlich der **Backend**-Wert (`settings.auto_approve`); ein Frontend-Gegenstück gibt es nicht — das ungenutzte Public-Flag wurde entfernt (Details: [`backend.md`](backend.md)).
 
 Filter- und Sortierlogik ist in `useModerationFilter.ts` gekapselt (nicht inline in der Komponente) — 13 Unit-Tests in `useModerationFilter.spec.ts`.
 

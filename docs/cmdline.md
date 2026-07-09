@@ -47,7 +47,7 @@ Alternativ via Env-Variable: `SERVICE_TOKEN=xyz ./smoke-test.sh all`
 
 ```bash
 curl http://localhost:8000/health          # direkt (Dev)
-curl https://decisionmap.ai/api/health    # via nginx (Prod)
+curl https://decisionmap.ai/ai/health     # via nginx (Prod)
 ```
 
 ```json
@@ -325,7 +325,7 @@ curl -s -X POST http://localhost:8000/generate-solution \
 ```
 
 Draft wird auf 2000 Zeichen gekürzt (`truncated: true` wenn abgeschnitten).
-Via nginx: `POST /api/generate-solution` (Port 80/443).
+Via nginx: `POST /ai/generate-solution` (Port 80/443).
 
 ---
 

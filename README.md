@@ -100,10 +100,11 @@ DecisionMap/                     ← Workspace root (issues, docs, CI coordinati
 │   └── ses-setup.md             ← AWS SES: domain verification → SMTP → production
 ├── scripts/                     ← Workspace scripts
 │   ├── db-backup.sh             ← Unified DB backup/restore (backend + infrastructure)
-│   ├── env-audit.py             ← .env audit against .env.example as SoT (--strict, --comment-out, --fill, leak-free --check value comparison)
+│   ├── env-audit.py             ← .env audit against .env.example as SoT (--strict, --comment-out, --fill, leak-free --check value comparison, cross-repo liveness/superset/forwarding/compose-var guard)
 │   ├── git-push-all.sh          ← Git push across all checked-out sub-repos
 │   ├── repo-status.sh           ← Git status of all sub-repos
-│   └── smtp-test.py             ← SMTP relay verification (AWS SES)
+│   ├── routing-check.sh         ← Anti-drift guard: greps the whole tree for stale domains/routing prefixes (make routing-check)
+│   └── smtp-test.py             ← SMTP relay verification (backend MAIL_* keys — SES / Mailpit)
 ├── .templates/                  ← Reusable templates (Jenkinsfile, Makefile, Docker)
 ├── .libs/                       ← Local symlinks (BashLib, MakeLib) — gitignored
 ├── apps/                        ← Service repos (gitignored, own repos)
@@ -183,12 +184,13 @@ make dev-down  # stop overmind + all Docker services
 
 **Problems (multi-layer):**
 1. nginx rate limiting (5 req/minute per IP)
-2. Behavioral signals (too-fast submit, session flood, bot agents)
-3. Honeypot field
-4. GPT-4o-mini as final gate — no CAPTCHA
+2. Honeypot field (instant reject if filled)
+3. GPT-4o as final gate — no CAPTCHA
+
+> Submissions also carry a `signals` array evaluated server-side (≥2 → reject, 1 → review). Behavioral-signal *computation* (too-fast submit, session flood, bot agents) is **not yet implemented** — only the `duplicate_confirmed` signal currently flows through.
 
 **Solution Approaches (post-login, LLM-only):**
-- GPT-4o-mini evaluates content — no behavioral layer needed (auth required)
+- GPT-4o evaluates content — no behavioral layer needed (auth required)
 
 ### Automatic Clustering
 1. Load embeddings → HDBSCAN (L2-norm, euclidean, adaptive `min_cluster_size`)
@@ -200,9 +202,9 @@ make dev-down  # stop overmind + all Docker services
 
 **Problems:**
 ```
-submitted → [behavioral signals] ─→ needs_review ─→ [admin] → approved / rejected
-         → [LLM spam filter]    ─→ pending       ─→ [admin] → approved / rejected
-                                 ↘ spam → rejected (automatic)
+submitted → [honeypot / signals] ─→ rejected / needs_review   (signals: only duplicate_confirmed today)
+         → [LLM spam filter]     ─→ pending       ─→ [admin] → approved / rejected
+                                  ↘ spam → rejected (automatic)
 ```
 
 **Solution Approaches** (post-login, no behavioral layer):
@@ -241,7 +243,7 @@ Full specification: [`docs/data-model.md`](docs/data-model.md)
 - [x] FastAPI backend + auth (JWT in HttpOnly cookie, magic link, email verification)
 - [x] pgvector similarity detection + duplicate filter
 - [x] HDBSCAN clustering + LLM labeling → hierarchical tags
-- [x] Spam filter: multi-layer for problems (rate limiting → honeypot → GPT-4o-mini), LLM-only for solution approaches
+- [x] Spam filter: multi-layer for problems (rate limiting → honeypot → GPT-4o), LLM-only for solution approaches
 - [x] WebSocket realtime updates (voting, graph changes)
 - [x] Moderation workflow (admin queue, batch operations)
 - [x] Cytoscape.js graph visualization
@@ -274,6 +276,7 @@ Full specification: [`docs/data-model.md`](docs/data-model.md)
 - [ ] Server-driven search + pagination (Phase 3) — replace the full re-fetch on `problem.created` with an "N new problems" banner; the graph drill-down and the `GET /problems/all` removal (Task 2.4) already shipped (see [`docs/features.md → Language-independent search`](docs/features.md))
 - [ ] Cross-lingual full-text search + relevance ranking (F2) — the backend has **landed** (Tasks 1–4): registry-driven Postgres FTS (`plainto_tsquery` against per-language functional GIN indexes, Migration 010) replaced keyword ILIKE in the `q` path, so `fehlt`/`fehlend`/`missing` now match symmetrically via stemming, plus the opt-in `sort=relevance` (`ts_rank` over the language registry, keyset-paginated; BE `59a2b29`, #37). The frontend `sort=relevance` has now landed too (Task 5, FE `d3a6950`), and as of 2026-06-30 relevance is **on by default** whenever keyword search is active (query present, AI search off — set at the transition into that state so a manual switch-off survives further typing), sending `sort=relevance` to `/problems` with the existing StatusBar "Sorted by relevance" hint. The explicit "Sort by relevance" toggle button has since been **removed**: clicking any column header now leaves relevance and sorts the loaded results by that column instead (so within one search there's no explicit way back to relevance — a new/cleared search restarts at relevance). Sort headers are locked only in **semantic** mode (where the backend orders server-side by embedding distance); in the keyword-relevance default they stay clickable, and no misleading sort arrow shows while relevance is active. Task 6 (the extensibility smoke-test `test_third_language_needs_only_registry_and_index` + docs, BE `820083e`) has landed too — all six F2 tasks are in and the final whole-branch review has been applied (notably I-1: the `original_translations` persist-allowlist is now derived from the search registry, so adding a language really is registry-entry + index only — no second hardcoded gatekeeper) (see [`docs/specs/2026-06-27-f2-cross-lingual-search-design.md`](docs/specs/2026-06-27-f2-cross-lingual-search-design.md))
 - [ ] Discussion / forum (post-launch, [decmap_project#38](https://github.com/MikeMitterer/decmap_project/issues/38)) — lightweight in-app comments, **problem-anchored, cluster-aggregated**: threads attach to stable problem UUIDs (cluster L1-tags are re-computed by HDBSCAN and would lose their anchor), the cluster view aggregates the latest discussion across its problems at read time. Reuses ~80 % of existing building blocks (Markdown + DOMPurify, LLM spam filter + `needs_review` queue, WebSocket, voting, soft-delete). Launch-gated: built only after the public launch proves demand; escalates to Discourse + SSO if real forum features are needed
+- [ ] Add DNSBL check (post-launch — not currently implemented)
 
 ---
 
