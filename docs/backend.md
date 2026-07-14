@@ -524,11 +524,11 @@ db-reset: ##D DB zurücksetzen  # Danger-Op → rot hervorgehoben
 
 [`.templates/Makefile`](../.templates/Makefile) ist ein generisches Ausgangs-Template mit `##@`/`## desc`/`##R`/`##D`-Stil. Benoetigt nur `DEV_MAKE` — kein `setup`-Target, kein `DEV_LOCAL`.
 
-**Versioning-Voraussetzung:** `bumpVer` benoetigt `BASH_LIBS` und eine Versionsdatei (`package.json`, `pyproject.toml` oder `VERSION`). Jedes Sub-Repo muss genau eine davon enthalten:
+**Versioning-Voraussetzung:** `semVerBump` benoetigt `BASH_LIBS` und eine Versionsdatei (`package.json`, `pyproject.toml` oder `VERSION`). Jedes Sub-Repo muss genau eine davon enthalten — Framework-Datei hat Vorrang, `VERSION` ist nur der Fallback ohne Framework:
 
 | Repo | Versionsdatei |
 |---|---|
-| `apps/backend/` | `VERSION` |
+| `apps/backend/` | `pyproject.toml` (die redundante `VERSION`-Datei ist seit 2026-07-14 entfernt) |
 | `apps/frontend/` | `package.json` |
 | `apps/ai-service/` | `pyproject.toml` |
 
@@ -610,7 +610,14 @@ make version            # Aktuelle Version anzeigen
 make tags               # Letzte 10 Tags anzeigen
 ```
 
-`bumpVer` (BashLib) schreibt die Version in die Datei (`VERSION`, `package.json` oder `pyproject.toml`),
+`make version` (Root wie Sub-Repos) liest die Version via `readProjectVersion` (BashLib `version.lib.sh`)
+statt divergierender inline `cat`/`grep`/`npm pkg get`-Varianten pro Makefile. Auto-Detect-Kette (seit
+2026-07-14 auch JVM, read-only): `package.json` → `pyproject.toml` → `pom.xml` → `build.gradle.kts` →
+`build.gradle` → `VERSION`; die Bump-Funktionen (`semVerBump`/`bumpVer`/`calVerBump`) schreiben weiterhin
+nur `package.json`/`pyproject.toml`/`VERSION` — fuer DecisionMap ohne Belang (keine JVM-Apps), relevant
+nur beim Wiederverwenden der Lib in Java/Kotlin-Repos.
+
+`semVerBump` (BashLib) schreibt die Version in die Datei (`package.json`, `pyproject.toml` oder `VERSION`),
 erstellt einen Git-Commit und setzt den Tag. Reihenfolge: Version berechnen → Datei schreiben → Commit → Tag.
 
 **Laufzeit-Auflösung (framework-nativ, kein Env):** Jeder Service liest seine Version zur Laufzeit aus
@@ -618,7 +625,8 @@ seiner Versionsdatei — es gibt keinen `APP_VERSION`-Env-Wert (2026-07-08 aus a
 `config.py` entfernt). Der ai-service kapselt das in `app/version.py`: `importlib.metadata.version` für den
 installierten Prod-Container, mit `tomllib`-Fallback auf `pyproject.toml` beim Lauf aus dem Source-Tree;
 `GET /health` gibt `SERVICE_VERSION` zurück (bislang meldete es fälschlich den `config.py`-Default `0.1.0`
-statt der `pyproject.toml`-Version). Analog Frontend → `package.json`, Backend → `VERSION`.
+statt der `pyproject.toml`-Version). Analog Frontend → `package.json`, Backend → `pyproject.toml`
+(kein Laufzeit-Read — das Backend-`/health` gibt bewusst keine Version preis).
 
 ### Snapshot-Tags (Docker)
 
