@@ -169,21 +169,13 @@ version: ## Aktuelle Versionen aller Sub-Repos anzeigen
 	@echo
 	@echo "  ${YELLOW}Versionen${RESET}"
 	@echo
-	@if [ -f apps/backend/VERSION ]; then \
-		printf "    ${BLUE}%-20s${RESET} ${GREEN}%s${RESET}\n" "backend" "$$(cat apps/backend/VERSION)"; \
-	else \
-		printf "    ${BLUE}%-20s${RESET} ${WHITE}%s${RESET}\n" "backend" "(nicht ausgecheckt)"; \
-	fi
-	@if [ -f apps/frontend/package.json ]; then \
-		printf "    ${BLUE}%-20s${RESET} ${GREEN}%s${RESET}\n" "frontend" "$$(grep '"version"' apps/frontend/package.json | head -1 | sed 's/.*"version": *"\(.*\)".*/\1/')"; \
-	else \
-		printf "    ${BLUE}%-20s${RESET} ${WHITE}%s${RESET}\n" "frontend" "(nicht ausgecheckt)"; \
-	fi
-	@if [ -f apps/ai-service/pyproject.toml ]; then \
-		printf "    ${BLUE}%-20s${RESET} ${GREEN}%s${RESET}\n" "ai-service" "$$(grep '^version' apps/ai-service/pyproject.toml | head -1 | sed 's/version *= *"\(.*\)"/\1/')"; \
-	else \
-		printf "    ${BLUE}%-20s${RESET} ${WHITE}%s${RESET}\n" "ai-service" "(nicht ausgecheckt)"; \
-	fi
+	@for app in backend frontend ai-service; do \
+		if VER=$$(source "$${BASH_LIBS}/version.lib.sh" 2>/dev/null && readProjectVersion auto "apps/$$app" 2>/dev/null) && [ -n "$$VER" ]; then \
+			printf "    ${BLUE}%-20s${RESET} ${GREEN}%s${RESET}\n" "$$app" "$$VER"; \
+		else \
+			printf "    ${BLUE}%-20s${RESET} ${WHITE}%s${RESET}\n" "$$app" "(nicht ausgecheckt)"; \
+		fi; \
+	done
 	@echo
 
 .PHONY: git-push-all
