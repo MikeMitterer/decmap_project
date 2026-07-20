@@ -5,6 +5,10 @@ SHELL := /bin/bash
 WORKSPACE    := $(realpath $(shell pwd))
 PROJECT_NAME := $(notdir $(WORKSPACE))
 
+# ProjectTools (geteilte Workspace-Scripts): Env-Variable respektieren,
+# .libs-Fallback fuer nicht-interaktive Shells (Jenkins, make ohne Login-Shell)
+PROJECT_TOOLS ?= $(WORKSPACE)/.libs/ProjectTools/src
+
 # ─── Cross-Cutting-Werte (Domains/Routing) ────────────────────────────────────
 # SoT: infra/.env(.example) fuer Werte + nginx fuer die Routing-Struktur. Hier nur
 # fuer die `hints`-Ausgabe gespiegelt (eine Stelle statt vieler). Aenderung? -> nginx
@@ -38,11 +42,12 @@ help: ## Alle verfügbaren Befehle anzeigen
 .PHONY: info
 info: ## Workspace-Umgebungsvariablen anzeigen
 	@echo
-	@echo "    ${YELLOW}PROJECT_NAME${RESET} = ${BLUE}$(PROJECT_NAME)${RESET}"
-	@echo "    ${YELLOW}WORKSPACE${RESET}    = ${BLUE}$(WORKSPACE)${RESET}"
-	@echo "    ${YELLOW}DEV_LOCAL${RESET}    = ${BLUE}$${DEV_LOCAL}${RESET}"
-	@echo "    ${YELLOW}DEV_MAKE${RESET}     = ${BLUE}$${DEV_MAKE}${RESET}"
-	@echo "    ${YELLOW}BASH_LIBS${RESET}    = ${BLUE}$${BASH_LIBS}${RESET}"
+	@echo "    ${YELLOW}PROJECT_NAME${RESET}  = ${BLUE}$(PROJECT_NAME)${RESET}"
+	@echo "    ${YELLOW}WORKSPACE${RESET}     = ${BLUE}$(WORKSPACE)${RESET}"
+	@echo "    ${YELLOW}DEV_LOCAL${RESET}     = ${BLUE}$${DEV_LOCAL}${RESET}"
+	@echo "    ${YELLOW}DEV_MAKE${RESET}      = ${BLUE}$${DEV_MAKE}${RESET}"
+	@echo "    ${YELLOW}BASH_LIBS${RESET}     = ${BLUE}$${BASH_LIBS}${RESET}"
+	@echo "    ${YELLOW}PROJECT_TOOLS${RESET} = ${BLUE}$(PROJECT_TOOLS)${RESET}"
 	@echo
 
 
@@ -91,9 +96,10 @@ hints: ## Nützliche Links und Hinweise anzeigen
 .PHONY: setup
 setup: ## Lokale .libs/-Symlinks erstellen (DEV_LOCAL muss gesetzt sein)
 	@test -n "$${DEV_LOCAL}" || (echo "${RED}Fehler: DEV_LOCAL ist nicht gesetzt.${RESET}" && exit 1)
-	ln -sf $${DEV_LOCAL}/DevBash/Production/BashLib  .libs/BashLib
-	ln -sf $${DEV_LOCAL}/DevBash/Production/BashTools .libs/BashTools
-	ln -sf $${DEV_LOCAL}/DevMake/Production/MakeLib   .libs/MakeLib
+	ln -sfn $${DEV_LOCAL}/DevBash/Production/BashLib  .libs/BashLib
+	ln -sfn $${DEV_LOCAL}/DevBash/Production/BashTools .libs/BashTools
+	ln -sfn $${DEV_LOCAL}/DevBash/Production/ProjectTools .libs/ProjectTools
+	ln -sfn $${DEV_LOCAL}/DevMake/Production/MakeLib   .libs/MakeLib
 	@echo "${GREEN}Setup abgeschlossen.${RESET}"
 
 .PHONY: install-hooks
@@ -130,7 +136,7 @@ dev-nginx-logs: ## nginx Dev-Proxy Logs verfolgen
 
 .PHONY: status
 status: ## Git-Status aller Repos (dirty + ahead/behind Remote)
-	@bash scripts/repo-status.sh --show
+	@bash $(PROJECT_TOOLS)/bash/repo-status.sh --show
 
 .PHONY: env-audit
 env-audit: ## .env gegen .env.example prüfen — Drift in allen Repos anzeigen
