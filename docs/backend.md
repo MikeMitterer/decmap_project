@@ -536,7 +536,7 @@ db-reset: ##D DB zurücksetzen  # Danger-Op → rot hervorgehoben
 ```bash
 # Workspace-Root
 make setup             # .libs/-Symlinks erstellen (einmalig, benoetigt DEV_LOCAL)
-make status            # Git-Status aller Workspace-Repos (dirty + ahead/behind Remote) — ProjectTools repo-status.sh, Config: .repo-status.conf im Root
+make status            # Git-Status aller Workspace-Repos (dirty + ahead/behind Remote) — ProjectTools repo-status.sh, Config: .repo-status.conf.sh im Root
 make dev-up            # Docker-Services + overmind (Frontend, AI-Service, Backend-Logs via Procfile.dev)
 make dev-down          # Docker-Services stoppen
 make env-audit         # .env gegen SoT .env.example pruefen (alle Repos; Pflicht/optional via #:-Doku; Exit 1 bei Drift)

@@ -90,7 +90,7 @@ DecisionMap/                     ← Workspace-Root (Issues, Doku, CI-Koordinati
 ├── README.md                    ← English version
 ├── README.de.md                 ← Dieses File (Deutsch)
 ├── Makefile                     ← Workspace-Orchestrierung
-├── .repo-status.conf            ← Repo-Liste + Issue-Repo für make status (ProjectTools repo-status.sh)
+├── .repo-status.conf.sh         ← Repo-Liste + Issue-Repo für make status (ProjectTools repo-status.sh)
 ├── docs/                        ← Detaillierte Spezifikationen
 │   ├── backend.md               ← Infrastruktur, Deploy, Versionierung
 │   ├── conventions.md           ← Code-Konventionen mit Beispielen
