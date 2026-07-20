@@ -31,6 +31,7 @@ Diese Variablen gehoeren nicht in `.env.example` — sie werden einmalig in der 
 | `DEV_DOCKER` | Docker-Hilfsskripte | `.templates/docker/build.sh` — Build + Push |
 | `BASH_LIBS` | Bash-Bibliotheken (`*.lib.sh`) | `.templates/docker/build.sh` — sourced via `. ${BASH_LIBS}/build.lib.sh` usw. |
 | `BASH_TOOLS` | Bash-Tools (`genCerts.sh` usw.) | `.templates/docker/build.sh` — Zertifikate in Docker-Image kopieren |
+| `PROJECT_TOOLS` | Geteilte Dev-Scripts (`ProjectTools/src`) | Root-`Makefile` — `make status` ruft `$(PROJECT_TOOLS)/bash/repo-status.sh`; `?=`-Default ist der `.libs/ProjectTools/src`-Symlink, per Env auf das Schwester-Repo überschreibbar |
 
 ### Applikation (`.env` / Runtime)
 
@@ -535,7 +536,7 @@ db-reset: ##D DB zurücksetzen  # Danger-Op → rot hervorgehoben
 ```bash
 # Workspace-Root
 make setup             # .libs/-Symlinks erstellen (einmalig, benoetigt DEV_LOCAL)
-make status            # Git-Status aller Workspace-Repos (dirty + ahead/behind Remote)
+make status            # Git-Status aller Workspace-Repos (dirty + ahead/behind Remote) — ProjectTools repo-status.sh, Config: .repo-status.conf im Root
 make dev-up            # Docker-Services + overmind (Frontend, AI-Service, Backend-Logs via Procfile.dev)
 make dev-down          # Docker-Services stoppen
 make env-audit         # .env gegen SoT .env.example pruefen (alle Repos; Pflicht/optional via #:-Doku; Exit 1 bei Drift)

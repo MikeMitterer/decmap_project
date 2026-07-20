@@ -65,7 +65,7 @@ DecisionMap/                     ← Workspace-Root-Repo (Issues, Haupt-Doku)
 ├── docs/                        ← Detaillierte Spezifikationen
 ├── scripts/                     ← Workspace-Skripte (z.B. db-backup.sh, env-audit.py)
 ├── .templates/                  ← Wiederverwendbare Templates (Jenkinsfile, Makefile, docker/)
-├── .libs/                       ← Lokale Symlinks (BashLib, BashTools, MakeLib) — per .gitignore ausgeschlossen
+├── .libs/                       ← Lokale Symlinks (BashLib, BashTools, MakeLib, ProjectTools) — per .gitignore ausgeschlossen
 ├── apps/                        ← Service-Repos (gitignored)
 │   ├── backend/                 ← FastAPI Backend + Alembic (Schema-Owner)
 │   ├── frontend/                ← Nuxt.js App

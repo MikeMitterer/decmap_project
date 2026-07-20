@@ -90,6 +90,7 @@ DecisionMap/                     ← Workspace root (issues, docs, CI coordinati
 ├── README.md                    ← This file (English)
 ├── README.de.md                 ← German version
 ├── Makefile                     ← Workspace orchestration
+├── .repo-status.conf            ← Repo list + issue repo for make status (ProjectTools repo-status.sh)
 ├── docs/                        ← Detailed specifications
 │   ├── backend.md               ← Infrastructure, deploy, versioning
 │   ├── conventions.md           ← Code conventions with examples
@@ -102,11 +103,10 @@ DecisionMap/                     ← Workspace root (issues, docs, CI coordinati
 │   ├── db-backup.sh             ← Unified DB backup/restore (backend + infrastructure)
 │   ├── env-audit.py             ← .env audit against .env.example as SoT (--strict, --comment-out, --fill, leak-free --check value comparison, cross-repo liveness/superset/forwarding/compose-var guard)
 │   ├── git-push-all.sh          ← Git push across all checked-out sub-repos
-│   ├── repo-status.sh           ← Git status of all sub-repos
 │   ├── routing-check.sh         ← Anti-drift guard: greps the whole tree for stale domains/routing prefixes (make routing-check)
 │   └── smtp-test.py             ← SMTP relay verification (backend MAIL_* keys — SES / Mailpit)
 ├── .templates/                  ← Reusable templates (Jenkinsfile, Makefile, Docker)
-├── .libs/                       ← Local symlinks (BashLib, MakeLib) — gitignored
+├── .libs/                       ← Local symlinks (BashLib, MakeLib, ProjectTools) — gitignored
 ├── apps/                        ← Service repos (gitignored, own repos)
 │   ├── backend/                 ← FastAPI backend + Alembic (schema owner)
 │   ├── frontend/                ← Nuxt.js app

@@ -90,6 +90,7 @@ DecisionMap/                     ← Workspace-Root (Issues, Doku, CI-Koordinati
 ├── README.md                    ← English version
 ├── README.de.md                 ← Dieses File (Deutsch)
 ├── Makefile                     ← Workspace-Orchestrierung
+├── .repo-status.conf            ← Repo-Liste + Issue-Repo für make status (ProjectTools repo-status.sh)
 ├── docs/                        ← Detaillierte Spezifikationen
 │   ├── backend.md               ← Infrastruktur, Deploy, Versionierung
 │   ├── conventions.md           ← Code-Konventionen mit Beispielen
@@ -102,11 +103,10 @@ DecisionMap/                     ← Workspace-Root (Issues, Doku, CI-Koordinati
 │   ├── db-backup.sh             ← Einheitliches DB-Backup/Restore (Backend + Infrastructure)
 │   ├── env-audit.py             ← .env-Audit gegen .env.example als SoT (--strict, --comment-out, --fill, leak-freier --check Wert-Abgleich, Cross-Repo-Liveness/Superset/Forwarding/Compose-Var-Guard)
 │   ├── git-push-all.sh          ← Git-Push in allen ausgecheckten Sub-Repos
-│   ├── repo-status.sh           ← Git-Status aller Sub-Repos
 │   ├── routing-check.sh         ← Anti-Drift-Guard: greppt den ganzen Baum auf veraltete Domains/Routing-Präfixe (make routing-check)
 │   └── smtp-test.py             ← SMTP-Relay-Verifikation (Backend-MAIL_*-Keys — SES / Mailpit)
 ├── .templates/                  ← Wiederverwendbare Templates (Jenkinsfile, Makefile, Docker)
-├── .libs/                       ← Lokale Symlinks (BashLib, MakeLib) — gitignored
+├── .libs/                       ← Lokale Symlinks (BashLib, MakeLib, ProjectTools) — gitignored
 ├── apps/                        ← Service-Repos (gitignored, eigene Repos)
 │   ├── backend/                 ← FastAPI Backend + Alembic (Schema-Owner)
 │   ├── frontend/                ← Nuxt.js App
