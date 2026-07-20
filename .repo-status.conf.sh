@@ -1,12 +1,16 @@
-# Config fuer repo-status.sh (ProjectTools) — Format: siehe ProjectTools/README.md
-# .sh-Endung nur fuers IDE-Highlighting; wird NICHT gesourced, sondern zeilenweise geparst
+#!/usr/bin/env bash
+# Config fuer repo-status.sh (ProjectTools) — wird gesourced, kein Custom-Parser.
+# .sh-Endung fuers IDE-Highlighting. Format-Doku: ProjectTools/README.md
+# shellcheck disable=SC2034  # von repo-status.sh gesourct
 
-# GitHub-Repo fuer die Issue-Sektion (blocker/high-priority)
-ISSUES_REPO=MikeMitterer/decmap_project
+# Optional: GitHub-Repo fuer die Issue-Sektion (blocker/high-priority)
+ISSUES_REPO="MikeMitterer/decmap_project"
 
-# Repos: <pfad>:<anzeigename>
-.:DecisionMap (Root)
-apps/backend:apps/backend
-apps/frontend:apps/frontend
-apps/ai-service:apps/ai-service
-infrastructure:infrastructure
+# Workspace-Repos: "<pfad>:<anzeigename>"
+REPOS=(
+    ".:DecisionMap (Root)"
+    "apps/backend:apps/backend"
+    "apps/frontend:apps/frontend"
+    "apps/ai-service:apps/ai-service"
+    "infrastructure:infrastructure"
+)
