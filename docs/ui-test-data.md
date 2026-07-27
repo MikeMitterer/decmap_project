@@ -6,7 +6,7 @@ Testszenarien für manuelles UI-Testing und curl-basiertes Seeding.
 > **Auth:** Login als Admin/Superuser vor curl-Calls — das JWT kommt als HttpOnly-Cookie (kein Token im Response-Body), curl daher mit Cookie-Jar (`-c`/`-b`) verwenden.
 > **UI-/Form-Pendant:** Copy-paste-fertige Einträge zum direkten Testen des „+ Add problem"-Flows
 > (Form, Similarity-Check, EN-Translation, Moderation, Locale-Guard) liegen in
-> `apps/frontend/tickets/SAMPLE-PROBLEMS.md` — dieses Dokument hier ist die curl-/Seeding-Variante.
+> `apps/frontend/docs/sample-problems.md` — dieses Dokument hier ist die curl-/Seeding-Variante.
 
 ---
 

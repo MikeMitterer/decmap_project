@@ -61,12 +61,15 @@ created_at          timestamp
 **`tags`** — Hierarchische Themen-Tags. Level bestimmt die Ebene in der Taxonomie: L0 Root, L1-L9 KI-generierte Kategorien, L10 User-Tags. Strukturelle Tags (L0-L9) haben ein `parent_id`, User-Tags (L10) sind flach.
 ```
 id                  uuid (PK)
-name                string (unique)
+name                string (unique)             — englischer Canonical (KI-generiertes Label bei L1–L9)
+name_translations   jsonb (default '{}')        — vorab-übersetzte Anzeigenamen {lang: text}, Migration 011
 level               integer                     — 0 = Root, 1-9 = KI-Kategorien, 10 = User-Tags
 parent_id           FK → tags (nullable)        — null bei L0 und L10
 locked_by           enum: admin | ai | null     — Schutz vor manueller Bearbeitung
 created_at          timestamp
 ```
+
+`name_translations` (Migration 011, 2026-07-24) hält vorab-berechnete Übersetzungen des `name` (`{de: "…"}`) — analog zu `problems.original_translations`. Der ai-service übersetzt das KI-generierte **englische** Label beim Clustering-Upsert (`_translate_label` → `POST /internal/tags/upsert` mit `name_translations`) und via Einmal-Backfill (`POST /clustering/backfill-tag-translations` → Backend `PATCH /internal/tags/{id}/translations`, nur strukturelle L1–L9-Tags ohne Übersetzung). `/tags` liefert das Feld ans Frontend; die Anzeige liest `nameTranslations[locale] ?? name` (`utils/tagDisplay.ts`) statt jeden Tag-Namen live zu übersetzen — schließt das `/ai/translate`-429 auf den DE-Listen. **L10-User-Tags werden nie übersetzt** (Guard `tag.level >= 10 → Roh-name` in `tagDisplayName`): sie sind die eigenen Worte des Autors, nicht ein KI-Label — die Regel steht im Code, unabhängig davon, dass der Backfill L10 ohnehin überspringt.
 
 Tag-Hierarchie:
 - **L0** (Root): Einzelner Wurzelknoten — uebergeordnetes Thema der Plattform. `locked_by: admin`
@@ -76,6 +79,8 @@ Tag-Hierarchie:
 - **L10** (User-Tags): Flach, kein `parent_id`, z.B. "shadow-ai", "data-privacy" — `locked_by: null`
 
 Beim KI-Clustering werden nur L1–L9 neu generiert. L0 (Root) und L10 (User-Tags) bleiben erhalten.
+
+**L10-Anlage ist idempotent:** `POST /tags` (`create_tag`) dedupliziert User-Tags **case-insensitiv** gegen `(name, level=10)` — ein bereits existierendes **nicht-gelöschtes** Label wird wiederverwendet, nie ein Duplikat angelegt. Damit läuft das POST nie in den `(name, level)`-Unique-Constraint (der frühere unbehandelte `IntegrityError → 500` erschien im Browser als irreführender CORS-Fehler). **Ein soft-deleted Match wird NICHT revived, sondern mit `409` abgewiesen:** Tag-Löschung ist superuser-only (`delete_tag`, Moderations-Aktion) — würde `create_tag` den Namen reviven, könnte jeder eingeloggte User eine Moderations-Löschung durch erneutes Posten aufheben (Authorization-Bypass, Push-Security-Review). Der entfernte Slot belegt weiter `(name, level)`, daher 409 statt Revive (und statt 500 am Constraint). Siehe Konventionen Fund 68.
 
 **`problem_tag`** — Junction: Problem ↔ Tag (n:m) mit optionalem Weight.
 ```

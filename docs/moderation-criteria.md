@@ -29,6 +29,10 @@ des `signals`-Arrays im ai-service `SpamFilterService` (genau 1 Signal → `need
 implementiert (die `BOT_*`-Schwellenwerte wurden 2026-07-08 als toter Config entfernt) —
 faktisch fließt nur `duplicate_confirmed` durch das Array.
 
+Ein **LLM-/Provider-Fehler** während der Moderation (RateLimit, Quota-Erschöpfung, API-Ausfall)
+eskaliert ebenfalls fail-safe nach `needs_review` (`moderation_error`) — **nicht** `rejected`
+(seit 2026-07-25, symmetrisch zu Lösungen; s. `moderation_error` unter *Gemeinsame Regeln*).
+
 Grenzfälle, bei denen `is_spam: false` erwartet wird, aber manuell geprüft werden sollte:
 
 - Sehr kurze Texte (< 20 Wörter) ohne klaren KI-Bezug
@@ -115,7 +119,7 @@ Wenn `is_spam: false`, ist `reason` leer — außer ein System-Wert (z. B. `poss
 |---|---|---|
 | `possible_duplicate` (Problem) | Backend Duplicate-Detection | User hat trotz Duplikat-Warnung eingereicht (`signals: ['duplicate_confirmed']`). Status → `needs_review`. Admin-Queue zeigt amber Systemhinweis (`admin.systemNote` i18n-Key). |
 | `possible_duplicate` (Solution) | AI-Service globaler pgvector-Check im `solution-submitted`-Hook | Spam-saubere Lösung gleicht einer bestehenden approved Solution (Score > `duplicate_threshold`) **ohne** `duplicate_confirmed`-Signal → Status `needs_review`. Mit `duplicate_confirmed` (authentifizierter User bestätigt „ist anders") → `approved`. |
-| `moderation_error` (Solution) | LLM-Provider-Fehler im Spam-Filter | Spam-Check konnte nicht laufen → fail-safe `needs_review` statt Auto-Approve/Reject. |
+| `moderation_error` (Problem + Solution) | LLM-Provider-Fehler im Spam-Filter (`is_spam` wirft: RateLimit/Quota/API-Ausfall) | Spam-Check konnte nicht laufen → fail-safe `needs_review` statt Auto-Approve/Reject. Gilt seit 2026-07-25 **symmetrisch für Probleme** (`SpamFilterService`, vorher fälschlich `rejected` — eine Provider-Quota-Störung lehnte still jedes eingehende Problem ab). Auto-Reject bleibt echten Spam-Verdikten, Honeypot und ≥2 Signalen vorbehalten. |
 
 ### Prompt-Synchronisierung
 

@@ -170,7 +170,7 @@ FRONTEND_URL=http://localhost:3000
 MAIL_SUPPRESS=true
 # Darf keine .local-Domain sein — Backend startet sonst nicht
 MAIL_FROM=noreply@decisionmap.ai
-# Shared Secret apps/backend ↔ apps/ai-service — Pflicht, Platzhalter (dev-service-token) bricht den Start ab
+# Shared Secret apps/backend ↔ apps/ai-service (openssl rand -hex 32) — Pflicht, Platzhalter (dev-service-token) bricht den Start ab
 SERVICE_TOKEN=
 # Docker löst localhost:8000 als host.docker.internal auf
 AI_SERVICE_URL=http://localhost:8000

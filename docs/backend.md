@@ -74,7 +74,7 @@ CLUSTERING_INTERVAL=360
 SIMILARITY_THRESHOLD=0.85
 # Schwellenwert fuer Duplikat-Erkennung; Dev: 0.70
 DUPLICATE_THRESHOLD=0.92
-# Shared Secret (X-Service-Token Header); leer bricht den Start ab (fail-closed)
+# Shared Secret (X-Service-Token Header, openssl rand -hex 32); leer bricht den Start ab (fail-closed)
 SERVICE_TOKEN=
 # true = expliziter Dev-Opt-in: Start trotz leerem SERVICE_TOKEN (Hook-Auth aus)
 ALLOW_INSECURE_DEV=false
@@ -87,7 +87,7 @@ CORS_ORIGINS=["http://localhost:3000"]
 # überspringt das LLM-Moderations-Gate (kein Frontend-Gegenstück, s. Feature Flags)
 AUTO_APPROVE=false
 DATABASE_URL=postgresql+asyncpg://decisionmap:decisionmap@localhost:5432/decisionmap
-# Pflicht — leer/Platzhalter-Wert bricht den Start hart ab (RuntimeError)
+# Pflicht (openssl rand -hex 32) — leer/Platzhalter-Wert bricht den Start hart ab (RuntimeError)
 SECRET_KEY=
 # Auth-Cookie (HttpOnly): leer = host-only (Dev); Prod ".decisionmap.ai" (Frontend + api. teilen das Cookie)
 COOKIE_DOMAIN=
