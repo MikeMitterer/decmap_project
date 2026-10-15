@@ -2,7 +2,8 @@
 
 > Haupt-Referenz fur das gesamte Projekt. Gilt fur alle Repos. `CLAUDE.md`
 > im Root verweist nur hierher. Die Sub-Repos haben je eine eigene schlanke
-> `CLAUDE.md`, die auf diese Haupt-Referenz verweist.
+> `AGENTS.md`, die auf diese Haupt-Referenz verweist; ihre `CLAUDE.md` verweist
+> nur auf die eigene `AGENTS.md`.
 > Detaillierte Spezifikationen in `docs/` — siehe Verweise unten.
 
 ## Projektuebersicht
@@ -74,13 +75,13 @@ DecisionMap/                     ← Workspace-Root-Repo (Issues, Haupt-Doku)
 └── infrastructure/              ← Server-Orchestrierung (docker-compose, nginx)
 ```
 
-Detaillierte Verzeichnisbaeme: siehe die `CLAUDE.md` des jeweiligen Sub-Repos.
+Detaillierte Verzeichnisbaeme: siehe die `AGENTS.md` des jeweiligen Sub-Repos.
 
 ---
 
 ## Sub-Repo-Regeldateien
 
-Jedes Sub-Repo enthaelt eine schlanke `CLAUDE.md` mit:
+Jedes Sub-Repo enthaelt eine schlanke `AGENTS.md` (die `CLAUDE.md` daneben verweist nur darauf) mit:
 - Verweis auf diese Haupt-Referenz (`AGENTS.md` im Root)
 - Kurzbeschreibung, lokale Entwicklung, Test-Befehle, Deploy-Hinweis
 
