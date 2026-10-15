@@ -331,7 +331,7 @@ parser = argparse.ArgumentParser(add_help=False)
 
 `set -eou pipefail` ist Mindeststandard für alle Bash-Scripts.
 
-Kritische Gotchas (Details: `/code-standards`):
+Kritische Gotchas (Details: Skill `code-conventions`):
 - **Lib-Funktionen geben keine Ausgaben** — nur differenzierte Exit-Codes (2, 3, …); Fehlermeldungen gehören in den Aufrufer.
 - **`readonly VAR="$(cmd)"`** gibt immer Exit-Code 0 — `|| exit 1` dahinter triggert nie. Stattdessen: `VAR="$(cmd)" || _rc=$?` dann `readonly VAR`.
 
