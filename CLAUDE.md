@@ -145,7 +145,7 @@ routeRules: {
 ## Kern-Konventionen
 
 → Details on demand: `/conventions` | Ausfuehrliche Beispiele: [`docs/conventions.md`](docs/conventions.md)
-→ Code-Standards (Stil, Struktur, Scripts, BashLib, Gotchas): `/code-standards`
+→ Code-Standards (Stil, Struktur, Scripts, BashLib, Gotchas): Skill `code-conventions`
 
 - **Architektur:** Komponenten = Darstellung, Composables = Logic (Frontend) | Router = HTTP, Services = Logic (Backend)
 - **Naming:** TS/Vue `camelCase`/`PascalCase`/`SCREAMING_SNAKE_CASE` | Python `snake_case`/`PascalCase` | DB `snake_case` | Bash Funktionen `camelCase`, Variablen `snake_case`, Konstanten `SCREAMING_SNAKE_CASE`

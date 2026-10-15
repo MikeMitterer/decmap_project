@@ -498,7 +498,7 @@ Bei `docker.io`-Installation (Ubuntu-Paket statt Docker-Repo) muss zuerst das of
 
 Jedes Sub-Repo hat ein eigenes Makefile fuer seinen Kontext. `make help` zeigt die Befehle des jeweiligen Repos, `make hints` zeigt Service-URLs, SSH-Befehle und Abhaengigkeiten — eigenstaendiges Target, kein `@$(MAKE) hints` am Ende von `help`.
 
-Konventionen (Struktur, `##@`-Gruppen, `.PHONY`, `info`/`hints`-Targets, Farben): `/code-standards`
+Konventionen (Struktur, `##@`-Gruppen, `.PHONY`, `info`/`hints`-Targets, Farben): Skill `code-conventions`
 
 **Comment-Syntax (awk-basiertes `make help`):**
 
